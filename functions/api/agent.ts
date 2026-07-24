@@ -1,5 +1,6 @@
 import { generateText, resolveModelRoute, getApiKeys } from '../shared/ai';
 import { AGENT_SYSTEM_PROMPT, AGENT_WRITE_MODE_NOTE, AGENT_ASK_MODE_NOTE, buildAgentContextBlock } from '../shared/systemPrompts';
+import { splitThinkingAndText } from '../shared/responseFormatting';
 
 const AGENT_SYSTEM_PROMPT_BASE = AGENT_SYSTEM_PROMPT;
 
@@ -69,16 +70,39 @@ export const onRequest: PagesFunction = async (context) => {
       content: m.content || '',
     }));
 
-    const text = await generateText({
+    const rawText = (await generateText({
       geminiKeys,
       groqKeys,
       contents,
       plainMessages,
       systemInstruction,
       route,
-    });
+    })) || '';
 
-    return new Response(JSON.stringify({ text }), {
+    const { text, thinking } = splitThinkingAndText(rawText);
+    let thinkingLabel = '';
+    if (thinking) {
+      try {
+        const firstLines = thinking.split('\n').filter(Boolean).slice(0, 3).join('\n');
+        const labelPrompt = `Based on this thinking process:\n${firstLines}\n\nReturn ONLY a 2-4 word action label describing what this reasoning step was doing (e.g., "Planning the fix", "Scanning project files", "Drafting the component"). Do not include quotes, punctuation, or any other text.`;
+        const labelText = await generateText({
+          geminiKeys,
+          groqKeys,
+          contents: [{ role: 'user', parts: [{ text: labelPrompt }] }],
+          plainMessages: [{ role: 'user', content: labelPrompt }],
+          systemInstruction: 'You are a concise label generator. Output ONLY a 2 to 4 word phrase with no quotes or punctuation.',
+          route,
+        });
+        const generatedLabel = (labelText || '').trim().replace(/['"]/g, '');
+        if (generatedLabel && generatedLabel.split(/\s+/).length <= 5) {
+          thinkingLabel = generatedLabel;
+        }
+      } catch (labelErr) {
+        console.warn('Failed to generate dynamic thinking label for agent:', labelErr);
+      }
+    }
+
+    return new Response(JSON.stringify({ text, thinking, thinkingLabel }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });

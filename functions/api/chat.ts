@@ -1,38 +1,9 @@
 import { generateText, resolveModelRoute, getApiKeys } from '../shared/ai';
 import { processImageRequests } from '../shared/imageGenerator';
+import { CHAT_SYSTEM_PROMPT } from '../shared/systemPrompts';
+import { splitThinkingAndText, buildImageResponseText } from '../shared/responseFormatting';
 
 type PagesFunction = (context: any) => Promise<Response>;
-
-// Function to generate images via Pollination AI
-async function generateImageForChat(prompt: string, pollinationKey: string): Promise<string | null> {
-  if (!pollinationKey) return null;
-  
-  try {
-    const response = await fetch('https://api.pollinations.ai/generate', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${pollinationKey}`,
-      },
-      body: JSON.stringify({
-        prompt: prompt,
-        model: 'flux-schnell',
-        width: 1024,
-        height: 1024,
-        steps: 4,
-      }),
-    });
-
-    if (!response.ok) return null;
-    const blob = await response.blob();
-    const buffer = await blob.arrayBuffer();
-    const base64 = Buffer.from(buffer).toString('base64');
-    return `data:image/png;base64,${base64}`;
-  } catch (error) {
-    console.error('Image generation failed:', error);
-    return null;
-  }
-}
 
 async function convertAttachmentsToGeminiContents(
   attachments: any[] = []
@@ -125,40 +96,37 @@ export const onRequest: PagesFunction = async (context) => {
       content: m.content || '',
     }));
 
-    const systemInstruction = `You are a helpful AI assistant. Provide clear, concise, and accurate responses.
+    const systemInstruction = `${CHAT_SYSTEM_PROMPT}
 
-You have access to an image generation function. When a user asks for ANY visual content, use the image generation function by including this in your response:
-[GENERATE_IMAGE: detailed description of what to generate]
+Reasoning format:
+- Before your final answer, write your reasoning inside <think>...</think> tags.
+- Start the response with <think>, then your reasoning, then </think>, then your final answer.
+- Keep the thinking plain text only. Do not use markdown inside <think>.
 
-Examples of images you can create:
-- Technical: [GENERATE_IMAGE: flowchart showing user registration process with login, email verification, and profile setup steps]
-- Diagrams: [GENERATE_IMAGE: UML class diagram for e-commerce system with Product, Order, and Customer classes]
-- Mockups: [GENERATE_IMAGE: mobile app landing page mockup with header, hero section, and feature cards]
-- Architecture: [GENERATE_IMAGE: microservices architecture diagram with API gateway, user service, product service, and database]
-- Artwork: [GENERATE_IMAGE: watercolor painting of a serene mountain landscape at sunset with lake reflection]
-- Logos: [GENERATE_IMAGE: modern, minimalist logo for a tech startup called TechFlow with blue and white colors]
-- Illustrations: [GENERATE_IMAGE: cartoon illustration of a friendly robot helping people with code]
-- UI/UX: [GENERATE_IMAGE: dark mode dashboard design for a cryptocurrency trading platform with charts]
-- Infographics: [GENERATE_IMAGE: infographic showing the water cycle with evaporation, condensation, and precipitation]
-- Characters: [GENERATE_IMAGE: fantasy character design of an elf wizard with purple robes and magical staff]
-- Abstract: [GENERATE_IMAGE: abstract geometric art with vibrant colors, circles and triangles in modern style]
+If the user requests visual content, include a single [GENERATE_IMAGE: ...] directive in your final answer so the server can generate and attach the image automatically.`;
 
-The image will be automatically generated and displayed in the response. Be creative and detailed in your descriptions to get better results.`;
-
-    const text = await generateText({
+    const rawText = (await generateText({
       geminiKeys,
       groqKeys,
       contents,
       plainMessages,
       systemInstruction,
       route,
-    });
+    })) || '';
+
+    const { text, thinking } = splitThinkingAndText(rawText);
 
     // Process image generation requests in the response
     const pollinationKey = env.POLLINATION_API_KEY;
     const { text: processedText, images } = await processImageRequests(text, pollinationKey);
+    const responseText = processedText || buildImageResponseText(images.length);
 
-    return new Response(JSON.stringify({ text: processedText, images }), {
+    return new Response(JSON.stringify({
+      text: responseText,
+      images,
+      thinking,
+      thinkingLabel: thinking ? 'Analyzing request' : '',
+    }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });

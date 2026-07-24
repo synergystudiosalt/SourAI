@@ -1,3 +1,5 @@
+import { blobToDataUrl } from '../shared/imageGenerator';
+
 export const onRequest: PagesFunction = async (context) => {
   if (context.request.method !== 'POST') {
     return new Response('Method not allowed', { status: 405 });
@@ -54,9 +56,9 @@ export const onRequest: PagesFunction = async (context) => {
       );
     }
 
-    // Get the image as a blob
+    // Get the image as a data URL using a runtime-safe base64 conversion.
     const imageBlob = await response.blob();
-    const base64Image = await blobToBase64(imageBlob);
+    const base64Image = await blobToDataUrl(imageBlob, imageBlob.type || response.headers.get('content-type') || 'image/png');
 
     return new Response(
       JSON.stringify({
@@ -81,15 +83,3 @@ export const onRequest: PagesFunction = async (context) => {
     );
   }
 };
-
-function blobToBase64(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const result = reader.result as string;
-      resolve(result);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
-}

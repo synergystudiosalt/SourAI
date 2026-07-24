@@ -244,7 +244,13 @@ export default function App() {
         }
       }
 
-      const responseText = data.text || (data.error ? `Error: ${data.error}` : 'No response returned.');
+      const responseText =
+        data.text ||
+        (Array.isArray(data.images) && data.images.length > 0
+          ? `Generated ${data.images.length} image${data.images.length === 1 ? '' : 's'}.`
+          : data.error
+            ? `Error: ${data.error}`
+            : 'No response returned.');
       const assistantMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
@@ -373,7 +379,13 @@ export default function App() {
         }
       }
 
-      const responseText = data.text || (data.error ? `Error: ${data.error}` : 'No response returned.');
+      const responseText =
+        data.text ||
+        (Array.isArray(data.images) && data.images.length > 0
+          ? `Generated ${data.images.length} image${data.images.length === 1 ? '' : 's'}.`
+          : data.error
+            ? `Error: ${data.error}`
+            : 'No response returned.');
       const assistantMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',

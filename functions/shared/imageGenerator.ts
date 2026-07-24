@@ -1,3 +1,5 @@
+import { buildImageResponseText } from './responseFormatting';
+
 /**
  * Image generation helper for AI responses
  * Converts text descriptions to images that can be embedded in chat
@@ -31,13 +33,37 @@ export async function generateImageForChat(
     }
 
     const blob = await response.blob();
-    const buffer = await blob.arrayBuffer();
-    const base64 = Buffer.from(buffer).toString('base64');
-    return `data:image/png;base64,${base64}`;
+    return await blobToDataUrl(blob, blob.type || response.headers.get('content-type') || 'image/png');
   } catch (error) {
     console.error('Image generation error:', error);
     return null;
   }
+}
+
+export async function blobToDataUrl(blob: Blob, mimeType = 'image/png'): Promise<string> {
+  const buffer = await blob.arrayBuffer();
+  return `data:${mimeType};base64,${arrayBufferToBase64(buffer)}`;
+}
+
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const chunkSize = 0x8000;
+
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+
+  if (typeof btoa === 'function') {
+    return btoa(binary);
+  }
+
+  if (typeof Buffer !== 'undefined') {
+    return Buffer.from(buffer).toString('base64');
+  }
+
+  throw new Error('No base64 encoder available in this runtime');
 }
 
 /**
@@ -87,6 +113,9 @@ export async function processImageRequests(
 
   // Clean up any extra whitespace left by removed placeholders
   processedText = processedText.replace(/\n\n+/g, '\n\n').trim();
+  if (!processedText && images.length > 0) {
+    processedText = buildImageResponseText(images.length);
+  }
 
   return { text: processedText, images };
 }
