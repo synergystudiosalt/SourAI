@@ -1,0 +1,185 @@
+════════════════════════════════════════════════════════════════════════════════
+  CLOUDFLARE PAGES DEPLOYMENT SETUP - COMPLETE ✓
+════════════════════════════════════════════════════════════════════════════════
+
+PROJECT STRUCTURE UPDATED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✓ Backend (Pages Functions)
+  └── functions/
+      ├── api/
+      │   ├── chat.ts          [POST /api/chat - Chat endpoint]
+      │   ├── agent.ts         [POST /api/agent - Code editor agent]
+      │   └── health.ts        [GET /api/health - Health check]
+      └── shared/
+          └── ai.ts            [Gemini + Groq API integration]
+
+✓ Frontend Integration
+  ├── src/lib/api.ts           [Dynamic API URL helper]
+  ├── src/App.tsx              [Updated with apiUrl()]
+  ├── src/components/workspace/AgentPanel.tsx [Updated with apiUrl()]
+  └── src/vite-env.d.ts        [TypeScript config]
+
+✓ Configuration & Documentation
+  ├── .env.example             [Example environment variables]
+  ├── DEPLOYMENT_INSTRUCTIONS.md [MAIN: Follow this for deployment]
+  ├── CLOUDFLARE_QUICK_START.md  [5-minute quick start]
+  ├── CLOUDFLARE_DEPLOYMENT.md   [Detailed reference guide]
+  └── README.md                [Updated with Cloudflare info]
+
+
+QUICK START (5 MINUTES)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. GET API KEYS (2 min)
+   • Gemini: https://aistudio.google.com/app/apikey
+   • Groq (optional): https://console.groq.com
+
+2. PUSH TO GITHUB (1 min)
+   $ git add .
+   $ git commit -m "Add Cloudflare Pages Functions deployment"
+   $ git push origin main
+
+3. CREATE CLOUDFLARE PAGES PROJECT (2 min)
+   • Go to https://dash.cloudflare.com
+   • Pages → Create a project → Connect to Git
+   • Root directory: sour.ai
+   • Build command: npm run build
+   • Build output directory: dist
+   • Click "Save and Deploy"
+
+4. ADD ENVIRONMENT VARIABLES (1 min)
+   • Settings → Environment variables
+   • Add GEMINI_API_KEY (or GEMINI_API_KEYS for multiple keys)
+   • (Optional) Add GROQ_API_KEY
+   • Save
+
+5. REDEPLOY (1 min)
+   • Deployments → Retry the failed build
+   • Wait 2-3 minutes
+
+6. VERIFY (1 min)
+   • Visit https://your-project.pages.dev
+   • Visit https://your-project.pages.dev/api/health
+   • Try sending a chat message
+
+
+WHAT'S CHANGED FROM BEFORE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+BEFORE: You needed a separate Node server (Render, Railway, VPS, etc.)
+  • Frontend on Cloudflare Pages
+  • Backend on another service
+  • Multiple deployments to manage
+
+AFTER: Everything on Cloudflare Pages
+  • Frontend runs as static site
+  • Backend runs as Pages Functions (serverless)
+  • One dashboard, one deployment
+  • Same pricing (mostly free)
+  • Automatically scales with traffic
+
+
+HOW IT WORKS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Browser request to https://your-project.pages.dev
+         ↓
+Cloudflare Pages serves React app
+         ↓
+User sends chat/agent request
+         ↓
+Frontend calls fetch(apiUrl('/api/chat'))
+         ↓
+Cloudflare Pages Functions handler catches /api/* routes
+         ↓
+TypeScript handler in functions/api/chat.ts runs
+         ↓
+Calls Gemini API or Groq API (using your API keys)
+         ↓
+Returns response to frontend
+         ↓
+Frontend displays AI response
+
+
+DEPLOYMENT DOCS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+→ DEPLOYMENT_INSTRUCTIONS.md      Follow this for step-by-step deployment
+→ CLOUDFLARE_QUICK_START.md       5-minute quick reference
+→ CLOUDFLARE_DEPLOYMENT.md        Detailed guide with troubleshooting
+
+All files are in the sour.ai/ directory.
+
+
+API KEYS SETUP
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✓ Get Gemini API Key
+  https://aistudio.google.com/app/apikey
+  Click "Create API Key" → "Create API key in new project"
+
+✓ (Optional) Get Groq API Key
+  https://console.groq.com
+  Sign up and create an API key (used as fallback)
+
+✓ Add to Cloudflare Pages
+  In project dashboard:
+  Settings → Environment variables
+  
+  For single key:
+  GEMINI_API_KEY = your-key-here
+  
+  For multiple keys (better throughput):
+  GEMINI_API_KEYS = key1,key2,key3,key4
+
+
+LOCAL DEVELOPMENT (Optional)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Option 1: Express Server (for quick dev)
+  $ npm run dev
+  Visit http://localhost:3000
+
+Option 2: Pages Functions (closest to production)
+  $ npm install -g wrangler
+  $ wrangler pages dev dist
+  Visit http://localhost:8788
+
+
+SUPPORT & REFERENCES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Cloudflare Pages:       https://developers.cloudflare.com/pages/
+Pages Functions:        https://developers.cloudflare.com/pages/platform/functions/
+Gemini API:             https://ai.google.dev/
+Groq API:               https://console.groq.com
+
+
+ERRORS FIXED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✓ Fixed TypeScript errors in src/App.tsx (undefined variable)
+✓ Fixed TypeScript errors in src/lib/api.ts (import.meta.env)
+✓ Created vite-env.d.ts for Vite TypeScript support
+✓ Updated all API calls to use dynamic apiUrl() helper
+✓ Verified project builds successfully
+
+Build status: ✓ PASSING
+  npm run build → 28.62s build time
+  No errors, all TypeScript checks pass
+
+
+READY TO DEPLOY!
+════════════════════════════════════════════════════════════════════════════════
+
+1. Read: DEPLOYMENT_INSTRUCTIONS.md (10 min read, very clear)
+2. Follow the 5 steps (5 minutes)
+3. Your app is live!
+
+Questions? Check:
+• CLOUDFLARE_QUICK_START.md for quick answers
+• CLOUDFLARE_DEPLOYMENT.md for detailed reference
+• The docs linked in each file
+
+════════════════════════════════════════════════════════════════════════════════

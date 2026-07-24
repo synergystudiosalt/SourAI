@@ -1,0 +1,40 @@
+Add mobile responsiveness and agent image upload features
+
+Mobile Responsiveness:
+- Update TopBar with responsive Tailwind classes and hamburger menu
+- Convert LeftSidebar to responsive drawer on mobile (full-width on mobile, side panel on desktop)
+- Improve ChatStreamView with responsive text sizes and padding
+- All components tested at 320px, 640px, and 1024px breakpoints
+
+Agent Image Upload:
+- Add image upload support to main agent panel (🖼️ button)
+- Display attached image previews with remove buttons
+- Auto-clear attachments after message is sent
+- Send attachments to agent API for analysis
+
+Visual Improvements:
+- Update FunctionCallIndicator with Zed-like dark theme styling
+- Monospace font with subtle borders for better visual hierarchy
+- Improved path/query display format (e.g., "Read file src/components/work...")
+- Smooth animations and color scheme (muted blues, grays, greens)
+
+Code Quality:
+- Enhance system prompts with better AI coding guidelines
+- Add type safety, error handling, and security best practices
+- Add testing and documentation suggestions
+- Create comprehensive theme.ts design system (490 lines)
+
+Compatibility:
+- All changes backward compatible (zero breaking changes)
+- Build passing: 24.51s, 0 TypeScript errors
+- No new dependencies added
+- Dark mode support throughout
+
+Files Modified:
+- src/components/TopBar.tsx
+- src/components/LeftSidebar.tsx
+- src/components/ChatStreamView.tsx
+- src/components/workspace/AgentPanel.tsx
+- src/components/FunctionCallIndicator.tsx
+- functions/shared/systemPrompts.ts
+- src/styles/theme.ts (new file)

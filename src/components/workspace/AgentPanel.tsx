@@ -1,0 +1,1272 @@
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import { motion, AnimatePresence } from 'motion/react';
+import {
+  Plus, ChevronRight, ChevronDown, AtSign, Check, Square, Loader2,
+  FilePlus, Trash2, ArrowLeft, Bot, Search, Settings, Mic, MicOff, X, Image as ImageIcon,
+} from 'lucide-react';
+import { AttachmentPopover } from '../AttachmentPopover';
+import { AttachmentItem } from '../../types';
+import { parseUploadedFile } from '../../utils/fileParser';
+import { AgentChatMessage, AgentFileOp, AgentMode, AgentToolCall, AIModel, SubAgentTask, WorkspaceFileNode } from '../../types';
+import { parseAgentResponse, summarizeForHistory, extractMentionedPaths } from '../../utils/agentProtocol';
+import { detectSubagentTasks, shouldUseSubagents, recommendedSubagentCount } from '../../utils/subagentDetection';
+import { MAX_CONCURRENT_SUBAGENTS } from '../../utils/constants';
+import { customApiManager, type CustomApiConfig } from '../../utils/customApiManager';
+import { VoiceRecognizer } from '../../utils/voiceRecognition';
+import { apiUrl } from '../../lib/api';
+import Logo from '../Logo';
+import PixelBowlIcon from '../PixelBowlIcon';
+import { CustomApiModal } from '../CustomApiModal';
+
+interface AgentPanelProps {
+  isDarkMode: boolean;
+  isCollapsed: boolean;
+  onToggleCollapse: () => void;
+  projectName: string;
+  files: WorkspaceFileNode[];
+  activeFile: { path: string; content: string } | null;
+  onApplyOps: (ops: AgentFileOp[]) => void;
+  onOpenFile: (path: string) => void;
+}
+
+const genId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
+const SLASH_COMMANDS: { cmd: string; label: string; prompt: string }[] = [
+  { cmd: '/explain', label: 'Explain the active file', prompt: 'Explain what the active file does, in simple terms.' },
+  { cmd: '/fix', label: 'Find and fix bugs', prompt: 'Find and fix any bugs in the active file.' },
+  { cmd: '/tests', label: 'Write tests', prompt: 'Write unit tests for the active file.' },
+  { cmd: '/comments', label: 'Add comments', prompt: 'Add clear, helpful comments to the active file.' },
+  { cmd: '/refactor', label: 'Refactor for clarity', prompt: 'Refactor the active file for readability and best practices without changing its behavior.' },
+  { cmd: '/readme', label: 'Generate a README', prompt: 'Generate a README.md for this project based on the files you can see.' },
+];
+
+const MODEL_LABELS: Record<AIModel, string> = {
+  'sour-omni-flash': 'Omni-Flash',
+  'sour-intelligence': 'Intelligence',
+  'sour-ultra': 'Ultra',
+  'sour-overclock': 'Overclock',
+};
+
+const MODEL_OPTIONS: AIModel[] = ['sour-omni-flash', 'sour-intelligence', 'sour-ultra', 'sour-overclock'];
+
+const MiniMarkdown: React.FC<{ text: string }> = ({ text }) => (
+  <ReactMarkdown
+    components={{
+      p: ({ children }) => <p className="mb-1.5 last:mb-0">{children}</p>,
+      ul: ({ children }) => <ul className="list-disc pl-4 mb-1.5 space-y-0.5">{children}</ul>,
+      ol: ({ children }) => <ol className="list-decimal pl-4 mb-1.5 space-y-0.5">{children}</ol>,
+      li: ({ children }) => <li>{children}</li>,
+      strong: ({ children }) => <strong className="font-semibold text-[#1c1b1a] dark:text-[#f0efe6]">{children}</strong>,
+      a: ({ children, href }) => (
+        <a href={href} target="_blank" rel="noreferrer" className="text-[#d96b43] underline">
+          {children}
+        </a>
+      ),
+      code: ({ children, className }) => {
+        if (className) {
+          return (
+            <pre className="my-1.5 p-2 rounded-lg bg-[#efece3] dark:bg-[#141413] overflow-x-auto text-[10.5px] font-mono">
+              <code>{children}</code>
+            </pre>
+          );
+        }
+        return <code className="px-1 py-0.5 rounded bg-[#efece3] dark:bg-[#141413] text-[10.5px] font-mono">{children}</code>;
+      },
+    }}
+  >
+    {text}
+  </ReactMarkdown>
+);
+
+/**
+ * Reveals `text` a few characters at a time (a staggered, simulated typing
+ * effect) instead of dumping the whole response in at once. Only animates
+ * when `enabled` is true (freshly-generated messages); once it finishes a
+ * single pass it locks in the full text so later re-renders never replay it.
+ */
+const TypedMarkdown: React.FC<{ text: string; enabled: boolean }> = ({ text, enabled }) => {
+  const [shown, setShown] = useState(enabled ? '' : text);
+  const doneRef = useRef(!enabled);
+
+  useEffect(() => {
+    if (doneRef.current || !enabled) {
+      setShown(text);
+      return;
+    }
+    let i = 0;
+    const id = setInterval(() => {
+      i += 4;
+      if (i >= text.length) {
+        setShown(text);
+        doneRef.current = true;
+        clearInterval(id);
+      } else {
+        setShown(text.slice(0, i));
+      }
+    }, 14);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [text]);
+
+  return <MiniMarkdown text={shown} />;
+};
+
+const SUBAGENT_STATUS_LABEL: Record<SubAgentTask['status'], string> = {
+  queued: 'Queued',
+  running: 'Working…',
+  done: 'Done',
+  error: 'Failed',
+};
+
+export const AgentPanel: React.FC<AgentPanelProps> = ({
+  isDarkMode,
+  isCollapsed,
+  onToggleCollapse,
+  projectName,
+  files,
+  activeFile,
+  onApplyOps,
+  onOpenFile,
+}) => {
+  const [messages, setMessages] = useState<AgentChatMessage[]>([]);
+  const [input, setInput] = useState('');
+  const [isSending, setIsSending] = useState(false);
+  const [mode, setMode] = useState<AgentMode>(() => (localStorage.getItem('sourbot_agent_mode') as AgentMode) || 'write');
+  const [selectedModel, setSelectedModel] = useState<AIModel>(
+    () => (localStorage.getItem('sourbot_agent_model') as AIModel) || 'sour-omni-flash'
+  );
+  const [showModelPopover, setShowModelPopover] = useState(false);
+  const [showCustomApiModal, setShowCustomApiModal] = useState(false);
+  const [customApiConfigs, setCustomApiConfigs] = useState<CustomApiConfig[]>(customApiManager.getConfigs());
+  const [isListening, setIsListening] = useState(false);
+  const [mentionState, setMentionState] = useState<{ query: string; start: number } | null>(null);
+  const [showSlash, setShowSlash] = useState(false);
+  const [openThoughts, setOpenThoughts] = useState<Set<string>>(new Set());
+  const [openToolCalls, setOpenToolCalls] = useState<Set<string>>(new Set());
+  const [subAgents, setSubAgents] = useState<SubAgentTask[]>([]);
+  const [showAttachmentPopover, setShowAttachmentPopover] = useState(false);
+  const [agentAttachments, setAgentAttachments] = useState<AttachmentItem[]>([]);
+  const attachmentPopoverRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const modelPopoverRef = useRef<HTMLDivElement>(null);
+  const voiceRecognizerRef = useRef<VoiceRecognizer | null>(null);
+  // Messages generated during this mount get a typewriter effect; messages
+  // restored from localStorage on load render instantly.
+  const freshMessageIdsRef = useRef<Set<string>>(new Set());
+  // Initialize voice recognizer on mount
+  useEffect(() => {
+    voiceRecognizerRef.current = new VoiceRecognizer({
+      onTranscript: (transcript, isFinal) => {
+        setInput((prev) => {
+          const newInput = prev + transcript;
+          return newInput;
+        });
+        if (isFinal) {
+          setIsListening(false);
+        }
+      },
+      onError: (error) => {
+        console.error('Voice recognition error:', error);
+        setIsListening(false);
+      },
+      onStart: () => setIsListening(true),
+      onEnd: () => setIsListening(false),
+    });
+  }, []);
+
+  const handleVoiceToggle = () => {
+    if (!voiceRecognizerRef.current) return;
+
+    if (isListening) {
+      voiceRecognizerRef.current.stop();
+      setIsListening(false);
+    } else {
+      if (!voiceRecognizerRef.current.isSupported()) {
+        alert('Speech recognition is not supported in your browser');
+        return;
+      }
+      voiceRecognizerRef.current.start();
+    }
+  };
+
+  /** Smart function auto-detection: when user mentions action words,
+   *  automatically inject the corresponding @@ function call. */
+  const autoDetectAndCallFunctions = (userText: string): { promptToSend: string; autoCalledFunctions: string[] } => {
+    const autoCalledFunctions: string[] = [];
+    let modifiedText = userText;
+
+    // Pattern 1: Read/view operations
+    if (/\b(read|view|show|open|check|display|cat|view.*file)\b/i.test(userText) && !/@@readfile/i.test(userText)) {
+      // Check if path-like tokens suggest a file request
+      const pathMatch = userText.match(/['\"]([\w.\/-]+[\.\w]+)['\"]|(?:the\s+)?file\s+([\w.\/-]+)|(src|app|lib|components)\/[\w.\/-]+/i);
+      if (pathMatch) {
+        modifiedText = `${userText}\n\n@@readfile: ${pathMatch[1] || pathMatch[2] || pathMatch[0]}`;
+        autoCalledFunctions.push('@@readfile');
+      }
+    }
+
+    // Pattern 2: Search/find operations
+    if (/\b(search|find|locate|grep|look for|where|detect)\b/i.test(userText) && !/@@findall/i.test(userText)) {
+      const searchTerm = userText.match(/(?:for|"([^"]+)"|\s+([\w\s]+?)(?:\s+in|\?|$))/i);
+      if (searchTerm && searchTerm[1]?.length < 50) {
+        modifiedText = `${userText}\n\n@@findall: ${searchTerm[1] || searchTerm[2]}`;
+        autoCalledFunctions.push('@@findall');
+      }
+    }
+
+    return { promptToSend: modifiedText, autoCalledFunctions };
+  };
+
+  /** Detect if task is complex enough to warrant subagent delegation. */
+  const shouldAutoSpawnSubagents = (userText: string): boolean => {
+    const sentenceCount = (userText.match(/[.!?]/g) || []).length;
+    const hasMultipleTopics = /\b(and|also|plus|additionally|furthermore)\b/i.test(userText);
+    const wordCount = userText.split(/\s+/).length;
+    return (wordCount > 60 && sentenceCount >= 2) || (hasMultipleTopics && sentenceCount >= 2);
+  };
+
+  // Hard cap enforcement for autonomous sub-agents: at most
+  // MAX_CONCURRENT_SUBAGENTS run at once, extras wait in this queue.
+  const subAgentQueueRef = useRef<{ task: SubAgentTask; prompt: string }[]>([]);
+  const runningSubAgentsRef = useRef(0);
+
+  useEffect(() => {
+    if (!showAttachmentPopover) return;
+    const onPointerDown = (e: MouseEvent) => {
+      if (attachmentPopoverRef.current && !attachmentPopoverRef.current.contains(e.target as Node)) {
+        setShowAttachmentPopover(false);
+      }
+    };
+    window.addEventListener('mousedown', onPointerDown);
+    return () => window.removeEventListener('mousedown', onPointerDown);
+  }, [showAttachmentPopover]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(`sourbot_agent_thread::${projectName}`);
+      setMessages(raw ? JSON.parse(raw) : []);
+    } catch {
+      setMessages([]);
+    }
+  }, [projectName]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(`sourbot_agent_thread::${projectName}`, JSON.stringify(messages));
+    } catch {
+      /* storage full/unavailable - not critical */
+    }
+  }, [messages, projectName]);
+
+  useEffect(() => {
+    localStorage.setItem('sourbot_agent_mode', mode);
+  }, [mode]);
+
+  useEffect(() => {
+    localStorage.setItem('sourbot_agent_model', selectedModel);
+  }, [selectedModel]);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages, isSending]);
+
+  useEffect(() => {
+    if (!showModelPopover) return;
+    const onPointerDown = (e: MouseEvent) => {
+      if (modelPopoverRef.current && !modelPopoverRef.current.contains(e.target as Node)) {
+        setShowModelPopover(false);
+      }
+    };
+    window.addEventListener('mousedown', onPointerDown);
+    return () => window.removeEventListener('mousedown', onPointerDown);
+  }, [showModelPopover]);
+
+  useEffect(() => {
+    if (!showAttachmentPopover) return;
+    const onPointerDown = (e: MouseEvent) => {
+      if (attachmentPopoverRef.current && !attachmentPopoverRef.current.contains(e.target as Node)) {
+        setShowAttachmentPopover(false);
+      }
+    };
+    window.addEventListener('mousedown', onPointerDown);
+    return () => window.removeEventListener('mousedown', onPointerDown);
+  }, [showAttachmentPopover]);
+
+  const mentionMatches = useMemo(() => {
+    if (!mentionState) return [];
+    const q = mentionState.query;
+    const list = q ? files.filter((f) => f.path.toLowerCase().includes(q)) : files;
+    return list.slice(0, 6);
+  }, [mentionState, files]);
+
+  const markApplied = (messageId: string, paths: string[]) => {
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === messageId
+          ? {
+              ...m,
+              appliedPaths: Array.from(new Set([...(m.appliedPaths || []), ...paths])),
+              codingPaths: (m.codingPaths || []).filter((p) => !paths.includes(p)),
+            }
+          : m
+      )
+    );
+  };
+
+  const handleApplySingle = (messageId: string, op: AgentFileOp) => {
+    onApplyOps([op]);
+    markApplied(messageId, [op.path]);
+  };
+
+  const handleApplyAll = (messageId: string, ops: AgentFileOp[]) => {
+    onApplyOps(ops);
+    markApplied(messageId, ops.map((o) => o.path));
+  };
+
+  const toggleThought = (messageId: string) => {
+    setOpenThoughts((prev) => {
+      const next = new Set(prev);
+      if (next.has(messageId)) next.delete(messageId);
+      else next.add(messageId);
+      return next;
+    });
+  };
+
+  const toggleToolCalls = (messageId: string) => {
+    setOpenToolCalls((prev) => {
+      const next = new Set(prev);
+      if (next.has(messageId)) next.delete(messageId);
+      else next.add(messageId);
+      return next;
+    });
+  };
+
+  /** Resolves @@readfile: requests — reads files from the workspace tree. */
+  const resolveFileRequests = (
+    paths: string[]
+  ): { toolCalls: AgentToolCall[]; resultText: string } => {
+    const toolCalls: AgentToolCall[] = [];
+    const parts: string[] = [];
+    for (const p of paths) {
+      const node = files.find((f) => f.path === p);
+      if (node && node.content !== undefined) {
+        toolCalls.push({ type: 'readfile', path: p, found: true });
+        parts.push(`[File read: ${p}]\n\`\`\`\n${node.content.slice(0, 6000)}\n\`\`\``);
+      } else {
+        toolCalls.push({ type: 'readfile', path: p, found: false });
+        parts.push(`[File not found: ${p}]`);
+      }
+    }
+    return { toolCalls, resultText: parts.join('\n\n') };
+  };
+
+  /** Resolves @@findall: requests — searches every loaded file for a query. */
+  const resolveFindRequests = (
+    queries: string[]
+  ): { toolCalls: AgentToolCall[]; resultText: string } => {
+    const toolCalls: AgentToolCall[] = [];
+    const parts: string[] = [];
+    for (const query of queries) {
+      const matches: { path: string; line: number; text: string }[] = [];
+      for (const file of files) {
+        if (file.type !== 'file' || file.content === undefined) continue;
+        const lines = file.content.split('\n');
+        lines.forEach((lineText, idx) => {
+          try {
+            const hit = new RegExp(query, 'i').test(lineText);
+            if (hit) matches.push({ path: file.path, line: idx + 1, text: lineText.trim().slice(0, 120) });
+          } catch {
+            if (lineText.toLowerCase().includes(query.toLowerCase()))
+              matches.push({ path: file.path, line: idx + 1, text: lineText.trim().slice(0, 120) });
+          }
+        });
+      }
+      const limited = matches.slice(0, 60);
+      const fileSet = new Set(limited.map((m) => m.path));
+      toolCalls.push({ type: 'findall', query, matchCount: matches.length, fileCount: fileSet.size, matches: limited });
+      if (matches.length === 0) {
+        parts.push(`[Search: "${query}"]\nNo matches found across ${files.length} files.`);
+      } else {
+        const resultLines = [`[Search results for "${query}"] (${matches.length} match${matches.length !== 1 ? 'es' : ''} in ${fileSet.size} file${fileSet.size !== 1 ? 's' : ''}):`];
+        for (const m of limited) resultLines.push(`${m.path}:${m.line}: ${m.text}`);
+        if (matches.length > 60) resultLines.push(`...and ${matches.length - 60} more matches (truncated).`);
+        parts.push(resultLines.join('\n'));
+      }
+    }
+    return { toolCalls, resultText: parts.join('\n\n') };
+  };
+
+  /** Summarises the tool calls into a short label for the collapsed button. */
+  const toolCallLabel = (calls: AgentToolCall[], busy: boolean): string => {
+    if (busy) {
+      const hasFind = calls.some((c) => c.type === 'findall');
+      const hasRead = calls.some((c) => c.type === 'readfile');
+      if (hasFind && hasRead) return 'Reading files & searching…';
+      if (hasFind) return `Searching ${calls.filter((c) => c.type === 'findall').length} term${calls.filter((c) => c.type === 'findall').length > 1 ? 's' : ''}…`;
+      return `Reading ${calls.filter((c) => c.type === 'readfile').length} file${calls.filter((c) => c.type === 'readfile').length > 1 ? 's' : ''}…`;
+    }
+    const reads = calls.filter((c) => c.type === 'readfile');
+    const finds = calls.filter((c) => c.type === 'findall');
+    const parts: string[] = [];
+    if (reads.length) parts.push(`Read ${reads.length} file${reads.length > 1 ? 's' : ''}`);
+    if (finds.length) parts.push(`Searched ${finds.length} term${finds.length > 1 ? 's' : ''}`);
+    return parts.join(', ');
+  };
+
+  /** Sequentially "codes" each file with a short delay so the UI can show a
+   *  spinner per-file (rather than instantly marking every file as done). */
+  const applyOpsStaggered = async (messageId: string, ops: AgentFileOp[]) => {
+    for (const op of ops) {
+      await new Promise((resolve) => setTimeout(resolve, 350 + Math.random() * 400));
+      onApplyOps([op]);
+      markApplied(messageId, [op.path]);
+    }
+  };
+
+  const runSubAgentTask = async (task: SubAgentTask, prompt: string, parentMsgId: string) => {
+    setSubAgents((prev) => prev.map((t) => (t.id === task.id ? { ...t, status: 'running' } : t)));
+
+    const knownPaths = files.map((f) => f.path);
+    try {
+      const res = await fetch(apiUrl('/api/agent'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: selectedModel,
+          mode,
+          messages: [{ role: 'user', content: `Sub-agent task (delegated by the main agent): ${prompt}` }],
+          activeFile: activeFile ? { path: activeFile.path, content: activeFile.content.slice(0, 8000) } : null,
+          projectFiles: knownPaths.slice(0, 300),
+          mentionedFiles: [],
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Sub-agent failed to respond.');
+
+      const parsed = parseAgentResponse(data.text || '');
+      let finalParsed = parsed;
+      let finalData = data;
+
+      // Tool-call loop for sub-agents
+      if (parsed.fileRequests.length > 0 || parsed.findRequests.length > 0) {
+        const { toolCalls: readCalls, resultText: readText } = resolveFileRequests(parsed.fileRequests);
+        const { toolCalls: findCalls, resultText: findText } = resolveFindRequests(parsed.findRequests);
+        const toolCalls = [...readCalls, ...findCalls];
+        const resultText = [readText, findText].filter(Boolean).join('\n\n');
+        const subMsgId = genId();
+        const interimSubMsg: AgentChatMessage = {
+          id: subMsgId,
+          role: 'assistant',
+          content: '',
+          ops: [],
+          appliedPaths: [],
+          codingPaths: [],
+          thinking: data.thinking,
+          thinkingLabel: data.thinkingLabel,
+          toolCalls,
+          isReadingFiles: true,
+          createdAt: Date.now(),
+        };
+        freshMessageIdsRef.current.add(subMsgId);
+        setMessages((prev) => [...prev, interimSubMsg]);
+
+        const res2 = await fetch(apiUrl('/api/agent'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: selectedModel,
+            mode,
+            messages: [
+              { role: 'user', content: `Sub-agent task (delegated by the main agent): ${prompt}` },
+              { role: 'assistant', content: data.text || '' },
+              { role: 'user', content: resultText },
+            ],
+            activeFile: activeFile ? { path: activeFile.path, content: activeFile.content.slice(0, 8000) } : null,
+            projectFiles: knownPaths.slice(0, 300),
+            mentionedFiles: [],
+          }),
+        });
+        const data2 = await res2.json().catch(() => ({}));
+        if (!res2.ok) throw new Error(data2?.error || 'Sub-agent failed after reading files.');
+        finalParsed = parseAgentResponse(data2.text || '');
+        finalData = data2;
+
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === subMsgId ? { ...m, isReadingFiles: false } : m
+          )
+        );
+      }
+
+      const { displayText, ops } = finalParsed;
+      const willAutoApply = mode === 'write' && ops.length > 0;
+
+      const subMsg: AgentChatMessage = {
+        id: genId(),
+        role: 'assistant',
+        content: `**Sub-agent — ${task.label}**\n\n${displayText || '_No changes were necessary._'}`,
+        ops,
+        appliedPaths: [],
+        codingPaths: willAutoApply ? ops.map((o) => o.path) : [],
+        thinking: finalData.thinking,
+        thinkingLabel: finalData.thinkingLabel,
+        createdAt: Date.now(),
+      };
+      freshMessageIdsRef.current.add(subMsg.id);
+      setMessages((prev) => [...prev, subMsg]);
+      if (willAutoApply) applyOpsStaggered(subMsg.id, ops);
+
+      setSubAgents((prev) => prev.map((t) => (t.id === task.id ? { ...t, status: 'done', fileCount: ops.length } : t)));
+    } catch (err: any) {
+      setSubAgents((prev) => prev.map((t) => (t.id === task.id ? { ...t, status: 'error', error: err?.message } : t)));
+    }
+  };
+
+  const kickSubAgentQueue = () => {
+    while (runningSubAgentsRef.current < MAX_CONCURRENT_SUBAGENTS && subAgentQueueRef.current.length > 0) {
+      const next = subAgentQueueRef.current.shift()!;
+      runningSubAgentsRef.current += 1;
+      runSubAgentTask(next.task, next.prompt, next.task.id).finally(() => {
+        runningSubAgentsRef.current -= 1;
+        kickSubAgentQueue();
+      });
+    }
+  };
+
+  /** The main agent autonomously decides (via `@@subagent:` directives in its
+   *  response) when a request should be split into delegated sub-tasks. This
+   *  enforces the hard concurrency cap; extra requests simply queue. */
+  const spawnSubAgents = (taskDescriptions: string[]) => {
+    const newTasks: SubAgentTask[] = taskDescriptions.map((label) => ({ id: genId(), label, status: 'queued' }));
+    setSubAgents((prev) => [...prev, ...newTasks]);
+    newTasks.forEach((task, idx) => subAgentQueueRef.current.push({ task, prompt: taskDescriptions[idx] }));
+    kickSubAgentQueue();
+  };
+
+  const handleSend = async (overrideText?: string) => {
+    const text = (overrideText ?? input).trim();
+    if (!text || isSending) return;
+    setInput('');
+    setShowSlash(false);
+    setMentionState(null);
+    setShowAttachmentPopover(false);
+
+    // Auto-detect functions and check for complex tasks
+    const { promptToSend, autoCalledFunctions } = autoDetectAndCallFunctions(text);
+    const shouldSpawnSubagents = !autoCalledFunctions.length && shouldAutoSpawnSubagents(text);
+
+    // Add note about auto-called functions if any
+    let displayContent = text;
+    if (autoCalledFunctions.length > 0) {
+      displayContent = `${text}\n\n_[Auto-called: ${autoCalledFunctions.join(', ')}]_`;
+    }
+    if (shouldSpawnSubagents) {
+      displayContent = `${displayContent}\n\n_[Complex task detected — spawning subagents for parallel work]_`;
+    }
+
+    const userMsg: AgentChatMessage = { id: genId(), role: 'user', content: displayContent, createdAt: Date.now() };
+    const historyBase = [...messages, userMsg];
+    setMessages(historyBase);
+    setIsSending(true);
+
+    const knownPaths = files.map((f) => f.path);
+    const mentionPaths = extractMentionedPaths(text, knownPaths);
+    const mentionedFiles = mentionPaths
+      .map((p) => files.find((f) => f.path === p))
+      .filter((f): f is WorkspaceFileNode => Boolean(f))
+      .map((f) => ({ path: f.path, content: (f.content || '').slice(0, 6000) }));
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    try {
+      const basePayload = {
+        model: selectedModel,
+        mode,
+        activeFile: activeFile ? { path: activeFile.path, content: activeFile.content.slice(0, 8000) } : null,
+        projectFiles: knownPaths.slice(0, 300),
+        mentionedFiles,
+      };
+
+      // ── First LLM turn ────────────────────────────────────────────────────
+      // Use modified text with auto-called functions
+      const messagesForAgent = historyBase.slice(-16).map((m) => ({
+        role: m.role,
+        content: m.role === 'assistant' ? summarizeForHistory(m.content, m.ops) : m.content,
+      }));
+      // Update the last user message with auto-called functions
+      if (messagesForAgent.length > 0 && messagesForAgent[messagesForAgent.length - 1].role === 'user') {
+        messagesForAgent[messagesForAgent.length - 1].content = promptToSend;
+      }
+
+      const res = await fetch(apiUrl('/api/agent'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...basePayload,
+          messages: messagesForAgent,
+          attachments: agentAttachments,
+        }),
+        signal: controller.signal,
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'The agent failed to respond.');
+
+      const parsed = parseAgentResponse(data.text || '');
+
+      // ── Tool-call loop: agent requested files and/or searches ─────────────
+      if (parsed.fileRequests.length > 0 || parsed.findRequests.length > 0) {
+        const { toolCalls: readCalls, resultText: readText } = resolveFileRequests(parsed.fileRequests);
+        const { toolCalls: findCalls, resultText: findText } = resolveFindRequests(parsed.findRequests);
+        const allToolCalls = [...readCalls, ...findCalls];
+        const resultText = [readText, findText].filter(Boolean).join('\n\n');
+
+        // Show an interim message immediately so the user sees progress
+        const msgId = genId();
+        const interimMsg: AgentChatMessage = {
+          id: msgId,
+          role: 'assistant',
+          content: '',
+          ops: [],
+          appliedPaths: [],
+          codingPaths: [],
+          thinking: data.thinking,
+          thinkingLabel: data.thinkingLabel,
+          toolCalls: allToolCalls,
+          isReadingFiles: true,
+          createdAt: Date.now(),
+        };
+        freshMessageIdsRef.current.add(msgId);
+        setMessages((prev) => [...prev, interimMsg]);
+
+        // ── Second LLM turn with tool results injected ───────────────────
+        const continuationMessages = [
+          ...historyBase.slice(-16).map((m) => ({
+            role: m.role,
+            content: m.role === 'assistant' ? summarizeForHistory(m.content, m.ops) : m.content,
+          })),
+          { role: 'assistant' as const, content: data.text || '' },
+          { role: 'user' as const, content: resultText },
+        ];
+
+        const res2 = await fetch(apiUrl('/api/agent'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...basePayload, messages: continuationMessages, attachments: agentAttachments }),
+          signal: controller.signal,
+        });
+        const data2 = await res2.json().catch(() => ({}));
+        if (!res2.ok) throw new Error(data2?.error || 'The agent failed to respond after using tools.');
+
+        const parsed2 = parseAgentResponse(data2.text || '');
+        const willAutoApply = mode === 'write' && parsed2.ops.length > 0;
+
+        // Update the interim message in-place with the final answer
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === msgId
+              ? {
+                  ...m,
+                  content: parsed2.displayText || (parsed2.ops.length ? '' : "I didn't find anything useful to say - try rephrasing that."),
+                  ops: parsed2.ops,
+                  codingPaths: willAutoApply ? parsed2.ops.map((o) => o.path) : [],
+                  thinking: data2.thinking || m.thinking,
+                  thinkingLabel: data2.thinkingLabel || m.thinkingLabel,
+                  isReadingFiles: false,
+                }
+              : m
+          )
+        );
+        if (willAutoApply) applyOpsStaggered(msgId, parsed2.ops);
+        if (parsed2.subAgentTasks.length > 0) spawnSubAgents(parsed2.subAgentTasks.slice(0, 8));
+
+      } else {
+        // ── Normal flow (no tool calls) ───────────────────────────────────
+        const { displayText, ops, subAgentTasks } = parsed;
+        
+        // Auto-detect multi-part tasks for subagent delegation
+        let allSubAgentTasks = [...subAgentTasks];
+        if (allSubAgentTasks.length === 0 && (shouldUseSubagents(text) || shouldSpawnSubagents)) {
+          const detectedTasks = detectSubagentTasks(text);
+          if (detectedTasks.length >= 2) {
+            allSubAgentTasks = detectedTasks;
+          }
+        }
+        
+        const willAutoApply = mode === 'write' && ops.length > 0;
+        const assistantMsgId = genId();
+        const assistantMsg: AgentChatMessage = {
+          id: assistantMsgId,
+          role: 'assistant',
+          content: displayText || (ops.length ? '' : "I didn't find anything useful to say - try rephrasing that."),
+          ops,
+          appliedPaths: [],
+          codingPaths: willAutoApply ? ops.map((o) => o.path) : [],
+          thinking: data.thinking,
+          thinkingLabel: data.thinkingLabel,
+          createdAt: Date.now(),
+        };
+        freshMessageIdsRef.current.add(assistantMsgId);
+        setMessages((prev) => [...prev, assistantMsg]);
+        if (willAutoApply) applyOpsStaggered(assistantMsgId, ops);
+        if (allSubAgentTasks.length > 0) spawnSubAgents(allSubAgentTasks.slice(0, 8));
+      }
+    } catch (err: any) {
+      if (err?.name === 'AbortError') {
+        setMessages((prev) => [...prev, { id: genId(), role: 'assistant', content: '_Stopped._', createdAt: Date.now() }]);
+      } else {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: genId(),
+            role: 'assistant',
+            content: err?.message || 'Something went wrong reaching the sour.ai Agent.',
+            isError: true,
+            createdAt: Date.now(),
+          },
+        ]);
+      }
+    } finally {
+      setIsSending(false);
+      setAgentAttachments([]);
+      abortControllerRef.current = null;
+    }
+  };
+
+  const handleAttachImage = (item: AttachmentItem) => {
+    setAgentAttachments((prev) => [...prev, item]);
+    setShowAttachmentPopover(false);
+  };
+
+  const removeAttachment = (index: number) => {
+    setAgentAttachments((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    setInput(val);
+    const caret = e.target.selectionStart ?? val.length;
+    const uptoCaret = val.slice(0, caret);
+
+    setShowSlash(/^\/[a-zA-Z]*$/.test(uptoCaret));
+
+    const atMatch = uptoCaret.match(/(?:^|\s)@([\w./-]*)$/);
+    setMentionState(atMatch ? { query: atMatch[1].toLowerCase(), start: caret - atMatch[1].length } : null);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Escape') {
+      setMentionState(null);
+      setShowSlash(false);
+      return;
+    }
+    if (e.key === 'Enter' && !e.shiftKey && !mentionState && !showSlash) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith('image/')) {
+        e.preventDefault();
+        const file = items[i].getAsFile();
+        if (file) {
+          parseUploadedFile(file).then((item) => {
+            setAgentAttachments((prev) => [...prev, item]);
+          }).catch((err) => {
+            console.error('Error pasting image:', err);
+          });
+        }
+        break;
+      }
+    }
+  };
+
+  const selectMention = (path: string) => {
+    if (!mentionState) return;
+    const before = input.slice(0, mentionState.start);
+    const after = input.slice(mentionState.start + mentionState.query.length);
+    const next = `${before}${path} ${after}`;
+    setInput(next);
+    setMentionState(null);
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (!el) return;
+      el.focus();
+      const pos = before.length + path.length + 1;
+      el.setSelectionRange(pos, pos);
+    });
+  };
+
+  const selectSlashCommand = (cmd: (typeof SLASH_COMMANDS)[number]) => {
+    setShowSlash(false);
+    setInput('');
+    handleSend(cmd.prompt);
+  };
+
+  if (isCollapsed) {
+    return (
+      <div className="w-9 border-r border-[#e5e3db] dark:border-[#2d2d2c] flex flex-col items-center py-3 bg-[#fbfaf7] dark:bg-[#1e1e1e] shrink-0">
+        <button
+          onClick={onToggleCollapse}
+          title="Show sour.ai Agent"
+          className="p-1.5 rounded-lg text-[#8c887d] dark:text-[#a09c94] hover:bg-[#efece5] dark:hover:bg-[#2a2a2a] hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer"
+        >
+          <ChevronRight className="w-4 h-4" />
+        </button>
+      </div>
+    );
+  }
+
+  const renderMessage = (msg: AgentChatMessage, idx: number) => {
+    if (msg.role === 'user') {
+      return (
+        <div key={msg.id} className="flex justify-end">
+          <div className="max-w-[88%] bg-[#f0ede4] dark:bg-[#252524] text-[#1c1b1a] dark:text-[#f0efe6] px-2.5 py-1.5 text-[12px] leading-relaxed whitespace-pre-wrap wrap-break-word rounded-lg">
+            {msg.content}
+          </div>
+        </div>
+      );
+    }
+
+    const allApplied = Boolean(msg.ops && msg.ops.length > 0 && msg.ops.every((op) => msg.appliedPaths?.includes(op.path)));
+    const isLatest = idx === messages.length - 1;
+    const isTyping = freshMessageIdsRef.current.has(msg.id) && isLatest;
+    const thoughtOpen = openThoughts.has(msg.id);
+
+    return (
+      <div key={msg.id} className="space-y-1.5">
+        <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-[#a39d8f] dark:text-[#767671]">
+          <Logo size={12} /> sour.ai Agent
+        </div>
+
+        {msg.thinking && (
+          <div className="select-none">
+            <button
+              type="button"
+              onClick={() => toggleThought(msg.id)}
+              className="flex items-center gap-1 text-[10.5px] font-medium text-[#8c887d] dark:text-[#a09c94] hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth"
+            >
+              <span>{msg.thinkingLabel || 'Thought process'}</span>
+              <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${thoughtOpen ? 'rotate-180' : ''}`} />
+            </button>
+            <AnimatePresence>
+              {thoughtOpen && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.15 }}
+                  className="mt-1.5 pl-2 border-l border-[#e2dec0] dark:border-[#383836] text-[10.5px] text-[#706c62] dark:text-[#a09d98] space-y-1 leading-relaxed overflow-hidden"
+                >
+                  {msg.thinking
+                    .split(/(?<=[.!?])\s+|\n+/)
+                    .map((s) => s.trim())
+                    .filter(Boolean)
+                    .slice(0, 6)
+                    .map((step, i) => (
+                      <div key={i}>{step}</div>
+                    ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
+
+        {msg.toolCalls && msg.toolCalls.length > 0 && (
+          <div className="select-none">
+            <button
+              type="button"
+              onClick={() => !msg.isReadingFiles && toggleToolCalls(msg.id)}
+              className="flex items-center gap-1 text-[10.5px] font-medium text-[#8c887d] dark:text-[#a09c94] hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth"
+            >
+              {msg.isReadingFiles
+                ? <><Loader2 className="w-3 h-3 animate-spin" /><span>{toolCallLabel(msg.toolCalls, true)}</span></>
+                : <><span>{toolCallLabel(msg.toolCalls, false)}</span><ChevronDown className={`w-3 h-3 transition-transform duration-200 ${openToolCalls.has(msg.id) ? 'rotate-180' : ''}`} /></>}
+            </button>
+            <AnimatePresence>
+              {openToolCalls.has(msg.id) && !msg.isReadingFiles && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.15 }}
+                  className="mt-1.5 pl-2 border-l border-[#e2dec0] dark:border-[#383836] text-[10.5px] text-[#706c62] dark:text-[#a09d98] space-y-2 leading-relaxed overflow-hidden"
+                >
+                  {msg.toolCalls.map((tc, i) =>
+                    tc.type === 'readfile' ? (
+                      <div key={i} className="flex items-center gap-1.5">
+                        {tc.found
+                          ? <Check className="w-3 h-3 text-emerald-600 shrink-0" />
+                          : <span className="w-3 h-3 text-red-400 shrink-0 font-bold leading-3 text-center">!</span>}
+                        <span className="font-mono truncate">{tc.path}</span>
+                        {!tc.found && <span className="text-red-400 shrink-0">not found</span>}
+                      </div>
+                    ) : (
+                      <div key={i} className="space-y-1">
+                        <div className="flex items-center gap-1.5 font-medium">
+                          <Search className="w-3 h-3 shrink-0" />
+                          <span>"{tc.query}" &mdash; {tc.matchCount} match{tc.matchCount !== 1 ? 'es' : ''} in {tc.fileCount} file{tc.fileCount !== 1 ? 's' : ''}</span>
+                        </div>
+                        {tc.matches.slice(0, 5).map((m, j) => (
+                          <div key={j} className="pl-3 font-mono text-[9.5px] truncate">
+                            <span className="opacity-60">{m.path}:{m.line}</span>{' '}{m.text}
+                          </div>
+                        ))}
+                        {tc.matchCount > 5 && (
+                          <div className="pl-3 opacity-50 text-[9.5px]">…and {tc.matchCount - 5} more</div>
+                        )}
+                      </div>
+                    )
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
+
+        {msg.content && (
+          <div className={`text-[12px] leading-relaxed wrap-break-word ${msg.isError ? 'text-red-600 dark:text-red-400' : 'text-[#3d3a33] dark:text-[#dedcd6]'}`}>
+            <TypedMarkdown text={msg.content} enabled={isTyping} />
+          </div>
+        )}
+        {msg.ops && msg.ops.length > 0 && (
+          <div className="space-y-1 pt-0.5">
+            {msg.ops.map((op) => {
+              const applied = msg.appliedPaths?.includes(op.path);
+              const isCoding = msg.codingPaths?.includes(op.path);
+              return (
+                <div
+                  key={op.path}
+                  className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 sm:gap-1.5 text-[9.5px] sm:text-[10.5px] px-2 py-1 border border-[#e5e3db] dark:border-[#2d2d2c] bg-white/60 dark:bg-black/10 rounded"
+                >
+                  <div className="flex items-center gap-1 sm:gap-1.5 min-w-0 w-full sm:w-auto">
+                    {isCoding ? (
+                      <Loader2 className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-[#d96b43] shrink-0 animate-spin" />
+                    ) : op.type === 'delete' ? (
+                      <Trash2 className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-red-500 shrink-0" />
+                    ) : (
+                      <FilePlus className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-emerald-600 shrink-0" />
+                    )}
+                    <span className="truncate text-[9px] sm:text-[10px]">{op.path}</span>
+                  </div>
+                  <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 w-full sm:w-auto justify-between sm:justify-end">
+                    {isCoding ? (
+                      <span className="text-[#d96b43] text-[8px] sm:text-[10px]">Coding…</span>
+                    ) : (
+                      <>
+                        {op.type !== 'delete' && (
+                          <button onClick={() => onOpenFile(op.path)} className="text-[#8c887d] hover:text-[#1c1b1a] dark:hover:text-white cursor-pointer ws-button-smooth transition-colors text-[8px] sm:text-[10px]">
+                            Open
+                          </button>
+                        )}
+                        {applied ? (
+                          <span className="flex items-center gap-0.5 text-emerald-600">
+                            <Check className="w-2 h-2 sm:w-3 sm:h-3" />
+                            <span className="text-[8px] sm:text-[10px]">Applied</span>
+                          </span>
+                        ) : (
+                          <button onClick={() => handleApplySingle(msg.id, op)} className="text-[#d96b43] hover:underline font-medium cursor-pointer ws-button-smooth transition-colors text-[8px] sm:text-[10px]">
+                            Apply
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+            {msg.ops.length > 1 && !allApplied && !msg.codingPaths?.length && (
+              <button
+                onClick={() => handleApplyAll(msg.id, msg.ops!)}
+                className="w-full text-[9.5px] sm:text-[10.5px] py-1 border border-[#d96b43]/40 text-[#d96b43] hover:bg-[#d96b43]/10 font-medium cursor-pointer ws-button-smooth transition-colors rounded"
+              >
+                Apply all {msg.ops.length} changes
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="w-full lg:w-72 h-full border-r border-[#e5e3db] dark:border-[#2d2d2c] flex flex-col bg-[#fbfaf7] dark:bg-[#1e1e1e] select-none shrink-0 relative">
+      <div className="h-8 sm:h-9 border-b border-[#e5e3db] dark:border-[#2d2d2c] flex items-center justify-between px-2 sm:px-3 text-xs text-[#8c887d] dark:text-[#a09c94] shrink-0">
+        <span className="flex items-center gap-1 sm:gap-1.5 truncate text-[11px] sm:text-xs">
+          <Logo size={12} className="sm:w-4" />
+          <span className="hidden sm:inline">New sour.ai Agent Thread</span>
+          <span className="sm:hidden">Agent</span>
+        </span>
+        <div className="flex items-center gap-1.5 sm:gap-2.5">
+          <button onClick={() => setMessages([])} title="New thread" className="hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth transition-colors">
+            <Plus className="w-3 sm:w-3.5 h-3 sm:h-3.5" />
+          </button>
+          <button onClick={onToggleCollapse} title="Collapse" className="hidden lg:block hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth transition-colors">
+            <ChevronRight className="w-3 sm:w-3.5 h-3 sm:h-3.5 rotate-180" />
+          </button>
+        </div>
+      </div>
+
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-2 sm:px-3 py-2 sm:py-3 space-y-2 sm:space-y-3">
+        {messages.length === 0 ? (
+          <div className="h-full flex flex-col items-center justify-center gap-2 sm:gap-3 text-center py-6 sm:py-10">
+            <PixelBowlIcon size={28} className="sm:size-10 opacity-80" />
+            <span className="font-pixel text-[10px] sm:text-[11px] leading-relaxed text-[#8c887d] dark:text-[#a09c94]">
+              Code with me
+            </span>
+            <span className="text-[9.5px] sm:text-[10.5px] text-[#a39d8f] dark:text-[#767671] max-w-[85%] leading-relaxed">
+              @ to include context · / for commands
+            </span>
+          </div>
+        ) : (
+          messages.map(renderMessage)
+        )}
+        {isSending && (
+          <div className="flex items-center gap-2 text-[10px] sm:text-[11px] text-[#8c887d] dark:text-[#a09c94]">
+            <Loader2 className="w-2.5 h-2.5 sm:w-3 sm:h-3 animate-spin" /> Thinking…
+          </div>
+        )}
+      </div>
+
+      {/* Attachment Popover for image upload in subagent input */}
+      <div ref={attachmentPopoverRef} className="relative">
+        {showAttachmentPopover && (
+          <AttachmentPopover
+            onAttachFile={handleAttachImage}
+            onClose={() => setShowAttachmentPopover(false)}
+            positionClass="bottom-full mb-3 right-0 sm:right-auto sm:left-0"
+          />
+        )}
+      </div>
+
+      {/* Sub-agent orchestration indicator: shows currently queued/running/done
+          sub-agents (hard-capped at MAX_CONCURRENT_SUBAGENTS concurrent). */}
+      <AnimatePresence>
+        {subAgents.some((t) => t.status === 'queued' || t.status === 'running') && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="border-t border-[#e5e3db] dark:border-[#2d2d2c] px-2 sm:px-3 py-2 space-y-1 sm:space-y-1.5 shrink-0 overflow-hidden"
+          >
+            <div className="flex items-center gap-1 sm:gap-1.5 text-[8px] sm:text-[9.5px] uppercase tracking-wide text-[#a39d8f] dark:text-[#767671]">
+              <Bot className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> Sub-agents ({subAgents.filter((t) => t.status === 'running').length}/{MAX_CONCURRENT_SUBAGENTS})
+            </div>
+            {subAgents
+              .filter((t) => t.status === 'queued' || t.status === 'running')
+              .map((t) => (
+                <div key={t.id} className="flex items-center gap-1 sm:gap-1.5 text-[9px] sm:text-[10.5px] text-[#3d3a33] dark:text-[#dedcd6]">
+                  {t.status === 'running' ? (
+                    <Loader2 className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-[#d96b43] shrink-0 animate-spin" />
+                  ) : (
+                    <span className="inline-flex rounded-full h-1.5 w-1.5 sm:h-2 sm:w-2 bg-[#c7c3b6]" />
+                  )}
+                  <span className="truncate flex-1">{t.label}</span>
+                  <span className="text-[#8c887d] dark:text-[#767671] shrink-0 text-[8px] sm:text-[9px]">{SUBAGENT_STATUS_LABEL[t.status]}</span>
+                </div>
+              ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="border-t border-[#e5e3db] dark:border-[#2d2d2c] px-2 sm:px-2.5 pt-2 relative flex flex-col shrink-0">
+        {mentionState && mentionMatches.length > 0 && (
+          <div className="absolute left-2.5 right-2.5 bottom-full mb-1 bg-white dark:bg-[#1e1e1d] border border-[#d8d5c9] dark:border-[#333230] shadow-lg p-1 max-h-40 overflow-y-auto z-20">
+            {mentionMatches.map((f) => (
+              <button
+                key={f.path}
+                onClick={() => selectMention(f.path)}
+                className="w-full flex items-center gap-1.5 px-2 py-1.5 text-[11px] text-left hover:bg-[#f5f3ec] dark:hover:bg-[#282826] cursor-pointer ws-button-smooth"
+              >
+                <AtSign className="w-3 h-3 text-[#8c887d] shrink-0" />
+                <span className="truncate">{f.path}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {showSlash && (
+          <div className="absolute left-2.5 right-2.5 bottom-full mb-1 bg-white dark:bg-[#1e1e1d] border border-[#d8d5c9] dark:border-[#333230] shadow-lg p-1 max-h-48 overflow-y-auto z-20">
+            {SLASH_COMMANDS.map((cmd) => (
+              <button
+                key={cmd.cmd}
+                onClick={() => selectSlashCommand(cmd)}
+                className="w-full flex items-center justify-between gap-2 px-2 py-1.5 text-[11px] text-left hover:bg-[#f5f3ec] dark:hover:bg-[#282826] cursor-pointer ws-button-smooth"
+              >
+                <span className="text-[#1c1b1a] dark:text-[#f0efe6]">{cmd.label}</span>
+                <span className="text-[#8c887d] dark:text-[#a09c94] font-mono">{cmd.cmd}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {agentAttachments.length > 0 && (
+          <div className="flex flex-wrap gap-2 p-2 border-t border-[#d8d5c9] dark:border-[#333230] bg-[#f5f3ec] dark:bg-[#2d2c2b]">
+            {agentAttachments.map((att, idx) => (
+              <div
+                key={idx}
+                className="flex items-center gap-2 px-2.5 py-1.5 rounded bg-white dark:bg-[#1e1e1d] border border-[#d8d5c9] dark:border-[#444240] text-[10px] text-[#1c1b1a] dark:text-[#f0efe6]"
+              >
+                <ImageIcon className="w-3.5 h-3.5 text-[#d96b43]" />
+                <span className="truncate flex-1">{att.name}</span>
+                <button
+                  onClick={() => removeAttachment(idx)}
+                  className="hover:text-[#d96b43] transition-colors"
+                  title="Remove attachment"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <textarea
+          ref={textareaRef}
+          value={input}
+          onChange={handleInputChange}
+          onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
+          placeholder="Message Agent, @ for context, / for commands"
+          className="w-full resize-none bg-transparent text-[11px] sm:text-xs text-[#1c1b1a] dark:text-[#f0efe6] placeholder-[#8c887d] dark:placeholder-[#767671] outline-none leading-tight h-16 sm:h-20 overflow-auto"
+        />
+
+        <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-[#8c887d] dark:text-[#a09c94] h-8 sm:h-8 shrink-0 gap-1 sm:gap-2">
+          <div className="flex items-center gap-1 sm:gap-3 flex-wrap">
+            <button
+              onClick={() => setShowAttachmentPopover((v) => !v)}
+              title="Attach files or images"
+              className="flex items-center justify-center p-1.5 sm:p-0 gap-1 sm:gap-1.5 hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth transition-colors min-w-[44px] sm:min-w-auto h-[44px] sm:h-auto"
+            >
+              <Plus className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
+            </button>
+            <button
+              onClick={() => setMode((m) => (m === 'write' ? 'ask' : 'write'))}
+              title="Toggle whether the agent applies changes automatically"
+              className="flex items-center justify-center p-1.5 sm:p-0 gap-1 sm:gap-1.5 hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth transition-colors min-w-[44px] sm:min-w-auto h-[44px] sm:h-auto"
+            >
+              <span className="w-3 h-3 sm:w-3.5 sm:h-3.5 border border-current flex items-center justify-center text-[6px] sm:text-[8px] font-bold">
+                {mode === 'write' ? 'W' : 'A'}
+              </span>
+              <span className="hidden sm:inline">{mode === 'write' ? 'Write' : 'Ask'}</span>
+            </button>
+            <div className="relative" ref={modelPopoverRef}>
+              <button onClick={() => setShowModelPopover((v) => !v)} className="flex items-center justify-center p-1.5 sm:p-0 gap-0.5 sm:gap-1 hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth transition-colors text-[9px] sm:text-[11px] min-w-[44px] sm:min-w-auto h-[44px] sm:h-auto">
+                <span className="hidden sm:inline">{MODEL_LABELS[selectedModel] || (selectedModel.startsWith('custom_') ? 'API' : selectedModel)}</span>
+                <span className="sm:hidden">M</span>
+              </button>
+              {showModelPopover && (
+                <div className="absolute bottom-full mb-2 left-0 w-48 bg-white dark:bg-[#1e1e1d] border border-[#d8d5c9] dark:border-[#333230] shadow-lg p-1 z-20">
+                  {/* Built-in Models */}
+                  {MODEL_OPTIONS.map((m) => (
+                    <button
+                      key={m}
+                      onClick={() => {
+                        setSelectedModel(m);
+                        setShowModelPopover(false);
+                      }}
+                      className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 text-[11px] text-left cursor-pointer ws-button-smooth ${
+                        m === selectedModel
+                          ? 'bg-[#f4f2eb] dark:bg-[#282826] text-[#1c1b1a] dark:text-[#f0efe6]'
+                          : 'text-[#3d3a33] dark:text-[#dedcd6] hover:bg-[#f5f3ec] dark:hover:bg-[#282826]'
+                      }`}
+                    >
+                      <span>{MODEL_LABELS[m]}</span>
+                      {m === selectedModel && <Check className="w-3 h-3 shrink-0" />}
+                    </button>
+                  ))}
+
+                  {/* Custom APIs */}
+                  {customApiConfigs.length > 0 && (
+                    <>
+                      <div className="border-t border-[#e5e3db] dark:border-[#333230] my-1" />
+                      {customApiConfigs.map((config) => (
+                        <button
+                          key={config.id}
+                          onClick={() => {
+                            setSelectedModel(config.id as AIModel);
+                            setShowModelPopover(false);
+                          }}
+                          className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 text-[11px] text-left cursor-pointer ws-button-smooth ${
+                            config.id === selectedModel
+                              ? 'bg-[#f4f2eb] dark:bg-[#282826] text-[#1c1b1a] dark:text-[#f0efe6]'
+                              : 'text-[#3d3a33] dark:text-[#dedcd6] hover:bg-[#f5f3ec] dark:hover:bg-[#282826]'
+                          }`}
+                        >
+                          <span className="truncate">{config.modelName}</span>
+                          {config.id === selectedModel && <Check className="w-3 h-3 shrink-0" />}
+                        </button>
+                      ))}
+                    </>
+                  )}
+
+                  {/* Add Custom API Option */}
+                  <div className="border-t border-[#e5e3db] dark:border-[#333230] my-1" />
+                  <button
+                    onClick={() => {
+                      setShowModelPopover(false);
+                      setShowCustomApiModal(true);
+                    }}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 text-[11px] text-left cursor-pointer text-[#3d3a33] dark:text-[#dedcd6] hover:bg-[#f5f3ec] dark:hover:bg-[#282826] ws-button-smooth"
+                  >
+                    <Settings className="w-3 h-3" />
+                    <span>Other model API</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-1 sm:gap-2">
+            <button
+              onClick={handleVoiceToggle}
+              title={isListening ? 'Stop listening' : 'Start voice input'}
+              className={`flex items-center justify-center p-1.5 sm:p-0 gap-1 cursor-pointer ws-button-smooth min-w-[44px] sm:min-w-auto h-[44px] sm:h-auto ${
+                isListening
+                  ? 'text-[#d96b43] hover:text-[#c55a32]'
+                  : 'text-[#8c887d] dark:text-[#a09c94] hover:text-[#1c1b1a] dark:hover:text-[#f0efe6]'
+              }`}
+            >
+              {isListening ? <Mic className="w-4 h-4 sm:w-3.5 sm:h-3.5" /> : <MicOff className="w-4 h-4 sm:w-3.5 sm:h-3.5" />}
+            </button>
+            {isSending ? (
+              <button onClick={() => abortControllerRef.current?.abort()} title="Stop generating" className="flex items-center justify-center p-1.5 sm:p-0 min-w-[44px] sm:min-w-auto h-[44px] sm:h-auto hover:text-red-500 cursor-pointer ws-button-smooth">
+                <Square className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
+              </button>
+            ) : (
+              <button
+                onClick={() => handleSend()}
+                disabled={!input.trim()}
+                title="Send"
+                className="flex items-center justify-center p-1.5 sm:p-0 min-w-[44px] sm:min-w-auto h-[44px] sm:h-auto hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] disabled:opacity-40 cursor-pointer ws-button-smooth"
+              >
+                <ArrowLeft className="w-4 h-4 sm:w-3.5 sm:h-3.5 rotate-180" />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <CustomApiModal
+        isDarkMode={isDarkMode}
+        isOpen={showCustomApiModal}
+        onClose={() => setShowCustomApiModal(false)}
+        onConfigAdded={(config) => {
+          setCustomApiConfigs([...customApiConfigs, config]);
+          setSelectedModel(config.id as AIModel);
+        }}
+      />
+    </div>
+  );
+};

@@ -1,0 +1,6 @@
+{
+  "name": "sour.ai",
+  "description": "Minimalist AI assistant interface for sour.ai",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

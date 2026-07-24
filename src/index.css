@@ -1,0 +1,189 @@
+@import "tailwindcss";
+@import "katex/dist/katex.min.css";
+
+@variant dark (&:where(.dark, .dark *));
+
+@layer utilities {
+  .font-instrument {
+    font-family: 'Instrument Serif', 'Newsreader', Georgia, serif;
+  }
+  .font-sans-ui {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  }
+  .font-pixel {
+    font-family: 'Press Start 2P', 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
+    letter-spacing: 0.02em;
+  }
+  .pixelated {
+    image-rendering: pixelated;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/* Global scrollbar styling to make any remaining scrollbars minimal or hidden */
+::-webkit-scrollbar {
+  width: 0px;
+  height: 0px;
+  background: transparent;
+}
+
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+body {
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  overflow: hidden;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+html.dark body {
+  color: #f0efe6;
+  background-color: #121212;
+}
+
+html:not(.dark) body {
+  color: #1a1a18;
+  background-color: #fafaf7;
+  --logo-bg-shade: #fafaf7;
+}
+
+html.dark body {
+  color: #f0efe6;
+  background-color: #121212;
+  --logo-bg-shade: #121212;
+}
+
+/* Tactile interactive hover & active click shrink animations */
+.interactable-btn {
+  transition: transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.1), filter 0.2s ease, opacity 0.2s ease, background-color 0.15s ease, border-color 0.15s ease !important;
+}
+.interactable-btn:hover {
+  filter: brightness(1.02) contrast(1.02);
+}
+.interactable-btn:active {
+  transform: scale(0.94) !important;
+}
+
+/* Smooth blurry hover effects for interactive elements */
+.blurry-hover {
+  transition: filter 0.22s cubic-bezier(0.4,0,0.2,1), opacity 0.22s ease, transform 0.18s cubic-bezier(0.4,0,0.2,1), background-color 0.18s ease, color 0.18s ease !important;
+}
+.blurry-hover:hover {
+  filter: blur(0.2px) brightness(1.03);
+  transform: scale(1.015);
+}
+.blurry-hover:active {
+  transform: scale(0.96);
+  filter: blur(0px) brightness(0.97);
+}
+
+/* Enhanced smooth blurry animation for workspace clickables */
+.ws-clickable {
+  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+  position: relative;
+}
+.ws-clickable:hover {
+  filter: blur(0.15px) brightness(1.04) saturate(1.05);
+  transform: translateY(-1px) scale(1.01);
+}
+.ws-clickable:active {
+  transform: translateY(0px) scale(0.97);
+  filter: blur(0px) brightness(0.96);
+}
+
+/* Smooth blur effect for buttons with animation */
+.ws-button-smooth {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+.ws-button-smooth:hover {
+  filter: blur(0.1px) brightness(1.05);
+  transform: scale(1.02);
+}
+.ws-button-smooth:active {
+  transform: scale(0.95);
+  filter: blur(0px) brightness(0.95);
+}
+
+/* Workspace tab transitions with smooth blur effects */
+.ws-tab {
+  transition: background-color 0.18s cubic-bezier(0.4, 0, 0.2, 1), color 0.18s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.18s cubic-bezier(0.4, 0, 0.2, 1), filter 0.18s ease !important;
+}
+.ws-tab:hover {
+  filter: blur(0.1px) brightness(1.02);
+}
+.ws-tab:active {
+  filter: blur(0px) brightness(0.98);
+}
+
+/* File explorer item transitions with smooth blur */
+.ws-file-item {
+  transition: background-color 0.15s cubic-bezier(0.4, 0, 0.2, 1), color 0.15s cubic-bezier(0.4, 0, 0.2, 1), filter 0.15s ease, transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+/* Toolbar button transitions */
+.ws-toolbar-btn {
+  transition: background-color 0.15s cubic-bezier(0.4, 0, 0.2, 1), color 0.15s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.15s cubic-bezier(0.4, 0, 0.2, 1), transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.12s ease !important;
+}
+.ws-toolbar-btn:hover {
+  transform: translateY(-0.5px) scale(1.02);
+  filter: blur(0.1px) brightness(1.04);
+}
+.ws-toolbar-btn:active {
+  transform: translateY(0px) scale(0.96);
+  filter: blur(0px) brightness(0.96);
+}
+
+/* Smooth panel slide-in for preview pane */
+@keyframes slideInFromRight {
+  from { opacity: 0; transform: translateX(12px) scale(0.99); filter: blur(3px); }
+  to   { opacity: 1; transform: translateX(0)   scale(1);    filter: blur(0);   }
+}
+.preview-panel-enter {
+  animation: slideInFromRight 0.25s cubic-bezier(0.4,0,0.2,1) both;
+}
+
+/* Smooth fade-blur for context menus and popovers */
+@keyframes fadeBlurIn {
+  from { opacity: 0; transform: scale(0.97) translateY(-4px); filter: blur(4px); }
+  to   { opacity: 1; transform: scale(1)    translateY(0);    filter: blur(0);   }
+}
+.menu-enter {
+  animation: fadeBlurIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* Smooth menu popover animations */
+.menu-popover {
+  animation: fadeBlurIn 0.22s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+/* Smooth collapse transition for agent panel */
+@keyframes collapseBlur {
+  from { opacity: 0; transform: scaleX(0.96); filter: blur(2px); }
+  to   { opacity: 1; transform: scaleX(1);    filter: blur(0);   }
+}
+.panel-collapse-enter {
+  animation: collapseBlur 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  transform-origin: left center;
+}
+
+/* Smooth transitions for dropdown and selection items */
+.dropdown-item {
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+.dropdown-item:hover {
+  filter: blur(0.05px) brightness(1.02);
+  transform: translateX(2px);
+}
+.dropdown-item:active {
+  filter: blur(0px) brightness(0.98);
+  transform: translateX(2px) scale(0.98);
+}
+
