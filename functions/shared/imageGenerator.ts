@@ -8,7 +8,7 @@ import { buildImageResponseText } from './responseFormatting';
 export async function generateImageForChat(
   prompt: string,
   pollinationKey: string,
-  model = 'flux-schnell'
+  model = 'flux'
 ): Promise<string> {
   if (!pollinationKey) throw new Error('Pollinations API key is missing');
 
@@ -88,7 +88,7 @@ export function extractImageRequests(
 export async function processImageRequests(
   text: string,
   pollinationKey: string,
-  model = 'flux-schnell'
+  model = 'flux'
 ): Promise<{ text: string; images: Array<{ prompt: string; url: string }>; errors: string[] }> {
   const requests = extractImageRequests(text);
   const images: Array<{ prompt: string; url: string }> = [];
