@@ -78,7 +78,7 @@ In the Cloudflare Pages project dashboard:
    |----------|-------|
    | `GEMINI_API_KEY` | Your API key from [Google AI Studio](https://aistudio.google.com/app/apikey) |
    | `GROQ_API_KEY` | (Optional) Your API key from [console.groq.com](https://console.groq.com) |
-   | `POLLINATION_API_KEY` | (Required for image generation) Your server-side key from [Pollinations](https://enter.pollinations.ai) |
+   | `POLLINATIONS_API_KEY` | (Required for image generation) Your server-side key from [Pollinations](https://enter.pollinations.ai) |
 
    **For multiple keys** (recommended for higher throughput):
    - Instead of `GEMINI_API_KEY`, use `GEMINI_API_KEYS=key1,key2,key3`

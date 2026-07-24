@@ -56,7 +56,7 @@ In your Cloudflare Pages project:
    GEMINI_API_KEYS = key1,key2,key3
    ```
 3. (Optional) Add `GROQ_API_KEY` or `GROQ_API_KEYS`
-4. Add `POLLINATION_API_KEY` to enable image generation
+4. Add `POLLINATIONS_API_KEY` to enable image generation
 5. Click **Save**
 
 ### 5. Trigger Deployment

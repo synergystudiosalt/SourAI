@@ -7,7 +7,7 @@ export const onRequest: PagesFunction = async (context) => {
     
     return new Response(
       JSON.stringify({
-        canGenerateImages: !!env.POLLINATION_API_KEY,
+        canGenerateImages: !!(env.POLLINATIONS_API_KEY || env.POLLINATION_API_KEY),
       }),
       {
         status: 200,

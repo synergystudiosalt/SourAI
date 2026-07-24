@@ -7,28 +7,34 @@ import { buildImageResponseText } from './responseFormatting';
 
 export async function generateImageForChat(
   prompt: string,
-  pollinationKey: string
-): Promise<string | null> {
-  if (!pollinationKey) return null;
+  pollinationKey: string,
+  model = 'flux'
+): Promise<string> {
+  if (!pollinationKey) throw new Error('Pollinations API key is missing');
 
   try {
     const response = await fetch(
-      `https://gen.pollinations.ai/image/${encodeURIComponent(prompt)}?model=flux&width=1024&height=1024`,
+      `https://gen.pollinations.ai/image/${encodeURIComponent(prompt)}?model=${encodeURIComponent(model)}&width=1024&height=1024`,
       {
         headers: { 'Authorization': `Bearer ${pollinationKey}` },
       }
     );
 
     if (!response.ok) {
-      console.error('Pollination API error:', response.status);
-      return null;
+      const details = (await response.text().catch(() => '')).slice(0, 500);
+      throw new Error(`Pollinations HTTP ${response.status}: ${details || 'Image request failed'}`);
     }
 
+    const contentType = response.headers.get('content-type') || 'image/jpeg';
+    if (!contentType.startsWith('image/')) {
+      const details = (await response.text().catch(() => '')).slice(0, 500);
+      throw new Error(`Pollinations returned ${contentType}: ${details || 'Expected an image'}`);
+    }
     const blob = await response.blob();
-    return await blobToDataUrl(blob, blob.type || response.headers.get('content-type') || 'image/png');
+    return await blobToDataUrl(blob, blob.type || contentType);
   } catch (error) {
     console.error('Image generation error:', error);
-    return null;
+    throw error instanceof Error ? error : new Error('Unknown Pollinations image error');
   }
 }
 
@@ -81,19 +87,23 @@ export function extractImageRequests(
  */
 export async function processImageRequests(
   text: string,
-  pollinationKey: string
-): Promise<{ text: string; images: Array<{ prompt: string; url: string }> }> {
+  pollinationKey: string,
+  model = 'flux'
+): Promise<{ text: string; images: Array<{ prompt: string; url: string }>; errors: string[] }> {
   const requests = extractImageRequests(text);
   const images: Array<{ prompt: string; url: string }> = [];
+  const errors: string[] = [];
   let processedText = text;
 
   for (const req of requests) {
-    const imageUrl = await generateImageForChat(req.prompt, pollinationKey);
-    if (imageUrl) {
+    try {
+      const imageUrl = await generateImageForChat(req.prompt, pollinationKey, model);
       images.push({ prompt: req.prompt, url: imageUrl });
       // Remove placeholder from text (don't embed as markdown)
       processedText = processedText.replace(req.fullMatch, '');
-    } else {
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Image generation failed';
+      errors.push(message);
       // Remove placeholder if generation failed
       processedText = processedText.replace(req.fullMatch, '');
     }
@@ -105,5 +115,5 @@ export async function processImageRequests(
     processedText = buildImageResponseText(images.length);
   }
 
-  return { text: processedText, images };
+  return { text: processedText, images, errors };
 }

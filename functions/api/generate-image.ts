@@ -7,7 +7,9 @@ export const onRequest: PagesFunction = async (context) => {
 
   try {
     // Check if Pollination API key is configured
-    const POLLINATION_API_KEY = (context.env as Record<string, string>).POLLINATION_API_KEY;
+    const env = context.env as Record<string, string>;
+    const POLLINATION_API_KEY = env.POLLINATIONS_API_KEY || env.POLLINATION_API_KEY;
+    const POLLINATION_IMAGE_MODEL = env.POLLINATIONS_IMAGE_MODEL || env.POLLINATION_IMAGE_MODEL || 'flux';
     if (!POLLINATION_API_KEY) {
       return new Response(
         JSON.stringify({ error: 'Image generation not available', code: 'NO_API_KEY' }),
@@ -28,20 +30,14 @@ export const onRequest: PagesFunction = async (context) => {
       );
     }
 
-    const base64Image = await generateImageForChat(prompt, POLLINATION_API_KEY);
-    if (!base64Image) {
-      return new Response(
-        JSON.stringify({ error: 'Failed to generate image' }),
-        { status: 502, headers: { 'Content-Type': 'application/json' } }
-      );
-    }
+    const base64Image = await generateImageForChat(prompt, POLLINATION_API_KEY, POLLINATION_IMAGE_MODEL);
 
     return new Response(
       JSON.stringify({
         success: true,
         image: base64Image,
         prompt: prompt,
-        model: 'flux',
+        model: POLLINATION_IMAGE_MODEL,
       }),
       { 
         status: 200,
@@ -52,7 +48,7 @@ export const onRequest: PagesFunction = async (context) => {
     console.error('Image generation error:', error);
     return new Response(
       JSON.stringify({ 
-        error: 'Internal server error',
+        error: 'Image generation failed',
         details: error instanceof Error ? error.message : 'Unknown error'
       }),
       { status: 500, headers: { 'Content-Type': 'application/json' } }
