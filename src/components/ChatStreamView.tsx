@@ -62,7 +62,6 @@ interface TypewriterMessageProps {
   onRetry: () => void;
   onScrollToBottom?: () => void;
   images?: Array<{ prompt: string; url: string }>;
-  onSendFollowUp?: (text: string, attachments?: AttachmentItem[]) => void;
 }
 
 const TypewriterMessage: React.FC<TypewriterMessageProps> = ({
@@ -79,7 +78,6 @@ const TypewriterMessage: React.FC<TypewriterMessageProps> = ({
   onRetry,
   onScrollToBottom,
   images = [],
-  onSendFollowUp,
 }) => {
   const [displayedContent, setDisplayedContent] = useState(isLatest ? '' : content);
   const [isThinking, setIsThinking] = useState(isLatest);
@@ -87,7 +85,7 @@ const TypewriterMessage: React.FC<TypewriterMessageProps> = ({
   const [isLiked, setIsLiked] = useState<boolean | null>(null);
   const hasFinishedTypewritingRef = useRef(!isLatest);
 
-  const { cleanText, questions } = extractQuestionBlocks(displayedContent);
+  const { cleanText } = extractQuestionBlocks(displayedContent);
 
   // Speed and thinking duration based on model tier
   const modelSpeed = selectedModel === 'sour-omni-flash' ? 14 : 26;
@@ -321,20 +319,6 @@ const TypewriterMessage: React.FC<TypewriterMessageProps> = ({
         </div>
       )}
 
-      {/* Question Box */}
-      {questions.length > 0 && onSendFollowUp && (
-        <div className="mt-4 space-y-3">
-          {questions.map((q, idx) => (
-            <QuestionBox
-              key={idx}
-              question={q.question}
-              options={q.options}
-              onSelect={(option) => onSendFollowUp(option)}
-            />
-          ))}
-        </div>
-      )}
-
       {/* Action Row Under Response */}
       {!isThinking && (
         <motion.div
@@ -430,6 +414,20 @@ export const ChatStreamView: React.FC<ChatStreamViewProps> = ({
   const [attachments, setAttachments] = useState<AttachmentItem[]>([]);
   const [isRecording, setIsRecording] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [questionDismissed, setQuestionDismissed] = useState(false);
+  const lastQuestionContentRef = useRef<string | null>(null);
+
+  // Extract pending question from last assistant message
+  const lastAssistantMsg = [...messages].reverse().find(m => m.role === 'assistant');
+  const { questions: pendingQuestions } = extractQuestionBlocks(lastAssistantMsg?.content || '');
+  const pendingQuestion = pendingQuestions.length > 0 && !isGenerating && !questionDismissed ? pendingQuestions[0] : null;
+
+  // Reset dismissed when new assistant content arrives
+  const currentAssistantContent = lastAssistantMsg?.content || '';
+  if (lastQuestionContentRef.current !== currentAssistantContent) {
+    lastQuestionContentRef.current = currentAssistantContent;
+    if (questionDismissed) setQuestionDismissed(false);
+  }
 
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -605,6 +603,7 @@ export const ChatStreamView: React.FC<ChatStreamViewProps> = ({
 
   const handleSend = () => {
     if ((inputText.trim() || attachments.length > 0) && !isGenerating) {
+      if (pendingQuestion) setQuestionDismissed(true);
       onSendFollowUp(inputText, attachments);
       setInputText('');
       setAttachments([]);
@@ -744,7 +743,6 @@ export const ChatStreamView: React.FC<ChatStreamViewProps> = ({
                   onRetry={() => onSendFollowUp(messages[idx - 1]?.content || 'Please elaborate further')}
                   onScrollToBottom={() => scrollToBottom(true)}
                   images={msg.images}
-                  onSendFollowUp={onSendFollowUp}
                 />
               )}
             </motion.div>
@@ -765,6 +763,21 @@ export const ChatStreamView: React.FC<ChatStreamViewProps> = ({
 
         <div ref={scrollEndRef} />
       </div>
+
+      {/* Question Box - above prompt field */}
+      {pendingQuestion && (
+        <div className="shrink-0 px-2 sm:px-3 md:px-4 pb-2">
+          <QuestionBox
+            question={pendingQuestion}
+            onSelect={(option) => {
+              setQuestionDismissed(true);
+              onSendFollowUp(option);
+            }}
+            onSkip={() => setQuestionDismissed(true)}
+            onClose={() => setQuestionDismissed(true)}
+          />
+        </div>
+      )}
 
       {/* Clean Prompt Box at bottom */}
       <div className="pb-2 sm:pb-3 pt-1 shrink-0 relative">
