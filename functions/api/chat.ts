@@ -55,8 +55,6 @@ export const onRequest: PagesFunction = async (context) => {
     const lastUserText = [...messages]
       .reverse()
       .find((message: any) => message?.role === 'user')?.content || '';
-    const pollinationKey = env.POLLINATIONS_API_KEY || env.POLLINATION_API_KEY;
-    const pollinationModel = env.POLLINATIONS_IMAGE_MODEL || env.POLLINATION_IMAGE_MODEL || 'flux';
 
     if (isIdentityRequest(lastUserText)) {
       return new Response(JSON.stringify({
@@ -69,15 +67,8 @@ export const onRequest: PagesFunction = async (context) => {
 
     const imageRequest = detectImageRequest(lastUserText);
     if (imageRequest.shouldGenerate) {
-      if (!pollinationKey) {
-        return new Response(JSON.stringify({
-          error: 'Image generation is not configured. Add POLLINATIONS_API_KEY in Cloudflare Pages environment variables.',
-        }), { status: 503, headers: { 'Content-Type': 'application/json' } });
-      }
       const { text: imageText, images, errors } = await processImageRequests(
-        `[GENERATE_IMAGE: ${imageRequest.prompt}]`,
-        pollinationKey,
-        pollinationModel
+        `[GENERATE_IMAGE: ${imageRequest.prompt}]`
       );
       if (images.length === 0) {
         return new Response(JSON.stringify({
@@ -143,7 +134,7 @@ If the user requests visual content, include a single [GENERATE_IMAGE: ...] dire
     const { text, thinking } = splitThinkingAndText(rawText);
 
     // Process image generation requests in the response
-    const { text: processedText, images } = await processImageRequests(text, pollinationKey, pollinationModel);
+    const { text: processedText, images } = await processImageRequests(text);
     const responseText = processedText || buildImageResponseText(images.length) ||
       "I'm sour.ai, created by Synergy Studios. I received the request but the AI provider returned no text. Please check the configured Cloudflare API keys.";
 

@@ -7,57 +7,12 @@ import { buildImageResponseText } from './responseFormatting';
 
 export async function generateImageForChat(
   prompt: string,
-  pollinationKey: string,
-  model = 'flux'
+  _pollinationKey?: string
 ): Promise<string> {
-  if (!pollinationKey) throw new Error('Pollinations API key is missing');
-
-  try {
-    const response = await fetch(
-      `https://gen.pollinations.ai/image/${encodeURIComponent(prompt)}?model=${encodeURIComponent(model)}&width=1024&height=1024`,
-      {
-        headers: { 'Authorization': `Bearer ${pollinationKey}` },
-      }
-    );
-
-    if (!response.ok) {
-      const details = (await response.text().catch(() => '')).slice(0, 500);
-      throw new Error(`Pollinations HTTP ${response.status}: ${details || 'Image request failed'}`);
-    }
-
-    const contentType = response.headers.get('content-type') || 'image/jpeg';
-    if (!contentType.startsWith('image/')) {
-      const details = (await response.text().catch(() => '')).slice(0, 500);
-      throw new Error(`Pollinations returned ${contentType}: ${details || 'Expected an image'}`);
-    }
-    const blob = await response.blob();
-    return await blobToDataUrl(blob, blob.type || contentType);
-  } catch (error) {
-    console.error('Image generation error:', error);
-    throw error instanceof Error ? error : new Error('Unknown Pollinations image error');
-  }
-}
-
-export async function blobToDataUrl(blob: Blob, mimeType = 'image/png'): Promise<string> {
-  const buffer = await blob.arrayBuffer();
-  return `data:${mimeType};base64,${arrayBufferToBase64(buffer)}`;
-}
-
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  let binary = '';
-  const chunkSize = 0x8000;
-
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    const chunk = bytes.subarray(i, i + chunkSize);
-    binary += String.fromCharCode(...chunk);
-  }
-
-  if (typeof btoa === 'function') {
-    return btoa(binary);
-  }
-
-  throw new Error('No base64 encoder available in this runtime');
+  // Pollinations' direct image endpoint generates the image on request. It
+  // does not require an API key and returns an image URL that the browser can
+  // render directly.
+  return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}`;
 }
 
 /**
@@ -86,9 +41,7 @@ export function extractImageRequests(
  * Images are returned separately, not embedded in text
  */
 export async function processImageRequests(
-  text: string,
-  pollinationKey: string,
-  model = 'flux'
+  text: string
 ): Promise<{ text: string; images: Array<{ prompt: string; url: string }>; errors: string[] }> {
   const requests = extractImageRequests(text);
   const images: Array<{ prompt: string; url: string }> = [];
@@ -97,7 +50,7 @@ export async function processImageRequests(
 
   for (const req of requests) {
     try {
-      const imageUrl = await generateImageForChat(req.prompt, pollinationKey, model);
+      const imageUrl = await generateImageForChat(req.prompt);
       images.push({ prompt: req.prompt, url: imageUrl });
       // Remove placeholder from text (don't embed as markdown)
       processedText = processedText.replace(req.fullMatch, '');

@@ -6,17 +6,6 @@ export const onRequest: PagesFunction = async (context) => {
   }
 
   try {
-    // Check if Pollination API key is configured
-    const env = context.env as Record<string, string>;
-    const POLLINATION_API_KEY = env.POLLINATIONS_API_KEY || env.POLLINATION_API_KEY;
-    const POLLINATION_IMAGE_MODEL = env.POLLINATIONS_IMAGE_MODEL || env.POLLINATION_IMAGE_MODEL || 'flux';
-    if (!POLLINATION_API_KEY) {
-      return new Response(
-        JSON.stringify({ error: 'Image generation not available', code: 'NO_API_KEY' }),
-        { status: 503, headers: { 'Content-Type': 'application/json' } }
-      );
-    }
-
     const body = await context.request.json() as {
       prompt: string;
     };
@@ -30,14 +19,14 @@ export const onRequest: PagesFunction = async (context) => {
       );
     }
 
-    const base64Image = await generateImageForChat(prompt, POLLINATION_API_KEY, POLLINATION_IMAGE_MODEL);
+    const imageUrl = await generateImageForChat(prompt);
 
     return new Response(
       JSON.stringify({
         success: true,
-        image: base64Image,
+        image: imageUrl,
         prompt: prompt,
-        model: POLLINATION_IMAGE_MODEL,
+        model: 'pollinations-direct-url',
       }),
       { 
         status: 200,

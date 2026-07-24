@@ -3,11 +3,9 @@
  */
 export const onRequest: PagesFunction = async (context) => {
   try {
-    const env = context.env as Record<string, string>;
-    
     return new Response(
       JSON.stringify({
-        canGenerateImages: !!(env.POLLINATIONS_API_KEY || env.POLLINATION_API_KEY),
+        canGenerateImages: true,
       }),
       {
         status: 200,
