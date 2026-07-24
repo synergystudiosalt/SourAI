@@ -1,4 +1,4 @@
-const THINK_BLOCK_RE = /<think>([\s\S]*?)<\/think>/i;
+const THINK_BLOCK_RE = /<think>([\s\S]*?)<\/think>/gi;
 
 export function splitThinkingAndText(rawText: string): { text: string; thinking: string } {
   const input = (rawText || '').trim();
@@ -6,12 +6,12 @@ export function splitThinkingAndText(rawText: string): { text: string; thinking:
     return { text: '', thinking: '' };
   }
 
-  const match = input.match(THINK_BLOCK_RE);
-  if (!match) {
+  const matches = [...input.matchAll(THINK_BLOCK_RE)];
+  if (matches.length === 0) {
     return { text: input, thinking: '' };
   }
 
-  const thinking = (match[1] || '').trim();
+  const thinking = matches.map(m => m[1].trim()).filter(Boolean).join('\n\n');
   const text = input.replace(THINK_BLOCK_RE, '').trim();
   return { text, thinking };
 }
