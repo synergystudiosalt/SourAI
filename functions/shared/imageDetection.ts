@@ -1,9 +1,9 @@
-const IMAGE_REQUEST_RE = /^(?:please\s+)?(?:generate|create|make|draw|paint|illustrate|design)\s+(?:an?\s+)?(?:image|picture|photo|art|illustration|visual)(?:\s+(?:of|for|showing))?\s*(.+)$/i;
-const PICTURE_REQUEST_RE = /^(?:please\s+)?show\s+me\s+(?:an?\s+)?(?:image|picture|photo)\s+(?:of|showing)?\s*(.+)$/i;
+const IMAGE_REQUEST_RE = /^(?:please\s+)?(?:(?:can|could|would)\s+you\s+)?(?:please\s+)?(?:generate|create|make|draw|paint|illustrate|design|give(?:\s+me)?|show(?:\s+me)?|get)\s+(?:me\s+)?(?:an?\s+)?(?:image|picture|photo|art|illustration|visual)(?:\s+(?:of|for|showing))?\s*(.+)$/i;
+const IMAGE_WANT_RE = /^(?:please\s+)?(?:i\s+want|i\s+need|i(?:'d|\s+would)\s+like)\s+(?:an?\s+)?(?:image|picture|photo|art|illustration|visual)(?:\s+(?:of|for|showing))?\s*(.+)$/i;
 
 export function detectImageRequest(text: string): { shouldGenerate: boolean; prompt: string } {
   const input = text.trim();
-  const match = input.match(IMAGE_REQUEST_RE) || input.match(PICTURE_REQUEST_RE);
+  const match = input.match(IMAGE_REQUEST_RE) || input.match(IMAGE_WANT_RE);
   if (!match || !match[1].trim()) return { shouldGenerate: false, prompt: input };
   return { shouldGenerate: true, prompt: match[1].trim() };
 }
