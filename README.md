@@ -22,7 +22,7 @@ View your app in AI Studio: https://ai.studio/apps/5937ba8e-f4d6-4ab7-929d-4f757
 2. Add these variables in Cloudflare Pages → Settings → Environment variables:
    - `GEMINI_API_KEY` or `GEMINI_API_KEYS` — keys from [Google AI Studio](https://aistudio.google.com/app/apikey)
    - `GROQ_API_KEY` or `GROQ_API_KEYS` (optional fallback provider)
-   - `POLLINATIONS_API_KEY` — required for image generation
+   - `POLLINATIONS_API_KEY` — required for image generation (`flux-schnell`)
 3. Deploy. Cloudflare automatically publishes the React build and the `functions/` directory together.
 
 See [CLOUDFLARE_DEPLOYMENT.md](./CLOUDFLARE_DEPLOYMENT.md) for step-by-step instructions.

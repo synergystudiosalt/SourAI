@@ -9,7 +9,7 @@ export const onRequest: PagesFunction = async (context) => {
     // Check if Pollination API key is configured
     const env = context.env as Record<string, string>;
     const POLLINATION_API_KEY = env.POLLINATIONS_API_KEY || env.POLLINATION_API_KEY;
-    const POLLINATION_IMAGE_MODEL = env.POLLINATIONS_IMAGE_MODEL || env.POLLINATION_IMAGE_MODEL || 'flux';
+    const POLLINATION_IMAGE_MODEL = env.POLLINATIONS_IMAGE_MODEL || env.POLLINATION_IMAGE_MODEL || 'flux-schnell';
     if (!POLLINATION_API_KEY) {
       return new Response(
         JSON.stringify({ error: 'Image generation not available', code: 'NO_API_KEY' }),

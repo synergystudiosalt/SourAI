@@ -56,7 +56,7 @@ export const onRequest: PagesFunction = async (context) => {
       .reverse()
       .find((message: any) => message?.role === 'user')?.content || '';
     const pollinationKey = env.POLLINATIONS_API_KEY || env.POLLINATION_API_KEY;
-    const pollinationModel = env.POLLINATIONS_IMAGE_MODEL || env.POLLINATION_IMAGE_MODEL || 'flux';
+    const pollinationModel = env.POLLINATIONS_IMAGE_MODEL || env.POLLINATION_IMAGE_MODEL || 'flux-schnell';
 
     if (isIdentityRequest(lastUserText)) {
       return new Response(JSON.stringify({
