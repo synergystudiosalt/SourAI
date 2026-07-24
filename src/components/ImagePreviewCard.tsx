@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Copy, Download, Check } from 'lucide-react';
+import { Copy, Download, Check, AlertCircle } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface ImagePreviewCardProps {
@@ -10,33 +10,59 @@ interface ImagePreviewCardProps {
 
 export const ImagePreviewCard: React.FC<ImagePreviewCardProps> = ({ prompt, url, index = 0 }) => {
   const [copied, setCopied] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchImageBlob = async (): Promise<Blob | null> => {
+    try {
+      const response = await fetch(url, { mode: 'cors' });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return await response.blob();
+    } catch (err) {
+      console.error('Failed to fetch image:', err);
+      return null;
+    }
+  };
 
   const handleCopy = async () => {
+    setError(null);
+    const blob = await fetchImageBlob();
+    if (!blob) {
+      setError('Failed to copy — CORS blocked');
+      setTimeout(() => setError(null), 3000);
+      return;
+    }
     try {
-      // Fetch the image and copy to clipboard
-      const response = await fetch(url);
-      const blob = await response.blob();
       await navigator.clipboard.write([
-        new ClipboardItem({ 'image/png': blob }),
+        new ClipboardItem({ [blob.type || 'image/png']: blob }),
       ]);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
       console.error('Failed to copy image:', err);
+      setError('Copy not supported in this browser');
+      setTimeout(() => setError(null), 3000);
     }
   };
 
-  const handleDownload = () => {
-    try {
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `generated-image-${Date.now()}.png`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    } catch (err) {
-      console.error('Failed to download image:', err);
+  const handleDownload = async () => {
+    setError(null);
+    setDownloading(true);
+    const blob = await fetchImageBlob();
+    setDownloading(false);
+    if (!blob) {
+      setError('Failed to download — CORS blocked');
+      setTimeout(() => setError(null), 3000);
+      return;
     }
+    const blobUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = `sour-ai-${Date.now()}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(blobUrl);
   };
 
   return (
@@ -63,10 +89,18 @@ export const ImagePreviewCard: React.FC<ImagePreviewCardProps> = ({ prompt, url,
         </p>
 
         <div className="flex items-center gap-2">
+          {error && (
+            <span className="flex items-center gap-1 text-xs text-red-500">
+              <AlertCircle size={12} />
+              {error}
+            </span>
+          )}
+
           <button
             onClick={handleCopy}
-            className="p-2 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors flex items-center gap-1.5"
-            title="Copy image"
+            disabled={copied}
+            className="p-2 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors flex items-center gap-1.5 disabled:opacity-50"
+            title="Copy image to clipboard"
             aria-label="Copy image"
           >
             {copied ? (
@@ -84,12 +118,15 @@ export const ImagePreviewCard: React.FC<ImagePreviewCardProps> = ({ prompt, url,
 
           <button
             onClick={handleDownload}
-            className="p-2 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors flex items-center gap-1.5"
+            disabled={downloading}
+            className="p-2 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors flex items-center gap-1.5 disabled:opacity-50"
             title="Download image"
             aria-label="Download image"
           >
             <Download size={16} className="text-gray-600 dark:text-gray-400" />
-            <span className="text-xs text-gray-600 dark:text-gray-400">Download</span>
+            <span className="text-xs text-gray-600 dark:text-gray-400">
+              {downloading ? 'Saving...' : 'Download'}
+            </span>
           </button>
         </div>
       </div>
