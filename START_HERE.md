@@ -15,7 +15,6 @@ Your sour.ai app is ready to deploy to **Cloudflare Pages**. The entire backend 
 ✅ **Frontend**
 - React app configured to call `/api/*` endpoints
 - Works with Cloudflare Pages + Pages Functions
-- Works locally with Express server
 - Environment-aware (auto-detects Pages vs local)
 
 ✅ **Documentation**
@@ -123,16 +122,7 @@ Your frontend is configured to automatically detect the environment:
 
 ```typescript
 // src/lib/api.ts
-const API_BASE = import.meta.env.VITE_API_BASE ?? '';
-
-// On Cloudflare Pages:
-apiUrl('/api/chat') → '/api/chat' (uses Pages Functions)
-
-// On local Express:
-apiUrl('/api/chat') → 'http://localhost:3000/api/chat' (if VITE_API_BASE set)
-
-// On custom backend:
-apiUrl('/api/chat') → 'https://api.example.com/api/chat' (if VITE_API_BASE set)
+apiUrl('/api/chat') → '/api/chat' (same-origin Cloudflare Pages Function)
 ```
 
 No code changes needed — it just works!
@@ -173,7 +163,7 @@ It has:
 - A: No! Everything is already configured. You just deploy.
 
 **Q: What about local development?**
-- A: Still works! `npm run dev` runs Express server on localhost:3000
+- A: The supported runtime is Cloudflare Pages. Use `wrangler pages dev dist` to test the built site and Pages Functions locally.
 
 **Q: Will it cost money?**
 - A: Cloudflare Pages is free. You only pay for API calls to Gemini/Groq (your keys).

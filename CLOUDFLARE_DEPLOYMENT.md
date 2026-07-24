@@ -17,6 +17,7 @@ This guide walks you through deploying the entire sour.ai application (frontend 
 2. **GitHub/GitLab Account** (to connect your repo)
 3. **Gemini API Key** from [Google AI Studio](https://aistudio.google.com/app/apikey)
 4. (Optional) **Groq API Key** from [console.groq.com](https://console.groq.com)
+5. (Optional) **Pollinations API Key** for image generation from [Pollinations](https://enter.pollinations.ai)
 
 ---
 
@@ -77,6 +78,7 @@ In the Cloudflare Pages project dashboard:
    |----------|-------|
    | `GEMINI_API_KEY` | Your API key from [Google AI Studio](https://aistudio.google.com/app/apikey) |
    | `GROQ_API_KEY` | (Optional) Your API key from [console.groq.com](https://console.groq.com) |
+   | `POLLINATION_API_KEY` | (Required for image generation) Your server-side key from [Pollinations](https://enter.pollinations.ai) |
 
    **For multiple keys** (recommended for higher throughput):
    - Instead of `GEMINI_API_KEY`, use `GEMINI_API_KEYS=key1,key2,key3`
@@ -197,12 +199,6 @@ npm install -g wrangler
 wrangler pages dev dist
 
 # Your app will be at http://localhost:8788
-```
-
-Or use the original Express server for dev:
-```bash
-npm run dev
-# Visit http://localhost:3000
 ```
 
 ---

@@ -2,6 +2,7 @@ import { generateText, resolveModelRoute, getApiKeys } from '../shared/ai';
 import { processImageRequests } from '../shared/imageGenerator';
 import { CHAT_SYSTEM_PROMPT } from '../shared/systemPrompts';
 import { splitThinkingAndText, buildImageResponseText } from '../shared/responseFormatting';
+import { detectImageRequest, isIdentityRequest } from '../shared/imageDetection';
 
 type PagesFunction = (context: any) => Promise<Response>;
 
@@ -17,25 +18,11 @@ async function convertAttachmentsToGeminiContents(
         const mimeMatch = headerPart.match(/data:([^;]+)/);
         const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
 
-        contents.push({
-          type: 'image',
-          source: {
-            type: 'base64',
-            mediaType: mimeType,
-            data: dataPart,
-          },
-        });
+        contents.push({ inlineData: { mimeType, data: dataPart } });
       }
     } else if (att.type === 'pdf' && att.dataUrl) {
       const [, dataPart] = att.dataUrl.split(',');
-      contents.push({
-        type: 'document',
-        source: {
-          type: 'base64',
-          mediaType: 'application/pdf',
-          data: dataPart,
-        },
-      });
+      contents.push({ inlineData: { mimeType: 'application/pdf', data: dataPart } });
     }
   }
 
@@ -49,14 +36,6 @@ export const onRequest: PagesFunction = async (context) => {
 
   try {
     const env = context.env as Record<string, string>;
-    const { geminiKeys, groqKeys } = getApiKeys(env);
-
-    if (geminiKeys.length === 0 && groqKeys.length === 0) {
-      return new Response(
-        JSON.stringify({ error: 'No API keys configured' }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } }
-      );
-    }
 
     const body = await context.request.json() as {
       messages?: any[];
@@ -71,6 +50,51 @@ export const onRequest: PagesFunction = async (context) => {
         JSON.stringify({ error: 'Messages array is required' }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
+    }
+
+    const lastUserText = [...messages]
+      .reverse()
+      .find((message: any) => message?.role === 'user')?.content || '';
+    const pollinationKey = env.POLLINATION_API_KEY;
+
+    if (isIdentityRequest(lastUserText)) {
+      return new Response(JSON.stringify({
+        text: "I'm sour.ai, an AI coding assistant created by Synergy Studios.",
+        thinking: 'I recognized an identity question.',
+        thinkingLabel: 'Identifying sour.ai',
+        images: [],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    const imageRequest = detectImageRequest(lastUserText);
+    if (imageRequest.shouldGenerate) {
+      if (!pollinationKey) {
+        return new Response(JSON.stringify({
+          error: 'Image generation is not configured. Add POLLINATION_API_KEY in Cloudflare Pages environment variables.',
+        }), { status: 503, headers: { 'Content-Type': 'application/json' } });
+      }
+      const { text: imageText, images } = await processImageRequests(
+        `[GENERATE_IMAGE: ${imageRequest.prompt}]`,
+        pollinationKey
+      );
+      if (images.length === 0) {
+        return new Response(JSON.stringify({
+          error: 'sour.ai could not generate that image. Please try a different prompt.',
+        }), { status: 502, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({
+        text: imageText || buildImageResponseText(images.length),
+        images,
+        thinking: 'I recognized an image-generation request and sent it to the image model.',
+        thinkingLabel: 'Generating image',
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    const { geminiKeys, groqKeys } = getApiKeys(env);
+    if (geminiKeys.length === 0 && groqKeys.length === 0) {
+      return new Response(JSON.stringify({
+        error: 'No AI API keys are configured in Cloudflare Pages environment variables.',
+      }), { status: 500, headers: { 'Content-Type': 'application/json' } });
     }
 
     const route = resolveModelRoute(model);
@@ -117,15 +141,15 @@ If the user requests visual content, include a single [GENERATE_IMAGE: ...] dire
     const { text, thinking } = splitThinkingAndText(rawText);
 
     // Process image generation requests in the response
-    const pollinationKey = env.POLLINATION_API_KEY;
     const { text: processedText, images } = await processImageRequests(text, pollinationKey);
-    const responseText = processedText || buildImageResponseText(images.length);
+    const responseText = processedText || buildImageResponseText(images.length) ||
+      "I'm sour.ai, created by Synergy Studios. I received the request but the AI provider returned no text. Please check the configured Cloudflare API keys.";
 
     return new Response(JSON.stringify({
       text: responseText,
       images,
-      thinking,
-      thinkingLabel: thinking ? 'Analyzing request' : '',
+      thinking: thinking || 'I identified the request and prepared a response.',
+      thinkingLabel: thinking ? 'Analyzing request' : 'Preparing response',
     }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },

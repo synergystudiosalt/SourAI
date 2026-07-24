@@ -1,5 +1,3 @@
-import { GoogleGenAI } from '@google/genai';
-
 function parseKeyList(raw: string | undefined): string[] {
   return (raw || '')
     .split(',')
@@ -30,13 +28,6 @@ export function takeGroqKey(keys: string[]): string | null {
   return key;
 }
 
-export function buildGeminiClient(apiKey: string) {
-  return new GoogleGenAI({
-    apiKey,
-    httpOptions: { headers: { 'User-Agent': 'sour-ai-cf-pages' } },
-  });
-}
-
 export async function generateWithGemini(
   keys: string[],
   contents: any,
@@ -48,9 +39,30 @@ export async function generateWithGemini(
   for (let attempt = 0; attempt < keys.length; attempt++) {
     const key = takeGeminiKey(keys)!;
     try {
-      const ai = buildGeminiClient(key);
-      const response = await ai.models.generateContent({ model, contents, config: { systemInstruction } });
-      return response.text || '';
+      // Use Gemini's REST API directly so this function stays compatible with
+      // the Cloudflare Pages runtime and does not depend on Node-only SDK code.
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents,
+            systemInstruction: { parts: [{ text: systemInstruction }] },
+            generationConfig: { temperature: 0.3 },
+          }),
+        }
+      );
+      const data: any = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(`Gemini HTTP ${response.status}: ${data?.error?.message || 'Request failed'}`);
+      }
+      const text = data?.candidates?.[0]?.content?.parts
+        ?.map((part: any) => part?.text || '')
+        .join('')
+        .trim();
+      if (!text) throw new Error('Gemini returned no text content');
+      return text;
     } catch (err: any) {
       lastErr = err;
       console.warn(`Gemini key #${attempt + 1}/${keys.length} failed on ${model}:`, err?.message || err);
@@ -107,13 +119,13 @@ export interface ModelRoute {
 
 export const MODEL_ROUTES: Record<string, ModelRoute> = {
   'sour-omni-flash': { provider: 'gemini', model: 'gemini-3.5-flash-lite' },
-  'sour-intelligence': { provider: 'groq', model: 'llama-4-scout-17b-16e-instruct' },
-  'sour-ultra': { provider: 'gemini', model: 'gemma-4-31b-it' },
-  'sour-overclock': { provider: 'gemini', model: 'gemma-4-31b-it' },
+  'sour-intelligence': { provider: 'groq', model: 'llama-3.3-70b-versatile' },
+  'sour-ultra': { provider: 'gemini', model: 'gemini-3.5-flash' },
+  'sour-overclock': { provider: 'gemini', model: 'gemini-3.5-flash' },
 };
 
 const DEFAULT_ROUTE: ModelRoute = MODEL_ROUTES['sour-omni-flash'];
-const GLOBAL_FALLBACK_MODEL = 'gemma-4-31b-it';
+const GLOBAL_FALLBACK_MODEL = 'gemini-3.5-flash';
 
 export function resolveModelRoute(model: unknown): ModelRoute {
   if (typeof model === 'string' && MODEL_ROUTES[model]) return MODEL_ROUTES[model];

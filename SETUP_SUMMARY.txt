@@ -137,11 +137,7 @@ API KEYS SETUP
 LOCAL DEVELOPMENT (Optional)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Option 1: Express Server (for quick dev)
-  $ npm run dev
-  Visit http://localhost:3000
-
-Option 2: Pages Functions (closest to production)
+Pages Functions (closest to production)
   $ npm install -g wrangler
   $ wrangler pages dev dist
   Visit http://localhost:8788

@@ -1,4 +1,4 @@
-import { blobToDataUrl } from '../shared/imageGenerator';
+import { generateImageForChat } from '../shared/imageGenerator';
 
 export const onRequest: PagesFunction = async (context) => {
   if (context.request.method !== 'POST') {
@@ -28,44 +28,20 @@ export const onRequest: PagesFunction = async (context) => {
       );
     }
 
-    // Call Pollination AI API
-    const response = await fetch('https://api.pollinations.ai/generate', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${POLLINATION_API_KEY}`,
-      },
-      body: JSON.stringify({
-        prompt: prompt,
-        model: 'flux-schnell',
-        width: 1024,
-        height: 1024,
-        steps: 4,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Pollination API error:', errorText);
+    const base64Image = await generateImageForChat(prompt, POLLINATION_API_KEY);
+    if (!base64Image) {
       return new Response(
-        JSON.stringify({ 
-          error: 'Failed to generate image',
-          details: errorText 
-        }),
-        { status: response.status, headers: { 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: 'Failed to generate image' }),
+        { status: 502, headers: { 'Content-Type': 'application/json' } }
       );
     }
-
-    // Get the image as a data URL using a runtime-safe base64 conversion.
-    const imageBlob = await response.blob();
-    const base64Image = await blobToDataUrl(imageBlob, imageBlob.type || response.headers.get('content-type') || 'image/png');
 
     return new Response(
       JSON.stringify({
         success: true,
         image: base64Image,
         prompt: prompt,
-        model: 'flux-schnell',
+        model: 'flux',
       }),
       { 
         status: 200,

@@ -17,8 +17,6 @@ Your sour.ai application has been fully enhanced with **professional-grade featu
   
 - ✅ Dynamic API URL system (`src/lib/api.ts`)
   - Works on Cloudflare Pages (uses `/api/*`)
-  - Works locally (uses `http://localhost:3000`)
-  - Works with custom backends (uses `VITE_API_BASE`)
 
 ### Deployment Ready
 - ✅ Complete documentation (5 guides)
@@ -358,8 +356,6 @@ All sensitive data remains secure:
 
 ### For Development
 ```bash
-# Local Express server
-npm run dev              # http://localhost:3000
 
 # Local Pages Functions (closest to prod)
 wrangler pages dev dist  # http://localhost:8788

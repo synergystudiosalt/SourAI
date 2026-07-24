@@ -250,7 +250,7 @@ export default function App() {
           ? `Generated ${data.images.length} image${data.images.length === 1 ? '' : 's'}.`
           : data.error
             ? `Error: ${data.error}`
-            : 'No response returned.');
+            : 'sour.ai received an empty response from the Cloudflare Pages Function. Please try again.');
       const assistantMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
@@ -385,7 +385,7 @@ export default function App() {
           ? `Generated ${data.images.length} image${data.images.length === 1 ? '' : 's'}.`
           : data.error
             ? `Error: ${data.error}`
-            : 'No response returned.');
+            : 'sour.ai received an empty response from the Cloudflare Pages Function. Please try again.');
       const assistantMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',

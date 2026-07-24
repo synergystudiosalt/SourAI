@@ -188,7 +188,6 @@ Response sent back to frontend
 
 **Q: Can I still run locally?**
 - A: Yes!
-  - For Express server: `npm run dev` (visit http://localhost:3000)
   - For Pages Functions: `npm install -g wrangler` then `wrangler pages dev dist` (visit http://localhost:8788)
 
 **Q: How much does this cost?**

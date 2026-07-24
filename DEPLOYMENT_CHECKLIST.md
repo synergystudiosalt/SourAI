@@ -181,10 +181,6 @@ Backend automatically rotates through them.
 
 ### 4. Local Development
 ```bash
-# Option 1: Express server
-npm run dev
-# Visit http://localhost:3000
-
 # Option 2: Pages Functions (closest to production)
 npm install -g wrangler
 wrangler pages dev dist

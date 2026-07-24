@@ -102,7 +102,11 @@ export const onRequest: PagesFunction = async (context) => {
       }
     }
 
-    return new Response(JSON.stringify({ text, thinking, thinkingLabel }), {
+    return new Response(JSON.stringify({
+      text: text || "I'm sour.ai, created by Synergy Studios. The AI provider returned no text for this request.",
+      thinking: thinking || 'I reviewed the workspace context and prepared an answer.',
+      thinkingLabel: thinkingLabel || 'Reviewing workspace',
+    }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });

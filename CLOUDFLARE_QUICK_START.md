@@ -56,7 +56,8 @@ In your Cloudflare Pages project:
    GEMINI_API_KEYS = key1,key2,key3
    ```
 3. (Optional) Add `GROQ_API_KEY` or `GROQ_API_KEYS`
-4. Click **Save**
+4. Add `POLLINATION_API_KEY` to enable image generation
+5. Click **Save**
 
 ### 5. Trigger Deployment
 
@@ -136,10 +137,4 @@ To test Pages Functions locally before deploying:
 npm install -g wrangler
 wrangler pages dev dist
 # App runs at http://localhost:8788
-```
-
-Or use the Express server for quick testing:
-```bash
-npm run dev
-# Visit http://localhost:3000
 ```

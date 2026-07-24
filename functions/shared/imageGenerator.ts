@@ -12,20 +12,12 @@ export async function generateImageForChat(
   if (!pollinationKey) return null;
 
   try {
-    const response = await fetch('https://api.pollinations.ai/generate', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${pollinationKey}`,
-      },
-      body: JSON.stringify({
-        prompt: prompt,
-        model: 'flux-schnell',
-        width: 1024,
-        height: 1024,
-        steps: 4,
-      }),
-    });
+    const response = await fetch(
+      `https://gen.pollinations.ai/image/${encodeURIComponent(prompt)}?model=flux&width=1024&height=1024`,
+      {
+        headers: { 'Authorization': `Bearer ${pollinationKey}` },
+      }
+    );
 
     if (!response.ok) {
       console.error('Pollination API error:', response.status);
@@ -57,10 +49,6 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 
   if (typeof btoa === 'function') {
     return btoa(binary);
-  }
-
-  if (typeof Buffer !== 'undefined') {
-    return Buffer.from(buffer).toString('base64');
   }
 
   throw new Error('No base64 encoder available in this runtime');
