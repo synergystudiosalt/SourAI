@@ -40,8 +40,8 @@ Each sour.ai model tier is pinned to a Cloudflare-compatible provider model in `
 | Tier | Provider | Model |
 | --- | --- | --- |
 | Omni-Flash | Gemini | `gemini-3.5-flash-lite` |
-| Intelligence | Groq | `llama-3.1-8b-instant` |
-| Ultra | Gemini | `gemini-3.5-flash` |
-| Overclock | Gemini | `gemini-3.5-flash` |
+| Intelligence | Gemini | `gemma-4-31b-it` |
+| Ultra | Gemini | `gemma-4-31b-it` |
+| Overclock | Gemini | `gemma-4-31b-it` |
 
 If a tier's primary model fails, the Pages Function tries the global Gemini fallback and then Groq when configured.

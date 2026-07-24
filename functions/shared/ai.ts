@@ -119,13 +119,13 @@ export interface ModelRoute {
 
 export const MODEL_ROUTES: Record<string, ModelRoute> = {
   'sour-omni-flash': { provider: 'gemini', model: 'gemini-3.5-flash-lite' },
-  'sour-intelligence': { provider: 'groq', model: 'llama-3.3-70b-versatile' },
-  'sour-ultra': { provider: 'gemini', model: 'gemini-3.5-flash' },
-  'sour-overclock': { provider: 'gemini', model: 'gemini-3.5-flash' },
+  'sour-intelligence': { provider: 'gemini', model: 'gemma-4-31b-it' },
+  'sour-ultra': { provider: 'gemini', model: 'gemma-4-31b-it' },
+  'sour-overclock': { provider: 'gemini', model: 'gemma-4-31b-it' },
 };
 
 const DEFAULT_ROUTE: ModelRoute = MODEL_ROUTES['sour-omni-flash'];
-const GLOBAL_FALLBACK_MODEL = 'gemini-3.5-flash';
+const GLOBAL_FALLBACK_MODEL = 'gemini-3.5-flash-lite';
 
 export function resolveModelRoute(model: unknown): ModelRoute {
   if (typeof model === 'string' && MODEL_ROUTES[model]) return MODEL_ROUTES[model];
