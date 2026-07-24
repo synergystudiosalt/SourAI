@@ -9,7 +9,7 @@ import { buildImageResponseText } from './responseFormatting';
  */
 
 export interface ImageGenerationOptions {
-  model?: 'flux' | 'flux-realism' | 'flux-anime' | 'flux-3d' | 'turbo' | 'kontext';
+  model?: 'flux' | 'turbo' | 'kontext';
   seed?: number;
   width?: number;
   height?: number;
@@ -19,31 +19,13 @@ export interface ImageGenerationOptions {
 
 /**
  * Determine the optimal Pollinations model based on prompt keywords
- * Routing Table:
- * - flux (Default): General, complex prompts, text/logos, high quality.
- * - flux-realism: Photos, portraits, macro, natural lighting.
- * - flux-anime: Anime, manga, comic, drawn illustrations.
- * - flux-3d: 3D, CGI, render, isometric, game assets.
- * - turbo: Low-latency previews/drafts.
- * - kontext: Style transfer, thematic renders.
+ * Routing Table (all models verified against Pollinations API):
+ * - flux: General purpose, complex prompts, text/logos, high quality (default)
+ * - turbo: Low-latency previews/drafts
+ * - kontext: Style transfer, thematic renders
  */
 export function selectOptimalModel(prompt: string): ImageGenerationOptions['model'] {
   const promptLower = prompt.toLowerCase();
-  
-  // flux-realism: Photos, portraits, macro, natural lighting
-  if (/\b(photo|realistic|photograph|portrait|macro|natural lighting|real|authentic|genuine|candid)\b/i.test(promptLower)) {
-    return 'flux-realism';
-  }
-  
-  // flux-anime: Anime, manga, comic, drawn illustrations
-  if (/\b(anime|manga|comic|drawn|illustration|chibi|cartoon)\b/i.test(promptLower)) {
-    return 'flux-anime';
-  }
-  
-  // flux-3d: 3D, CGI, render, isometric, game assets
-  if (/\b(3d|render|cgi|isometric|game asset|3d model|voxel|pixar)\b/i.test(promptLower)) {
-    return 'flux-3d';
-  }
   
   // turbo: Low-latency previews/drafts
   if (/\b(quick|fast|draft|preview|low-res|thumbnail)\b/i.test(promptLower)) {
@@ -55,7 +37,7 @@ export function selectOptimalModel(prompt: string): ImageGenerationOptions['mode
     return 'kontext';
   }
   
-  // Default: flux for general, complex prompts, text/logos
+  // Default: flux for all other requests (high quality, best general model)
   return 'flux';
 }
 

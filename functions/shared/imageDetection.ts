@@ -23,31 +23,13 @@ export function isIdentityRequest(text: string): boolean {
 /**
  * Analyze prompt and suggest optimal Pollinations model
  * 
- * Model selection rules:
- * - flux-realism: for photorealism, portraits, landscapes, natural lighting
- * - flux-anime: for anime, manga, illustrations, comics
- * - flux-3d: for 3D renders, CGI, game assets, Pixar style
+ * Model selection rules (verified against Pollinations API):
+ * - flux: default for general requests, photos, anime, 3D, high quality
  * - turbo: for quick drafts, previews, fast generation
  * - kontext: for style transfer, character consistency
- * - flux: default for general requests (high precision, text rendering, logos)
  */
-export function analyzePromptForModel(prompt: string): 'flux' | 'flux-realism' | 'flux-anime' | 'flux-3d' | 'turbo' | 'kontext' {
+export function analyzePromptForModel(prompt: string): 'flux' | 'turbo' | 'kontext' {
   const promptLower = prompt.toLowerCase();
-  
-  // flux-realism patterns
-  if (/\b(photo|realistic|photograph|portrait|macro|landscape|natural lighting|real|authentic|genuine|candid|person|people|human|face|body)\b/i.test(promptLower)) {
-    return 'flux-realism';
-  }
-  
-  // flux-anime patterns
-  if (/\b(anime|manga|drawn|illustration|comic|chibi|cartoon|manga style|anime style|character design)\b/i.test(promptLower)) {
-    return 'flux-anime';
-  }
-  
-  // flux-3d patterns
-  if (/\b(3d|render|cgi|pixar style|claymation|isometric|game asset|3d model|voxel|blender|maya|c4d)\b/i.test(promptLower)) {
-    return 'flux-3d';
-  }
   
   // turbo patterns
   if (/\b(quick|fast|draft|preview|low-res|thumbnail|minimal|simple)\b/i.test(promptLower)) {
@@ -59,6 +41,6 @@ export function analyzePromptForModel(prompt: string): 'flux' | 'flux-realism' |
     return 'kontext';
   }
   
-  // Default: flux for general requests (best for complex spatial descriptions, text, logos)
+  // Default: flux for all requests (best general-purpose model)
   return 'flux';
 }
