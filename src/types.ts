@@ -92,7 +92,7 @@ export interface AgentFileOp {
   language?: string;
 }
 
-export type AgentMode = 'write' | 'ask';
+export type AgentMode = 'write' | 'plan';
 
 export interface AgentChatMessage {
   id: string;

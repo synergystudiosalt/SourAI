@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Copy, Download, Check, AlertCircle } from 'lucide-react';
+import { Copy, Download, Check, AlertCircle, Loader2 } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface ImagePreviewCardProps {
@@ -12,6 +12,7 @@ export const ImagePreviewCard: React.FC<ImagePreviewCardProps> = ({ prompt, url,
   const [copied, setCopied] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   const fetchImageBlob = async (): Promise<Blob | null> => {
     try {
@@ -70,21 +71,38 @@ export const ImagePreviewCard: React.FC<ImagePreviewCardProps> = ({ prompt, url,
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.1 }}
-      className="my-4 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden bg-gray-50 dark:bg-gray-900"
+      className="my-4 rounded-lg border border-[#e2dec0] dark:border-[#2d2d2c] overflow-hidden bg-white dark:bg-[#1a1a19]"
     >
       {/* Image Container */}
-      <div className="relative bg-white dark:bg-gray-800 aspect-square overflow-auto flex items-center justify-center">
+      <div className="relative aspect-square overflow-hidden flex items-center justify-center">
+        {/* Loading skeleton */}
+        {!loaded && (
+          <div className="absolute inset-0 flex items-center justify-center overflow-hidden bg-[#f0eee8] dark:bg-[#222221]">
+            <div
+              className="absolute inset-0"
+              style={{
+                background: 'linear-gradient(110deg, #e8e6e0 30%, #f5f4ef 50%, #e8e6e0 70%)',
+                backgroundSize: '200% 100%',
+                animation: 'shimmer 1.5s ease-in-out infinite',
+              }}
+            />
+            <Loader2 className="relative w-6 h-6 text-[#a09a8e] dark:text-[#666] animate-spin" />
+          </div>
+        )}
+
         <img
           src={url}
           alt={prompt}
-          className="max-w-full max-h-full object-contain"
+          className={`max-w-full max-h-full object-contain transition-opacity duration-300 ${loaded ? 'opacity-100' : 'opacity-0'}`}
           loading="lazy"
+          onLoad={() => setLoaded(true)}
+          onError={() => setLoaded(true)}
         />
       </div>
 
       {/* Controls Footer */}
-      <div className="flex items-center justify-between gap-3 px-4 py-3 bg-gray-100 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
-        <p className="text-sm text-gray-600 dark:text-gray-400 flex-1 truncate">
+      <div className="flex items-center justify-between gap-3 px-4 py-3 bg-[#f4f2eb] dark:bg-[#1e1e1d] border-t border-[#e2dec0] dark:border-[#2d2d2c]">
+        <p className="text-sm text-[#6e6a5e] dark:text-[#a09c94] flex-1 truncate">
           {prompt}
         </p>
 
@@ -99,7 +117,7 @@ export const ImagePreviewCard: React.FC<ImagePreviewCardProps> = ({ prompt, url,
           <button
             onClick={handleCopy}
             disabled={copied}
-            className="p-2 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors flex items-center gap-1.5 disabled:opacity-50"
+            className="p-2 rounded-md hover:bg-[#e8e6e0] dark:hover:bg-[#282826] transition-colors flex items-center gap-1.5 disabled:opacity-50"
             title="Copy image to clipboard"
             aria-label="Copy image"
           >
@@ -110,8 +128,8 @@ export const ImagePreviewCard: React.FC<ImagePreviewCardProps> = ({ prompt, url,
               </>
             ) : (
               <>
-                <Copy size={16} className="text-gray-600 dark:text-gray-400" />
-                <span className="text-xs text-gray-600 dark:text-gray-400">Copy</span>
+                <Copy size={16} className="text-[#6e6a5e] dark:text-[#a09c94]" />
+                <span className="text-xs text-[#6e6a5e] dark:text-[#a09c94]">Copy</span>
               </>
             )}
           </button>
@@ -119,12 +137,12 @@ export const ImagePreviewCard: React.FC<ImagePreviewCardProps> = ({ prompt, url,
           <button
             onClick={handleDownload}
             disabled={downloading}
-            className="p-2 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors flex items-center gap-1.5 disabled:opacity-50"
+            className="p-2 rounded-md hover:bg-[#e8e6e0] dark:hover:bg-[#282826] transition-colors flex items-center gap-1.5 disabled:opacity-50"
             title="Download image"
             aria-label="Download image"
           >
-            <Download size={16} className="text-gray-600 dark:text-gray-400" />
-            <span className="text-xs text-gray-600 dark:text-gray-400">
+            <Download size={16} className="text-[#6e6a5e] dark:text-[#a09c94]" />
+            <span className="text-xs text-[#6e6a5e] dark:text-[#a09c94]">
               {downloading ? 'Saving...' : 'Download'}
             </span>
           </button>

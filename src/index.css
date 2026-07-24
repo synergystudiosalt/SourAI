@@ -26,6 +26,11 @@
   }
 }
 
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
 /* Global scrollbar styling to make any remaining scrollbars minimal or hidden */
 ::-webkit-scrollbar {
   width: 0px;

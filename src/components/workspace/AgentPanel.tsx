@@ -506,7 +506,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       }
 
       const { displayText, ops } = finalParsed;
-      const willAutoApply = mode === 'write' && ops.length > 0;
+      const willAutoApply = false;
 
       const subMsg: AgentChatMessage = {
         id: genId(),
@@ -667,7 +667,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         if (!res2.ok) throw new Error(data2?.error || 'The agent failed to respond after using tools.');
 
         const parsed2 = parseAgentResponse(data2.text || '');
-        const willAutoApply = mode === 'write' && parsed2.ops.length > 0;
+        const willAutoApply = false;
 
         // Update the interim message in-place with the final answer
         setMessages((prev) =>
@@ -701,7 +701,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           }
         }
         
-        const willAutoApply = mode === 'write' && ops.length > 0;
+const willAutoApply = false;
         const assistantMsgId = genId();
         const assistantMsg: AgentChatMessage = {
           id: assistantMsgId,
@@ -1154,14 +1154,14 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
               <Plus className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
             </button>
             <button
-              onClick={() => setMode((m) => (m === 'write' ? 'ask' : 'write'))}
-              title="Toggle whether the agent applies changes automatically"
+              onClick={() => setMode((m) => (m === 'write' ? 'plan' : 'write'))}
+              title={mode === 'write' ? 'Write: review & approve changes' : 'Plan: guidance only, no code changes'}
               className="flex items-center justify-center p-1.5 sm:p-0 gap-1 sm:gap-1.5 hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth transition-colors min-w-[44px] sm:min-w-auto h-[44px] sm:h-auto"
             >
               <span className="w-3 h-3 sm:w-3.5 sm:h-3.5 border border-current flex items-center justify-center text-[6px] sm:text-[8px] font-bold">
-                {mode === 'write' ? 'W' : 'A'}
+                {mode === 'write' ? 'W' : 'P'}
               </span>
-              <span className="hidden sm:inline">{mode === 'write' ? 'Write' : 'Ask'}</span>
+              <span className="hidden sm:inline">{mode === 'write' ? 'Write' : 'Plan'}</span>
             </button>
             <div className="relative" ref={modelPopoverRef}>
               <button onClick={() => setShowModelPopover((v) => !v)} className="flex items-center justify-center p-1.5 sm:p-0 gap-0.5 sm:gap-1 hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth transition-colors text-[9px] sm:text-[11px] min-w-[44px] sm:min-w-auto h-[44px] sm:h-auto">

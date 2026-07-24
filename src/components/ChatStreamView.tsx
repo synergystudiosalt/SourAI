@@ -417,10 +417,10 @@ export const ChatStreamView: React.FC<ChatStreamViewProps> = ({
   const [questionDismissed, setQuestionDismissed] = useState(false);
   const lastQuestionContentRef = useRef<string | null>(null);
 
-  // Extract pending question from last assistant message
+  // Extract pending questions from last assistant message
   const lastAssistantMsg = [...messages].reverse().find(m => m.role === 'assistant');
   const { questions: pendingQuestions } = extractQuestionBlocks(lastAssistantMsg?.content || '');
-  const pendingQuestion = pendingQuestions.length > 0 && !isGenerating && !questionDismissed ? pendingQuestions[0] : null;
+  const showQuestions = pendingQuestions.length > 0 && !isGenerating && !questionDismissed;
 
   // Reset dismissed when new assistant content arrives
   const currentAssistantContent = lastAssistantMsg?.content || '';
@@ -603,7 +603,7 @@ export const ChatStreamView: React.FC<ChatStreamViewProps> = ({
 
   const handleSend = () => {
     if ((inputText.trim() || attachments.length > 0) && !isGenerating) {
-      if (pendingQuestion) setQuestionDismissed(true);
+      if (showQuestions) setQuestionDismissed(true);
       onSendFollowUp(inputText, attachments);
       setInputText('');
       setAttachments([]);
@@ -765,13 +765,17 @@ export const ChatStreamView: React.FC<ChatStreamViewProps> = ({
       </div>
 
       {/* Question Box - above prompt field */}
-      {pendingQuestion && (
-        <div className="shrink-0 px-2 sm:px-3 md:px-4 pb-2">
+      {showQuestions && (
+        <div className="shrink-0 px-2 sm:px-3 md:px-4 pb-2 max-h-[60vh] overflow-y-auto">
           <QuestionBox
-            question={pendingQuestion}
-            onSelect={(option) => {
+            questions={pendingQuestions}
+            onAnswer={() => {}}
+            onComplete={(answers) => {
               setQuestionDismissed(true);
-              onSendFollowUp(option);
+              const lastAnswer = answers[answers.length - 1];
+              if (lastAnswer && lastAnswer !== '__skipped__') {
+                onSendFollowUp(lastAnswer);
+              }
             }}
             onSkip={() => setQuestionDismissed(true)}
             onClose={() => setQuestionDismissed(true)}

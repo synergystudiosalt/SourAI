@@ -1,5 +1,5 @@
 import { generateText, resolveModelRoute, getApiKeys } from '../shared/ai';
-import { AGENT_SYSTEM_PROMPT, AGENT_WRITE_MODE_NOTE, AGENT_ASK_MODE_NOTE, buildAgentContextBlock } from '../shared/systemPrompts';
+import { AGENT_SYSTEM_PROMPT, AGENT_WRITE_MODE_NOTE, AGENT_PLAN_MODE_NOTE, buildAgentContextBlock } from '../shared/systemPrompts';
 import { splitThinkingAndText } from '../shared/responseFormatting';
 
 const AGENT_SYSTEM_PROMPT_BASE = AGENT_SYSTEM_PROMPT;
@@ -32,7 +32,7 @@ export const onRequest: PagesFunction = async (context) => {
     const {
       messages = [],
       model,
-      mode = 'ask',
+      mode = 'plan',
       activeFile,
       projectFiles = [],
       mentionedFiles = [],
@@ -53,7 +53,7 @@ export const onRequest: PagesFunction = async (context) => {
     // Build the full prompt with system instruction
     const systemInstruction = [
       AGENT_SYSTEM_PROMPT,
-      mode === 'write' ? AGENT_WRITE_MODE_NOTE : AGENT_ASK_MODE_NOTE,
+      mode === 'write' ? AGENT_WRITE_MODE_NOTE : AGENT_PLAN_MODE_NOTE,
       '',
       'File context:',
       contextBlock,
