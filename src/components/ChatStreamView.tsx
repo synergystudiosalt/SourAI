@@ -34,6 +34,7 @@ import { AttachmentPopover } from './AttachmentPopover';
 import { AttachmentCard } from './AttachmentCard';
 import { parseUploadedFile } from '../utils/fileParser';
 import { ImagePreviewCard } from './ImagePreviewCard';
+import { QuestionBox, extractQuestionBlocks } from './QuestionBox';
 
 
 interface ChatStreamViewProps {
@@ -61,6 +62,7 @@ interface TypewriterMessageProps {
   onRetry: () => void;
   onScrollToBottom?: () => void;
   images?: Array<{ prompt: string; url: string }>;
+  onSendFollowUp?: (text: string, attachments?: AttachmentItem[]) => void;
 }
 
 const TypewriterMessage: React.FC<TypewriterMessageProps> = ({
@@ -77,12 +79,15 @@ const TypewriterMessage: React.FC<TypewriterMessageProps> = ({
   onRetry,
   onScrollToBottom,
   images = [],
+  onSendFollowUp,
 }) => {
   const [displayedContent, setDisplayedContent] = useState(isLatest ? '' : content);
   const [isThinking, setIsThinking] = useState(isLatest);
   const [showThoughtDetails, setShowThoughtDetails] = useState(false);
   const [isLiked, setIsLiked] = useState<boolean | null>(null);
   const hasFinishedTypewritingRef = useRef(!isLatest);
+
+  const { cleanText, questions } = extractQuestionBlocks(displayedContent);
 
   // Speed and thinking duration based on model tier
   const modelSpeed = selectedModel === 'sour-omni-flash' ? 14 : 26;
@@ -137,8 +142,8 @@ const TypewriterMessage: React.FC<TypewriterMessageProps> = ({
         .filter((s) => s.length > 0)
     : [];
 
-  // Group or constrain to 2-5 steps max
-  const thinkingSteps = rawThinkingSteps.slice(0, 5);
+  // Group or constrain to 2-12 steps max
+  const thinkingSteps = rawThinkingSteps.slice(0, 12);
 
   return (
     <div className="w-full text-left py-2">
@@ -297,7 +302,7 @@ const TypewriterMessage: React.FC<TypewriterMessageProps> = ({
               },
             }}
           >
-            {displayedContent}
+            {cleanText}
           </ReactMarkdown>
         </motion.div>
       )}
@@ -311,6 +316,20 @@ const TypewriterMessage: React.FC<TypewriterMessageProps> = ({
               prompt={img.prompt}
               url={img.url}
               index={idx}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Question Box */}
+      {questions.length > 0 && onSendFollowUp && (
+        <div className="mt-4 space-y-3">
+          {questions.map((q, idx) => (
+            <QuestionBox
+              key={idx}
+              question={q.question}
+              options={q.options}
+              onSelect={(option) => onSendFollowUp(option)}
             />
           ))}
         </div>
@@ -725,6 +744,7 @@ export const ChatStreamView: React.FC<ChatStreamViewProps> = ({
                   onRetry={() => onSendFollowUp(messages[idx - 1]?.content || 'Please elaborate further')}
                   onScrollToBottom={() => scrollToBottom(true)}
                   images={msg.images}
+                  onSendFollowUp={onSendFollowUp}
                 />
               )}
             </motion.div>

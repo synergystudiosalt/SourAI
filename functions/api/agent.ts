@@ -57,7 +57,12 @@ export const onRequest: PagesFunction = async (context) => {
       '',
       'File context:',
       contextBlock,
-    ].join('\n\n');
+      '',
+      'Reasoning format:',
+      '- Use MULTIPLE  thinking... response blocks throughout your response (one per logical step).',
+      '- Each  thinking block: 1-2 sentences, plain text only, no markdown.',
+      '- Example:  thinkingPlanning the fix... responseHere is the implementation.',
+    ].join('\n');
 
     // Prepare message content for Gemini format
     const contents = messages.map((m: any) => ({

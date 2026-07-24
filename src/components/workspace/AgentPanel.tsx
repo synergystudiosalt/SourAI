@@ -18,6 +18,7 @@ import { apiUrl } from '../../lib/api';
 import Logo from '../Logo';
 import PixelBowlIcon from '../PixelBowlIcon';
 import { CustomApiModal } from '../CustomApiModal';
+import { QuestionBox, extractQuestionBlocks } from '../QuestionBox';
 
 interface AgentPanelProps {
   isDarkMode: boolean;
@@ -874,7 +875,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                     .split(/(?<=[.!?])\s+|\n+/)
                     .map((s) => s.trim())
                     .filter(Boolean)
-                    .slice(0, 6)
+.slice(0, 12)
                     .map((step, i) => (
                       <div key={i}>{step}</div>
                     ))}
@@ -941,6 +942,24 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
             <TypedMarkdown text={msg.content} enabled={isTyping} />
           </div>
         )}
+        {(() => {
+          const { questions } = extractQuestionBlocks(msg.content || '');
+          if (questions.length > 0) {
+            return (
+              <div className="mt-2 space-y-2">
+                {questions.map((q, qIdx) => (
+                  <QuestionBox
+                    key={qIdx}
+                    question={q.question}
+                    options={q.options}
+                    onSelect={(option) => handleSend(option)}
+                  />
+                ))}
+              </div>
+            );
+          }
+          return null;
+        })()}
         {msg.ops && msg.ops.length > 0 && (
           <div className="space-y-1 pt-0.5">
             {msg.ops.map((op) => {

@@ -116,9 +116,9 @@ export const onRequest: PagesFunction = async (context) => {
     const systemInstruction = `${CHAT_SYSTEM_PROMPT}
 
 Reasoning format:
-- Before your final answer, write your reasoning inside <think>...</think> tags.
-- Start the response with <think>, then your reasoning, then </think>, then your final answer.
-- Keep the thinking plain text only. Do not use markdown inside <think>.
+- Use MULTIPLE <think>...</think> blocks throughout your response (one per logical step).
+- Each <think> block: 1-2 sentences, plain text only, no markdown.
+- Example: <think>Analyzing the code...</think>Here's the fix.
 
 Only if the user explicitly asks you to generate an image, picture, or photo (using words like "image", "picture", "photo", "draw", "paint"), include a single [GENERATE_IMAGE: ...] directive for the image description. Do NOT generate images for flowcharts, diagrams, charts, graphs, mind maps, wireframes, or other diagrams — describe those in text/code instead.`;
 
