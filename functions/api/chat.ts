@@ -120,7 +120,7 @@ Reasoning format:
 - Start the response with <think>, then your reasoning, then </think>, then your final answer.
 - Keep the thinking plain text only. Do not use markdown inside <think>.
 
-If the user requests visual content, include a single [GENERATE_IMAGE: ...] directive in your final answer so the server can generate and attach the image automatically.`;
+Only if the user explicitly asks you to generate an image, picture, or photo (using words like "image", "picture", "photo", "draw", "paint"), include a single [GENERATE_IMAGE: ...] directive for the image description. Do NOT generate images for flowcharts, diagrams, charts, graphs, mind maps, wireframes, or other diagrams — describe those in text/code instead.`;
 
     const rawText = (await generateText({
       geminiKeys,
