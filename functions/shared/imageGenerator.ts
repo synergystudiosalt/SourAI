@@ -2,10 +2,10 @@ import { buildImageResponseText } from './responseFormatting';
 
 /**
  * Image generation helper for AI responses with Pollinations AI
- * Converts text descriptions to images using advanced model routing and parameters
+ * Converts text descriptions to images using the free legacy endpoint
  * 
- * Uses the new Pollinations endpoint: https://gen.pollinations.ai/image/
- * No API key required - direct image generation endpoint
+ * Uses the free endpoint: https://image.pollinations.ai/prompt/{prompt}
+ * No API key required - anonymous free usage
  */
 
 export interface ImageGenerationOptions {
@@ -43,20 +43,16 @@ export function selectOptimalModel(prompt: string): ImageGenerationOptions['mode
 
 /**
  * Build complete Pollinations image generation URL with parameters
- * Format: https://gen.pollinations.ai/image/{URL_ENCODED_PROMPT}?model={MODEL}&seed={SEED}&width={WIDTH}&height={HEIGHT}&nologo=true&private=true&enhance={ENHANCE}&safe={SAFE}
+ * Uses the free legacy endpoint: https://image.pollinations.ai/prompt/{PROMPT}
+ * No API key required for anonymous usage
  */
 export function buildPollinationsUrl(
   prompt: string,
   options: ImageGenerationOptions = {}
 ): string {
-  // Determine model if not specified
-  const model = options.model || selectOptimalModel(prompt);
-  
-  // Build parameter list
+  // Build parameter list (legacy endpoint supports these params)
   const params: Record<string, string> = {
-    model: model,
     nologo: 'true',
-    private: 'true',
   };
   
   // Add seed if provided
@@ -73,10 +69,6 @@ export function buildPollinationsUrl(
     params.height = options.height.toString();
   }
   
-  // Enhance and Safe flags
-  params.enhance = options.enhance !== undefined ? options.enhance.toString() : 'false';
-  params.safe = options.safe !== undefined ? options.safe.toString() : 'false';
-  
   // Build query string
   const queryString = Object.entries(params)
     .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
@@ -84,7 +76,7 @@ export function buildPollinationsUrl(
   
   // Build final URL with encoded prompt
   const encodedPrompt = encodeURIComponent(prompt);
-  return `https://gen.pollinations.ai/image/${encodedPrompt}?${queryString}`;
+  return `https://image.pollinations.ai/prompt/${encodedPrompt}?${queryString}`;
 }
 
 export async function generateImageForChat(
