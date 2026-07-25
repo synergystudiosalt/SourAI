@@ -52,67 +52,146 @@ const MODEL_LABELS: Record<AIModel, string> = {
 
 const MODEL_OPTIONS: AIModel[] = ['sour-omni-flash', 'sour-intelligence', 'sour-ultra', 'sour-overclock', 'sour-ultracode'];
 
-/** Convert visible XML tags to styled markdown for readability. */
-function formatAgentXml(text: string): string {
-  return text
-    .replace(/<think>([\s\S]*?)<\/think>/g, (_m, content: string) => {
-      const lines = content.trim().split('\n').map(l => l.trim()).filter(Boolean).join('\n');
-      return `> 💭 ${lines}\n`;
-    })
-    .replace(/<check_for_errors>([\s\S]*?)<\/check_for_errors>/g, (_m, content: string) => {
-      return `\`\`\`\n🔍 Error Check\n${content.trim()}\n\`\`\`\n`;
-    })
-    .replace(/<subagent_request>([\s\S]*?)<\/subagent_request>/g, (_m, content: string) => {
-      return `\`\`\`\n🤖 Subagent Request\n${content.trim()}\n\`\`\`\n`;
-    })
-    .replace(/<subagent_response>([\s\S]*?)<\/subagent_response>/g, (_m, content: string) => {
-      return `\`\`\`\n📋 Subagent Response\n${content.trim()}\n\`\`\`\n`;
-    })
-    .replace(/<function_request>([\s\S]*?)<\/function_request>/g, (_m, content: string) => {
-      return `\`\`\`\n⚙️ Function Request\n${content.trim()}\n\`\`\`\n`;
-    })
-    .replace(/<function_result>([\s\S]*?)<\/function_result>/g, (_m, content: string) => {
-      return `\`\`\`\n📊 Function Result\n${content.trim()}\n\`\`\`\n`;
-    })
-    .replace(/<context_compact>([\s\S]*?)<\/context_compact>/g, (_m, content: string) => {
-      return `> 📦 **Context Compacted**\n> ${content.trim().split('\n').join('\n> ')}\n`;
-    });
+// ─── XML Tag Parsing & Expandable Rendering ────────────────────────────────────
+
+interface ContentSegment {
+  type: 'text' | 'think' | 'check_for_errors' | 'subagent_request' | 'subagent_response' | 'function_request' | 'function_result' | 'context_compact';
+  content: string;
 }
 
-const MiniMarkdown: React.FC<{ text: string }> = ({ text }) => {
-  const formatted = formatAgentXml(text);
+const XML_TAG_RE = /<(think|check_for_errors|subagent_request|subagent_response|function_request|function_result|context_compact)>([\s\S]*?)<\/\1>/g;
+
+function parseAgentContent(text: string): ContentSegment[] {
+  const segments: ContentSegment[] = [];
+  let lastIndex = 0;
+
+  for (const match of text.matchAll(XML_TAG_RE)) {
+    if (match.index! > lastIndex) {
+      const t = text.slice(lastIndex, match.index).trim();
+      if (t) segments.push({ type: 'text', content: t });
+    }
+    segments.push({ type: match[1] as ContentSegment['type'], content: match[2].trim() });
+    lastIndex = match.index! + match[0].length;
+  }
+
+  if (lastIndex < text.length) {
+    const t = text.slice(lastIndex).trim();
+    if (t) segments.push({ type: 'text', content: t });
+  }
+
+  return segments.length > 0 ? segments : [{ type: 'text', content: text }];
+}
+
+const TAG_META: Record<string, { label: string; icon: string; color: string }> = {
+  think: { label: 'Thinking', icon: '💭', color: 'text-[#8c887d] dark:text-[#a09c94]' },
+  check_for_errors: { label: 'Error Check', icon: '🔍', color: 'text-emerald-600 dark:text-emerald-400' },
+  subagent_request: { label: 'Subagent Request', icon: '🤖', color: 'text-[#d96b43] dark:text-[#e07e5d]' },
+  subagent_response: { label: 'Subagent Response', icon: '📋', color: 'text-blue-500 dark:text-blue-400' },
+  function_request: { label: 'Function Request', icon: '⚙️', color: 'text-[#8c887d] dark:text-[#a09c94]' },
+  function_result: { label: 'Function Result', icon: '📊', color: 'text-[#8c887d] dark:text-[#a09c94]' },
+  context_compact: { label: 'Context Compacted', icon: '📦', color: 'text-purple-500 dark:text-purple-400' },
+};
+
+const MiniMarkdown: React.FC<{ text: string }> = ({ text }) => (
+  <ReactMarkdown
+    components={{
+      p: ({ children }) => <p className="mb-1.5 last:mb-0">{children}</p>,
+      ul: ({ children }) => <ul className="list-disc pl-4 mb-1.5 space-y-0.5">{children}</ul>,
+      ol: ({ children }) => <ol className="list-decimal pl-4 mb-1.5 space-y-0.5">{children}</ol>,
+      li: ({ children }) => <li>{children}</li>,
+      strong: ({ children }) => <strong className="font-semibold text-[#1c1b1a] dark:text-[#f0efe6]">{children}</strong>,
+      a: ({ children, href }) => (
+        <a href={href} target="_blank" rel="noreferrer" className="text-[#d96b43] underline">
+          {children}
+        </a>
+      ),
+      code: ({ children, className }) => {
+        if (className) {
+          return (
+            <pre className="my-1.5 p-2 rounded-lg bg-[#efece3] dark:bg-[#141413] overflow-x-auto text-[10.5px] font-mono">
+              <code>{children}</code>
+            </pre>
+          );
+        }
+        return <code className="px-1 py-0.5 rounded bg-[#efece3] dark:bg-[#141413] text-[10.5px] font-mono">{children}</code>;
+      },
+    }}
+  >
+    {text}
+  </ReactMarkdown>
+);
+
+/** Expandable section that matches the existing thinking dropdown style. */
+const ExpandableTag: React.FC<{
+  tagType: string;
+  content: string;
+  id: string;
+  openSet: Set<string>;
+  onToggle: (id: string) => void;
+}> = ({ tagType, content, id, openSet, onToggle }) => {
+  const meta = TAG_META[tagType] || { label: tagType, icon: '📄', color: 'text-[#8c887d]' };
+  const isOpen = openSet.has(id);
+
+  // For thinking blocks, split into sentences like the original
+  const steps = tagType === 'think'
+    ? content.split(/(?<=[.!?])\s+|\n+/).map(s => s.trim()).filter(Boolean).slice(0, 12)
+    : content.split('\n').map(s => s.trim()).filter(Boolean);
+
   return (
-    <ReactMarkdown
-      components={{
-        p: ({ children }) => <p className="mb-1.5 last:mb-0">{children}</p>,
-        ul: ({ children }) => <ul className="list-disc pl-4 mb-1.5 space-y-0.5">{children}</ul>,
-        ol: ({ children }) => <ol className="list-decimal pl-4 mb-1.5 space-y-0.5">{children}</ol>,
-        li: ({ children }) => <li>{children}</li>,
-        strong: ({ children }) => <strong className="font-semibold text-[#1c1b1a] dark:text-[#f0efe6]">{children}</strong>,
-        a: ({ children, href }) => (
-          <a href={href} target="_blank" rel="noreferrer" className="text-[#d96b43] underline">
-            {children}
-          </a>
-        ),
-        blockquote: ({ children }) => (
-          <blockquote className="border-l-2 border-[#d96b43]/40 pl-2 my-1 text-[11px] text-[#706c62] dark:text-[#a09d98] italic">
-            {children}
-          </blockquote>
-        ),
-        code: ({ children, className }) => {
-          if (className) {
-            return (
-              <pre className="my-1.5 p-2 rounded-lg bg-[#efece3] dark:bg-[#141413] overflow-x-auto text-[10.5px] font-mono">
-                <code>{children}</code>
-              </pre>
-            );
-          }
-          return <code className="px-1 py-0.5 rounded bg-[#efece3] dark:bg-[#141413] text-[10.5px] font-mono">{children}</code>;
-        },
-      }}
-    >
-      {formatted}
-    </ReactMarkdown>
+    <div className="select-none">
+      <button
+        type="button"
+        onClick={() => onToggle(id)}
+        className={`flex items-center gap-1 text-[10.5px] font-medium ${meta.color} hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth`}
+      >
+        <span>{meta.icon}</span>
+        <span>{meta.label}</span>
+        <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.15 }}
+            className="mt-1.5 pl-2 border-l border-[#e2dec0] dark:border-[#383836] text-[10.5px] text-[#706c62] dark:text-[#a09d98] space-y-1 leading-relaxed overflow-hidden"
+          >
+            {steps.map((step, i) => (
+              <div key={i}>{step}</div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
+/** Renders agent content with expandable XML tag sections. */
+const AgentContent: React.FC<{ text: string; isTyping: boolean; msgId: string; openTags: Set<string>; onToggleTag: (id: string) => void }> = ({
+  text, isTyping, msgId, openTags, onToggleTag,
+}) => {
+  const segments = parseAgentContent(text);
+  return (
+    <div>
+      {segments.map((seg, i) => {
+        const segId = `${msgId}-xml-${i}`;
+        if (seg.type === 'text') {
+          return <MiniMarkdown key={i} text={seg.content} />;
+        }
+        return (
+          <div key={i} className="my-1">
+            <ExpandableTag
+              tagType={seg.type}
+              content={seg.content}
+              id={segId}
+              openSet={openTags}
+              onToggle={onToggleTag}
+            />
+          </div>
+        );
+      })}
+    </div>
   );
 };
 
@@ -180,6 +259,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   const [mentionState, setMentionState] = useState<{ query: string; start: number } | null>(null);
   const [showSlash, setShowSlash] = useState(false);
   const [openThoughts, setOpenThoughts] = useState<Set<string>>(new Set());
+  const [openXmlTags, setOpenXmlTags] = useState<Set<string>>(new Set());
   const [openToolCalls, setOpenToolCalls] = useState<Set<string>>(new Set());
   const [subAgents, setSubAgents] = useState<SubAgentTask[]>([]);
   const [showAttachmentPopover, setShowAttachmentPopover] = useState(false);
@@ -369,6 +449,15 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       const next = new Set(prev);
       if (next.has(messageId)) next.delete(messageId);
       else next.add(messageId);
+      return next;
+    });
+  };
+
+  const toggleXmlTag = (tagId: string) => {
+    setOpenXmlTags((prev) => {
+      const next = new Set(prev);
+      if (next.has(tagId)) next.delete(tagId);
+      else next.add(tagId);
       return next;
     });
   };
@@ -963,7 +1052,11 @@ const willAutoApply = false;
 
         {msg.content && (
           <div className={`text-[12px] leading-relaxed wrap-break-word ${msg.isError ? 'text-red-600 dark:text-red-400' : 'text-[#3d3a33] dark:text-[#dedcd6]'}`}>
-            <TypedMarkdown text={msg.content} enabled={isTyping} />
+            {msg.role === 'assistant' && !msg.content.startsWith('**Sub-agent') ? (
+              <AgentContent text={msg.content} isTyping={isTyping} msgId={msg.id} openTags={openXmlTags} onToggleTag={toggleXmlTag} />
+            ) : (
+              <TypedMarkdown text={msg.content} enabled={isTyping} />
+            )}
           </div>
         )}
         {msg.ops && msg.ops.length > 0 && (
