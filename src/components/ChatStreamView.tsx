@@ -772,9 +772,9 @@ export const ChatStreamView: React.FC<ChatStreamViewProps> = ({
             onAnswer={() => {}}
             onComplete={(answers) => {
               setQuestionDismissed(true);
-              const lastAnswer = answers[answers.length - 1];
-              if (lastAnswer && lastAnswer !== '__skipped__') {
-                onSendFollowUp(lastAnswer);
+              const validAnswers = answers.filter(a => a !== '__skipped__');
+              if (validAnswers.length > 0) {
+                onSendFollowUp(validAnswers.join('\n'));
               }
             }}
             onSkip={() => setQuestionDismissed(true)}

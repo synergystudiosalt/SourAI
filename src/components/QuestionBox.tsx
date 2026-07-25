@@ -254,19 +254,24 @@ export const QuestionBox: React.FC<QuestionBoxProps> = ({ questions, onAnswer, o
           <div className="flex items-center gap-2.5 h-[36px] sm:h-[38px] px-2.5 rounded-lg">
             <Pencil className="w-[14px] h-[14px] text-[#b0ada5] dark:text-[#666] shrink-0" />
             {showCustomInput ? (
-              <input
-                ref={customInputRef}
-                type="text"
-                value={customText}
-                onChange={(e) => setCustomText(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') { e.preventDefault(); handleCustomSubmit(); }
-                  else if (e.key === 'Escape') { e.preventDefault(); setShowCustomInput(false); containerRef.current?.focus(); }
-                }}
-                onBlur={() => { if (!customText.trim()) setShowCustomInput(false); }}
-                placeholder="Type your answer..."
-                className="flex-1 text-[13px] font-medium text-[#1c1b1a] dark:text-[#f0efe6] placeholder-[#b0ada5] dark:placeholder-[#666] outline-none bg-transparent"
-              />
+              <form
+                onSubmit={(e) => { e.preventDefault(); handleCustomSubmit(); }}
+                className="contents"
+              >
+                <input
+                  ref={customInputRef}
+                  type="text"
+                  value={customText}
+                  onChange={(e) => setCustomText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); handleCustomSubmit(); }
+                    else if (e.key === 'Escape') { e.preventDefault(); setShowCustomInput(false); containerRef.current?.focus(); }
+                  }}
+                  onBlur={() => { if (!customText.trim()) setShowCustomInput(false); }}
+                  placeholder="Type your answer..."
+                  className="flex-1 text-[13px] font-medium text-[#1c1b1a] dark:text-[#f0efe6] placeholder-[#b0ada5] dark:placeholder-[#666] outline-none bg-transparent"
+                />
+              </form>
             ) : (
               <button
                 type="button"
