@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Plus, ChevronRight, ChevronDown, AtSign, Check, Square, Loader2,
   FilePlus, Trash2, ArrowLeft, Bot, Search, Settings, Mic, MicOff, X, Image as ImageIcon,
+  Brain, CheckCircle, ClipboardList, BarChart3, Package, Tag, Zap,
 } from 'lucide-react';
 import { AttachmentPopover } from '../AttachmentPopover';
 import { AttachmentItem } from '../../types';
@@ -55,11 +56,11 @@ const MODEL_OPTIONS: AIModel[] = ['sour-omni-flash', 'sour-intelligence', 'sour-
 // ─── XML Tag Parsing & Expandable Rendering ────────────────────────────────────
 
 interface ContentSegment {
-  type: 'text' | 'think' | 'check_for_errors' | 'subagent_request' | 'subagent_response' | 'function_request' | 'function_result' | 'context_compact';
+  type: string;
   content: string;
 }
 
-const XML_TAG_RE = /<(think|check_for_errors|subagent_request|subagent_response|function_request|function_result|context_compact)>([\s\S]*?)<\/\1>/g;
+const XML_TAG_RE = /<([a-zA-Z][\w-]*)>([\s\S]*?)<\/\1>/g;
 
 function parseAgentContent(text: string): ContentSegment[] {
   const segments: ContentSegment[] = [];
@@ -70,7 +71,7 @@ function parseAgentContent(text: string): ContentSegment[] {
       const t = text.slice(lastIndex, match.index).trim();
       if (t) segments.push({ type: 'text', content: t });
     }
-    segments.push({ type: match[1] as ContentSegment['type'], content: match[2].trim() });
+    segments.push({ type: match[1], content: match[2].trim() });
     lastIndex = match.index! + match[0].length;
   }
 
@@ -82,22 +83,44 @@ function parseAgentContent(text: string): ContentSegment[] {
   return segments.length > 0 ? segments : [{ type: 'text', content: text }];
 }
 
-const TAG_META: Record<string, { label: string; icon: string; color: string }> = {
-  think: { label: 'Thinking', icon: '💭', color: 'text-[#8c887d] dark:text-[#a09c94]' },
-  check_for_errors: { label: 'Error Check', icon: '🔍', color: 'text-emerald-600 dark:text-emerald-400' },
-  subagent_request: { label: 'Subagent Request', icon: '🤖', color: 'text-[#d96b43] dark:text-[#e07e5d]' },
-  subagent_response: { label: 'Subagent Response', icon: '📋', color: 'text-blue-500 dark:text-blue-400' },
-  function_request: { label: 'Function Request', icon: '⚙️', color: 'text-[#8c887d] dark:text-[#a09c94]' },
-  function_result: { label: 'Function Result', icon: '📊', color: 'text-[#8c887d] dark:text-[#a09c94]' },
-  context_compact: { label: 'Context Compacted', icon: '📦', color: 'text-purple-500 dark:text-purple-400' },
+type TagIcon = React.FC<{ className?: string }>;
+
+const KNOWN_TAGS: Record<string, { label: string; Icon: TagIcon; color: string; bg: string; border: string }> = {
+  think:             { label: 'Thinking',        Icon: Brain,         color: 'text-[#8c887d] dark:text-[#a09c94]', bg: 'bg-[#f5f3eb] dark:bg-[#1f1f1e]', border: 'border-[#8c887d] dark:border-[#a09c94]' },
+  check_for_errors:  { label: 'Error Check',     Icon: CheckCircle,   color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-950/30', border: 'border-emerald-500 dark:border-emerald-400' },
+  subagent_request:  { label: 'Subagent Request', Icon: Bot,          color: 'text-[#d96b43] dark:text-[#e07e5d]', bg: 'bg-[#fdf0ea] dark:bg-[#2a1a14]', border: 'border-[#d96b43] dark:border-[#e07e5d]' },
+  subagent_response: { label: 'Subagent Response', Icon: ClipboardList, color: 'text-blue-500 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-950/30', border: 'border-blue-500 dark:border-blue-400' },
+  function_request:  { label: 'Function Request', Icon: Settings,     color: 'text-[#8c887d] dark:text-[#a09c94]', bg: 'bg-[#f5f3eb] dark:bg-[#1f1f1e]', border: 'border-[#8c887d] dark:border-[#a09c94]' },
+  function_result:   { label: 'Function Result',  Icon: BarChart3,    color: 'text-[#8c887d] dark:text-[#a09c94]', bg: 'bg-[#f5f3eb] dark:bg-[#1f1f1e]', border: 'border-[#8c887d] dark:border-[#a09c94]' },
+  context_compact:   { label: 'Context Compacted', Icon: Package,      color: 'text-purple-500 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-950/30', border: 'border-purple-500 dark:border-purple-400' },
 };
+
+const TAG_COLOR_CYCLE = [
+  { color: 'text-[#8c887d] dark:text-[#a09c94]', bg: 'bg-[#f5f3eb] dark:bg-[#1f1f1e]', border: 'border-[#8c887d] dark:border-[#a09c94]' },
+  { color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-950/30', border: 'border-emerald-500 dark:border-emerald-400' },
+  { color: 'text-[#d96b43] dark:text-[#e07e5d]', bg: 'bg-[#fdf0ea] dark:bg-[#2a1a14]', border: 'border-[#d96b43] dark:border-[#e07e5d]' },
+  { color: 'text-blue-500 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-950/30', border: 'border-blue-500 dark:border-blue-400' },
+  { color: 'text-purple-500 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-950/30', border: 'border-purple-500 dark:border-purple-400' },
+  { color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-950/30', border: 'border-amber-500 dark:border-amber-400' },
+  { color: 'text-rose-500 dark:text-rose-400', bg: 'bg-rose-50 dark:bg-rose-950/30', border: 'border-rose-500 dark:border-rose-400' },
+  { color: 'text-cyan-600 dark:text-cyan-400', bg: 'bg-cyan-50 dark:bg-cyan-950/30', border: 'border-cyan-500 dark:border-cyan-400' },
+];
+
+function getTagMeta(tagName: string): { label: string; Icon: TagIcon; color: string; bg: string; border: string } {
+  if (KNOWN_TAGS[tagName]) return KNOWN_TAGS[tagName];
+  let hash = 0;
+  for (let i = 0; i < tagName.length; i++) hash = ((hash << 5) - hash + tagName.charCodeAt(i)) | 0;
+  const palette = TAG_COLOR_CYCLE[Math.abs(hash) % TAG_COLOR_CYCLE.length];
+  const label = tagName.replace(/[_-]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  return { label, Icon: Tag, ...palette };
+}
 
 const MiniMarkdown: React.FC<{ text: string }> = ({ text }) => (
   <ReactMarkdown
     components={{
-      p: ({ children }) => <p className="mb-1.5 last:mb-0">{children}</p>,
-      ul: ({ children }) => <ul className="list-disc pl-4 mb-1.5 space-y-0.5">{children}</ul>,
-      ol: ({ children }) => <ol className="list-decimal pl-4 mb-1.5 space-y-0.5">{children}</ol>,
+      p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+      ul: ({ children }) => <ul className="list-disc pl-5 mb-2 space-y-1">{children}</ul>,
+      ol: ({ children }) => <ol className="list-decimal pl-5 mb-2 space-y-1">{children}</ol>,
       li: ({ children }) => <li>{children}</li>,
       strong: ({ children }) => <strong className="font-semibold text-[#1c1b1a] dark:text-[#f0efe6]">{children}</strong>,
       a: ({ children, href }) => (
@@ -108,12 +131,12 @@ const MiniMarkdown: React.FC<{ text: string }> = ({ text }) => (
       code: ({ children, className }) => {
         if (className) {
           return (
-            <pre className="my-1.5 p-2 rounded-lg bg-[#efece3] dark:bg-[#141413] overflow-x-auto text-[10.5px] font-mono">
+            <pre className="my-2 p-3 rounded-lg bg-[#efece3] dark:bg-[#141413] overflow-x-auto text-[11px] font-mono leading-relaxed">
               <code>{children}</code>
             </pre>
           );
         }
-        return <code className="px-1 py-0.5 rounded bg-[#efece3] dark:bg-[#141413] text-[10.5px] font-mono">{children}</code>;
+        return <code className="px-1 py-0.5 rounded bg-[#efece3] dark:bg-[#141413] text-[11px] font-mono">{children}</code>;
       },
     }}
   >
@@ -121,7 +144,7 @@ const MiniMarkdown: React.FC<{ text: string }> = ({ text }) => (
   </ReactMarkdown>
 );
 
-/** Expandable section that matches the existing thinking dropdown style. */
+/** ChatGPT-style collapsible section with lucide icon. */
 const ExpandableTag: React.FC<{
   tagType: string;
   content: string;
@@ -129,24 +152,21 @@ const ExpandableTag: React.FC<{
   openSet: Set<string>;
   onToggle: (id: string) => void;
 }> = ({ tagType, content, id, openSet, onToggle }) => {
-  const meta = TAG_META[tagType] || { label: tagType, icon: '📄', color: 'text-[#8c887d]' };
+  const { label, Icon, color, bg, border } = getTagMeta(tagType);
   const isOpen = openSet.has(id);
-
-  // For thinking blocks, split into sentences like the original
-  const steps = tagType === 'think'
-    ? content.split(/(?<=[.!?])\s+|\n+/).map(s => s.trim()).filter(Boolean).slice(0, 12)
-    : content.split('\n').map(s => s.trim()).filter(Boolean);
+  const preview = content.split(/\n+/).filter(Boolean).slice(0, 2).join(' ').slice(0, 80);
 
   return (
-    <div className="select-none">
+    <div className="my-1.5">
       <button
         type="button"
         onClick={() => onToggle(id)}
-        className={`flex items-center gap-1 text-[10.5px] font-medium ${meta.color} hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth`}
+        className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium ${color} ${isOpen ? bg : 'hover:' + bg} cursor-pointer ws-button-smooth transition-colors`}
       >
-        <span>{meta.icon}</span>
-        <span>{meta.label}</span>
-        <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+        <Icon className="w-3.5 h-3.5 shrink-0" />
+        <span>{label}</span>
+        {!isOpen && preview && <span className="opacity-50 truncate max-w-[200px] ml-1 font-normal">{preview}…</span>}
+        <ChevronDown className={`w-3 h-3 ml-auto transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
       </button>
       <AnimatePresence>
         {isOpen && (
@@ -155,11 +175,11 @@ const ExpandableTag: React.FC<{
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.15 }}
-            className="mt-1.5 pl-2 border-l border-[#e2dec0] dark:border-[#383836] text-[10.5px] text-[#706c62] dark:text-[#a09d98] space-y-1 leading-relaxed overflow-hidden"
+            className={`mt-1 ml-1 pl-3 py-2 rounded-md ${bg} border-l-2 ${border} overflow-hidden`}
           >
-            {steps.map((step, i) => (
-              <div key={i}>{step}</div>
-            ))}
+            <div className={`text-[11px] leading-relaxed ${color} space-y-1 whitespace-pre-wrap`}>
+              {content}
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -173,22 +193,21 @@ const AgentContent: React.FC<{ text: string; isTyping: boolean; msgId: string; o
 }) => {
   const segments = parseAgentContent(text);
   return (
-    <div>
+    <div className="space-y-1">
       {segments.map((seg, i) => {
         const segId = `${msgId}-xml-${i}`;
         if (seg.type === 'text') {
           return <MiniMarkdown key={i} text={seg.content} />;
         }
         return (
-          <div key={i} className="my-1">
-            <ExpandableTag
-              tagType={seg.type}
-              content={seg.content}
-              id={segId}
-              openSet={openTags}
-              onToggle={onToggleTag}
-            />
-          </div>
+          <ExpandableTag
+            key={i}
+            tagType={seg.type}
+            content={seg.content}
+            id={segId}
+            openSet={openTags}
+            onToggle={onToggleTag}
+          />
         );
       })}
     </div>
@@ -966,14 +985,15 @@ const willAutoApply = false;
         </div>
 
         {msg.thinking && (
-          <div className="select-none">
+          <div className="my-1.5">
             <button
               type="button"
               onClick={() => toggleThought(msg.id)}
-              className="flex items-center gap-1 text-[10.5px] font-medium text-[#8c887d] dark:text-[#a09c94] hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth"
+              className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium text-[#8c887d] dark:text-[#a09c94] hover:bg-[#f5f3eb] dark:hover:bg-[#1f1f1e] cursor-pointer ws-button-smooth transition-colors"
             >
+              <Brain className="w-3.5 h-3.5 shrink-0" />
               <span>{msg.thinkingLabel || 'Thought process'}</span>
-              <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${thoughtOpen ? 'rotate-180' : ''}`} />
+              <ChevronDown className={`w-3 h-3 ml-auto transition-transform duration-200 ${thoughtOpen ? 'rotate-180' : ''}`} />
             </button>
             <AnimatePresence>
               {thoughtOpen && (
@@ -982,16 +1002,11 @@ const willAutoApply = false;
                   animate={{ opacity: 1, height: 'auto' }}
                   exit={{ opacity: 0, height: 0 }}
                   transition={{ duration: 0.15 }}
-                  className="mt-1.5 pl-2 border-l border-[#e2dec0] dark:border-[#383836] text-[10.5px] text-[#706c62] dark:text-[#a09d98] space-y-1 leading-relaxed overflow-hidden"
+                  className="mt-1 ml-1 pl-3 py-2 rounded-md bg-[#f5f3eb] dark:bg-[#1f1f1e] border-l-2 border-[#8c887d] dark:border-[#a09c94] overflow-hidden"
                 >
-                  {msg.thinking
-                    .split(/(?<=[.!?])\s+|\n+/)
-                    .map((s) => s.trim())
-                    .filter(Boolean)
-.slice(0, 12)
-                    .map((step, i) => (
-                      <div key={i}>{step}</div>
-                    ))}
+                  <div className="text-[11px] leading-relaxed text-[#8c887d] dark:text-[#a09c94] whitespace-pre-wrap">
+                    {msg.thinking}
+                  </div>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -999,15 +1014,15 @@ const willAutoApply = false;
         )}
 
         {msg.toolCalls && msg.toolCalls.length > 0 && (
-          <div className="select-none">
+          <div className="my-1.5">
             <button
               type="button"
               onClick={() => !msg.isReadingFiles && toggleToolCalls(msg.id)}
-              className="flex items-center gap-1 text-[10.5px] font-medium text-[#8c887d] dark:text-[#a09c94] hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth"
+              className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium text-[#8c887d] dark:text-[#a09c94] hover:bg-[#f5f3eb] dark:hover:bg-[#1f1f1e] cursor-pointer ws-button-smooth transition-colors"
             >
               {msg.isReadingFiles
-                ? <><Loader2 className="w-3 h-3 animate-spin" /><span>{toolCallLabel(msg.toolCalls, true)}</span></>
-                : <><span>{toolCallLabel(msg.toolCalls, false)}</span><ChevronDown className={`w-3 h-3 transition-transform duration-200 ${openToolCalls.has(msg.id) ? 'rotate-180' : ''}`} /></>}
+                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /><span>{toolCallLabel(msg.toolCalls, true)}</span></>
+                : <><Search className="w-3.5 h-3.5 shrink-0" /><span>{toolCallLabel(msg.toolCalls, false)}</span><ChevronDown className={`w-3 h-3 ml-auto transition-transform duration-200 ${openToolCalls.has(msg.id) ? 'rotate-180' : ''}`} /></>}
             </button>
             <AnimatePresence>
               {openToolCalls.has(msg.id) && !msg.isReadingFiles && (
@@ -1016,7 +1031,7 @@ const willAutoApply = false;
                   animate={{ opacity: 1, height: 'auto' }}
                   exit={{ opacity: 0, height: 0 }}
                   transition={{ duration: 0.15 }}
-                  className="mt-1.5 pl-2 border-l border-[#e2dec0] dark:border-[#383836] text-[10.5px] text-[#706c62] dark:text-[#a09d98] space-y-2 leading-relaxed overflow-hidden"
+                  className="mt-1 ml-1 pl-3 py-2 rounded-md bg-[#f5f3eb] dark:bg-[#1f1f1e] border-l-2 border-[#8c887d] dark:border-[#a09c94] overflow-hidden"
                 >
                   {msg.toolCalls.map((tc, i) =>
                     tc.type === 'readfile' ? (
