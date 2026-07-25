@@ -88,8 +88,9 @@ const TypewriterMessage: React.FC<TypewriterMessageProps> = ({
   const { cleanText } = extractQuestionBlocks(displayedContent);
 
   // Speed and thinking duration based on model tier
-  const modelSpeed = selectedModel === 'sour-omni-flash' ? 14 : 26;
-  const thinkingDuration = selectedModel === 'sour-omni-flash' ? 900 : 1800;
+  const fastModels = ['sour-omni-flash', 'sour-overclock', 'sour-ultracode'] as const;
+  const modelSpeed = (fastModels as readonly string[]).includes(selectedModel) ? 14 : 26;
+  const thinkingDuration = (fastModels as readonly string[]).includes(selectedModel) ? 900 : 1800;
 
   useEffect(() => {
     // If message was already typed or is not latest, don't restart typing
@@ -617,15 +618,14 @@ export const ChatStreamView: React.FC<ChatStreamViewProps> = ({
     }
   };
 
-  const modelDisplayName = selectedModel === 'sour-omni-flash'
-    ? 'Omni-Flash'
-    : selectedModel === 'sour-intelligence'
-    ? 'Intelligence'
-    : selectedModel === 'sour-ultra'
-    ? 'Ultra'
-    : selectedModel === 'sour-overclock'
-    ? 'Overclock'
-    : 'UltraCode';
+  const MODEL_DISPLAY: Record<AIModel, string> = {
+    'sour-omni-flash': 'Omni-Flash',
+    'sour-intelligence': 'Intelligence',
+    'sour-ultra': 'Ultra',
+    'sour-overclock': 'Overclock',
+    'sour-ultracode': 'UltraCode',
+  };
+  const modelDisplayName = MODEL_DISPLAY[selectedModel] || selectedModel;
 
   return (
     <motion.div

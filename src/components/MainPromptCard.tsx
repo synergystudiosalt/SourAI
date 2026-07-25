@@ -127,15 +127,14 @@ export const MainPromptCard: React.FC<MainPromptCardProps> = ({
     }
   };
 
-  const modelDisplayName = selectedModel === 'sour-omni-flash'
-    ? 'Omni-Flash'
-    : selectedModel === 'sour-intelligence'
-    ? 'Intelligence'
-    : selectedModel === 'sour-ultra'
-    ? 'Ultra'
-    : selectedModel === 'sour-overclock'
-    ? 'Overclock'
-    : 'UltraCode';
+  const MODEL_DISPLAY: Record<AIModel, string> = {
+    'sour-omni-flash': 'Omni-Flash',
+    'sour-intelligence': 'Intelligence',
+    'sour-ultra': 'Ultra',
+    'sour-overclock': 'Overclock',
+    'sour-ultracode': 'UltraCode',
+  };
+  const modelDisplayName = MODEL_DISPLAY[selectedModel] || selectedModel;
 
   const toggleVoiceRecording = () => {
     if (!voiceRecognizerRef.current) return;
