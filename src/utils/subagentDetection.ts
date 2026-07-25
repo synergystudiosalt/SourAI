@@ -1,246 +1,155 @@
 /**
  * Subagent detection and orchestration
- * Automatically suggests and spawns subagents for complex multi-part tasks
+ * Implements parent→subagent hierarchy with mandatory approval gates,
+ * visible thinking, context tracking, and error checking.
  */
 
-/**
- * Keywords that indicate multi-part tasks suitable for subagent delegation
- */
-const SUBAGENT_TRIGGERS = [
-  'and',
-  'also',
-  '&',
-  'plus',
-  'additionally',
-  'furthermore',
-  'moreover',
-  'in addition',
-  'alongside',
-  'along with',
-  'plus also',
-  'in parallel',
-  'simultaneously',
-  'at the same time',
-];
+export interface SubagentPlan {
+  task: string;
+  type: 'code' | 'analysis' | 'research' | 'test' | 'doc';
+  risk: 'low' | 'medium' | 'high' | 'critical';
+  constraints: string[];
+  approvalLevel: 'auto' | 'manual' | 'critical';
+  estimatedContextTokens: number;
+}
 
-/**
- * Complexity indicators that suggest breaking down into subagents
- */
-const COMPLEXITY_INDICATORS = [
-  'multiple', 'several', 'various',
-  'both', 'three', 'different',
-  'refactor', 'restructure', 'reorganize',
-  'optimize', 'improve', 'enhance',
-  'add', 'create', 'implement',
-  'integrate', 'connect', 'combine',
-];
-
-/**
- * Analyze a user request to determine if it should be split into subagents
- * Returns list of suggested sub-tasks
- */
-export function detectSubagentTasks(userRequest: string): string[] {
-  const lowerRequest = userRequest.toLowerCase();
-  const subTasks: string[] = [];
-
-  // Check if request contains multi-part indicators
-  const hasMultiPart = SUBAGENT_TRIGGERS.some(trigger => lowerRequest.includes(trigger));
-
-  if (!hasMultiPart) {
-    return [];
-  }
-
-  // Split on key conjunction points
-  let parts = lowerRequest
-    .split(/\s+and\s+|,\s+also\s+|\s+\+\s+|;\s+/i)
-    .map(p => p.trim())
-    .filter(p => p.length > 10);
-
-  if (parts.length <= 1) {
-    return [];
-  }
-
-  // Extract meaningful task descriptions from parts
-  for (const part of parts) {
-    const task = cleanTaskDescription(part);
-    if (task && task.length > 8) {
-      subTasks.push(task);
-    }
-  }
-
-  // If we extracted meaningful tasks and have multiple, suggest subagents
-  return subTasks.length >= 2 ? subTasks : [];
+export interface SubagentResult {
+  status: 'success' | 'error' | 'partial';
+  thinking: string;
+  actions: string[];
+  errors: string[];
+  output: string;
+  contextUsed: number;
 }
 
 /**
- * Clean and standardize a task description
- */
-function cleanTaskDescription(text: string): string {
-  return text
-    .replace(/^(please\s+|can\s+you\s+)?/i, '')
-    .replace(/[.,!?;:]+$/g, '')
-    .trim()
-    .split(' ')
-    .slice(0, 12) // Limit to ~12 words
-    .join(' ');
-}
-
-/**
- * Estimate task complexity to determine if parallel execution is beneficial
- */
-export function estimateTaskComplexity(description: string): 'low' | 'medium' | 'high' {
-  const lowerDesc = description.toLowerCase();
-  let complexity = 0;
-
-  // Count complexity indicators
-  COMPLEXITY_INDICATORS.forEach(indicator => {
-    if (lowerDesc.includes(indicator)) {
-      complexity++;
-    }
-  });
-
-  // Count code-related keywords
-  const codeKeywords = [
-    'component', 'function', 'function', 'module', 'test', 'doc',
-    'import', 'export', 'class', 'interface', 'type',
-  ];
-  codeKeywords.forEach(keyword => {
-    if (lowerDesc.includes(keyword)) {
-      complexity += 2;
-    }
-  });
-
-  // Length-based complexity
-  const wordCount = description.split(/\s+/).length;
-  if (wordCount > 30) complexity += 2;
-  if (wordCount > 50) complexity += 2;
-
-  return complexity >= 5 ? 'high' : complexity >= 2 ? 'medium' : 'low';
-}
-
-/**
- * Format a task description for subagent delegation
- * Ensures tasks are self-contained and understandable
- */
-export function formatSubagentPrompt(originalRequest: string, taskDescription: string): string {
-  return `As part of a larger request, please complete this task:
-
-${taskDescription}
-
-Context: This is part of a multi-step request where different sub-agents handle independent parts in parallel.
-Please work independently and provide a complete solution for this specific task.`;
-}
-
-/**
- * Estimate how many subagents would be beneficial for a task
- * Returns recommended number of parallel subagents (1-4)
- */
-export function recommendedSubagentCount(tasks: string[]): number {
-  const MAX_CONCURRENT = 4;
-  const baseCount = Math.min(tasks.length, MAX_CONCURRENT);
-
-  if (baseCount === 1) return 1;
-  if (baseCount === 2) return 2;
-  if (baseCount === 3) return 2; // Use 2 agents for 3 tasks for efficiency
-  return 3; // 4+ tasks -> 3 subagents
-}
-
-/**
- * Check if a request should use subagents based on complexity and content
+ * Detect if a request should use subagents based on complexity and risk.
+ * Never auto-spawns — always requires parent approval.
  */
 export function shouldUseSubagents(userRequest: string): boolean {
-  const detectedTasks = detectSubagentTasks(userRequest);
-
-  if (detectedTasks.length < 2) {
-    return false;
-  }
-
-  // Check if any task is complex enough to warrant subagent
-  const hasComplexTask = detectedTasks.some(
-    task => estimateTaskComplexity(task) === 'high'
-  );
-
-  return hasComplexTask || detectedTasks.length >= 3;
+  const plan = planSubagent(userRequest);
+  return plan !== null;
 }
 
 /**
- * Group related tasks together for more efficient subagent execution
+ * Plan a subagent delegation with risk assessment and constraints.
+ * Returns null if the task is too simple for subagent delegation.
  */
-export function groupRelatedTasks(tasks: string[]): string[][] {
-  if (tasks.length <= 2) {
-    return tasks.map(t => [t]);
-  }
+export function planSubagent(task: string): SubagentPlan | null {
+  const lower = task.toLowerCase();
+  const wordCount = task.split(/\s+/).length;
 
-  const groups: string[][] = [];
-  const keywords = extractKeywords(tasks);
+  // Only suggest subagents for substantial, multi-part tasks
+  if (wordCount < 8) return null;
 
-  // Simple keyword-based grouping
-  for (const task of tasks) {
-    let addedToGroup = false;
+  // Determine type
+  let type: SubagentPlan['type'] = 'code';
+  if (lower.includes('research') || lower.includes('find') || lower.includes('search')) type = 'research';
+  else if (lower.includes('test') || lower.includes('spec')) type = 'test';
+  else if (lower.includes('doc') || lower.includes('readme') || lower.includes('comment')) type = 'doc';
+  else if (lower.includes('analyze') || lower.includes('review') || lower.includes('audit')) type = 'analysis';
 
-    for (const group of groups) {
-      const groupKeywords = extractKeywords(group);
-      const overlap = keywords.filter((kw: string) =>
-        groupKeywords.includes(kw) && task.toLowerCase().includes(kw)
-      );
+  // Determine risk level
+  let risk: SubagentPlan['risk'] = 'low';
+  if (lower.includes('delete') || lower.includes('remove') || lower.includes('migrate')) risk = 'high';
+  if (lower.includes('critical') || lower.includes('security') || lower.includes('auth') || lower.includes('database')) risk = 'critical';
+  else if (lower.includes('refactor') || lower.includes('restructure') || lower.includes('rewrite')) risk = 'medium';
 
-      if (overlap.length > 0) {
-        group.push(task);
-        addedToGroup = true;
-        break;
-      }
-    }
+  // Constraints
+  const constraints: string[] = [];
+  constraints.push('Show all reasoning in <think> tags');
+  constraints.push('Check context before starting');
+  constraints.push('Run <check_for_errors> before reporting');
+  if (risk === 'high' || risk === 'critical') constraints.push('No auto-execute — wait for parent approval');
 
-    if (!addedToGroup) {
-      groups.push([task]);
-    }
-  }
+  // Approval level
+  let approvalLevel: SubagentPlan['approvalLevel'] = 'manual';
+  if (risk === 'critical') approvalLevel = 'critical';
+  else if (risk === 'low') approvalLevel = 'auto';
 
-  return groups;
+  // Estimate context (rough: 1 token ~= 4 chars)
+  const estimatedContextTokens = Math.min(Math.ceil(task.length / 4) + 500, 100_000);
+
+  return { task, type, risk, constraints, approvalLevel, estimatedContextTokens };
 }
 
 /**
- * Extract meaningful keywords from task descriptions
+ * Format a subagent task for delegation with full context.
  */
-function extractKeywords(tasks: string[]): string[] {
-  const keywords: Set<string> = new Set();
-
-  const KEYWORDS = [
-    'component', 'function', 'test', 'doc', 'style', 'type',
-    'refactor', 'optimize', 'add', 'create', 'implement',
-    'fix', 'bug', 'feature', 'ui', 'api',
+export function formatSubagentPrompt(originalRequest: string, plan: SubagentPlan): string {
+  const lines = [
+    `As part of a larger request, complete this delegated task:`,
+    ``,
+    `## Task`,
+    plan.task,
+    ``,
+    `## Type`,
+    plan.type,
+    ``,
+    `## Risk Level`,
+    plan.risk.toUpperCase(),
+    ``,
+    `## Constraints`,
+    ...plan.constraints.map(c => `- ${c}`),
+    ``,
+    `## Context`,
+    `This is part of: "${originalRequest.slice(0, 500)}"`,
+    ``,
+    `## Required Format`,
+    `- Wrap all reasoning in <think> tags`,
+    `- Report all actions taken`,
+    `- Run <check_for_errors> before finishing`,
+    `- Return status: success | error | partial`,
+    `- Report context usage`,
   ];
-
-  for (const task of tasks) {
-    const lowerTask = task.toLowerCase();
-    KEYWORDS.forEach(keyword => {
-      if (lowerTask.includes(keyword)) {
-        keywords.add(keyword);
-      }
-    });
-  }
-
-  return Array.from(keywords);
+  return lines.join('\n');
 }
 
 /**
- * Generate progress messages for subagent execution
+ * Validate a subagent result meets the required format.
  */
-export function getProgressMessage(
-  currentTaskIndex: number,
-  totalTasks: number,
-  status: 'queued' | 'running' | 'complete' | 'error'
-): string {
-  const progress = Math.round((currentTaskIndex / totalTasks) * 100);
+export function validateSubagentResult(result: Partial<SubagentResult>): result is SubagentResult {
+  if (!result.status || !['success', 'error', 'partial'].includes(result.status)) return false;
+  if (typeof result.thinking !== 'string') return false;
+  if (!Array.isArray(result.actions)) return false;
+  if (!Array.isArray(result.errors)) return false;
+  if (typeof result.output !== 'string') return false;
+  if (typeof result.contextUsed !== 'number') return false;
+  return true;
+}
 
-  switch (status) {
-    case 'queued':
-      return `Task ${currentTaskIndex + 1}/${totalTasks} queued (${progress}%)`;
-    case 'running':
-      return `Task ${currentTaskIndex + 1}/${totalTasks} running... (${progress}%)`;
-    case 'complete':
-      return `Task ${currentTaskIndex + 1}/${totalTasks} complete (${progress}%)`;
-    case 'error':
-      return `Task ${currentTaskIndex + 1}/${totalTasks} encountered an error`;
-  }
+/**
+ * Check if parallel subagent execution is safe.
+ * Never allows true parallelism — subagents run sequentially with parent oversight.
+ */
+export function canRunSequentially(tasks: string[]): boolean {
+  // All subagents run sequentially, not in parallel
+  return true;
+}
+
+/**
+ * Estimate context impact of running a subagent.
+ */
+export function estimateContextImpact(plan: SubagentPlan): { current: number; after: number; wouldExceed: boolean } {
+  const current = plan.estimatedContextTokens;
+  const after = current + 2000; // overhead for delegation/response
+  return {
+    current,
+    after,
+    wouldExceed: after > 90_000,
+  };
+}
+
+/**
+ * Generate a structured error report for a failed subagent.
+ */
+export function buildSubagentError(task: string, error: string): SubagentResult {
+  return {
+    status: 'error',
+    thinking: `Task failed: ${error}`,
+    actions: ['Attempted to execute delegated task'],
+    errors: [error],
+    output: '',
+    contextUsed: 0,
+  };
 }

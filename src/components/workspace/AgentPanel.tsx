@@ -10,7 +10,7 @@ import { AttachmentItem } from '../../types';
 import { parseUploadedFile } from '../../utils/fileParser';
 import { AgentChatMessage, AgentFileOp, AgentMode, AgentToolCall, AIModel, SubAgentTask, WorkspaceFileNode } from '../../types';
 import { parseAgentResponse, summarizeForHistory, extractMentionedPaths } from '../../utils/agentProtocol';
-import { detectSubagentTasks, shouldUseSubagents, recommendedSubagentCount } from '../../utils/subagentDetection';
+import { shouldUseSubagents, planSubagent, formatSubagentPrompt } from '../../utils/subagentDetection';
 import { MAX_CONCURRENT_SUBAGENTS } from '../../utils/constants';
 import { customApiManager, type CustomApiConfig } from '../../utils/customApiManager';
 import { VoiceRecognizer } from '../../utils/voiceRecognition';
@@ -52,34 +52,69 @@ const MODEL_LABELS: Record<AIModel, string> = {
 
 const MODEL_OPTIONS: AIModel[] = ['sour-omni-flash', 'sour-intelligence', 'sour-ultra', 'sour-overclock', 'sour-ultracode'];
 
-const MiniMarkdown: React.FC<{ text: string }> = ({ text }) => (
-  <ReactMarkdown
-    components={{
-      p: ({ children }) => <p className="mb-1.5 last:mb-0">{children}</p>,
-      ul: ({ children }) => <ul className="list-disc pl-4 mb-1.5 space-y-0.5">{children}</ul>,
-      ol: ({ children }) => <ol className="list-decimal pl-4 mb-1.5 space-y-0.5">{children}</ol>,
-      li: ({ children }) => <li>{children}</li>,
-      strong: ({ children }) => <strong className="font-semibold text-[#1c1b1a] dark:text-[#f0efe6]">{children}</strong>,
-      a: ({ children, href }) => (
-        <a href={href} target="_blank" rel="noreferrer" className="text-[#d96b43] underline">
-          {children}
-        </a>
-      ),
-      code: ({ children, className }) => {
-        if (className) {
-          return (
-            <pre className="my-1.5 p-2 rounded-lg bg-[#efece3] dark:bg-[#141413] overflow-x-auto text-[10.5px] font-mono">
-              <code>{children}</code>
-            </pre>
-          );
-        }
-        return <code className="px-1 py-0.5 rounded bg-[#efece3] dark:bg-[#141413] text-[10.5px] font-mono">{children}</code>;
-      },
-    }}
-  >
-    {text}
-  </ReactMarkdown>
-);
+/** Convert visible XML tags to styled markdown for readability. */
+function formatAgentXml(text: string): string {
+  return text
+    .replace(/<think>([\s\S]*?)<\/think>/g, (_m, content: string) => {
+      const lines = content.trim().split('\n').map(l => l.trim()).filter(Boolean).join('\n');
+      return `> 💭 ${lines}\n`;
+    })
+    .replace(/<check_for_errors>([\s\S]*?)<\/check_for_errors>/g, (_m, content: string) => {
+      return `\`\`\`\n🔍 Error Check\n${content.trim()}\n\`\`\`\n`;
+    })
+    .replace(/<subagent_request>([\s\S]*?)<\/subagent_request>/g, (_m, content: string) => {
+      return `\`\`\`\n🤖 Subagent Request\n${content.trim()}\n\`\`\`\n`;
+    })
+    .replace(/<subagent_response>([\s\S]*?)<\/subagent_response>/g, (_m, content: string) => {
+      return `\`\`\`\n📋 Subagent Response\n${content.trim()}\n\`\`\`\n`;
+    })
+    .replace(/<function_request>([\s\S]*?)<\/function_request>/g, (_m, content: string) => {
+      return `\`\`\`\n⚙️ Function Request\n${content.trim()}\n\`\`\`\n`;
+    })
+    .replace(/<function_result>([\s\S]*?)<\/function_result>/g, (_m, content: string) => {
+      return `\`\`\`\n📊 Function Result\n${content.trim()}\n\`\`\`\n`;
+    })
+    .replace(/<context_compact>([\s\S]*?)<\/context_compact>/g, (_m, content: string) => {
+      return `> 📦 **Context Compacted**\n> ${content.trim().split('\n').join('\n> ')}\n`;
+    });
+}
+
+const MiniMarkdown: React.FC<{ text: string }> = ({ text }) => {
+  const formatted = formatAgentXml(text);
+  return (
+    <ReactMarkdown
+      components={{
+        p: ({ children }) => <p className="mb-1.5 last:mb-0">{children}</p>,
+        ul: ({ children }) => <ul className="list-disc pl-4 mb-1.5 space-y-0.5">{children}</ul>,
+        ol: ({ children }) => <ol className="list-decimal pl-4 mb-1.5 space-y-0.5">{children}</ol>,
+        li: ({ children }) => <li>{children}</li>,
+        strong: ({ children }) => <strong className="font-semibold text-[#1c1b1a] dark:text-[#f0efe6]">{children}</strong>,
+        a: ({ children, href }) => (
+          <a href={href} target="_blank" rel="noreferrer" className="text-[#d96b43] underline">
+            {children}
+          </a>
+        ),
+        blockquote: ({ children }) => (
+          <blockquote className="border-l-2 border-[#d96b43]/40 pl-2 my-1 text-[11px] text-[#706c62] dark:text-[#a09d98] italic">
+            {children}
+          </blockquote>
+        ),
+        code: ({ children, className }) => {
+          if (className) {
+            return (
+              <pre className="my-1.5 p-2 rounded-lg bg-[#efece3] dark:bg-[#141413] overflow-x-auto text-[10.5px] font-mono">
+                <code>{children}</code>
+              </pre>
+            );
+          }
+          return <code className="px-1 py-0.5 rounded bg-[#efece3] dark:bg-[#141413] text-[10.5px] font-mono">{children}</code>;
+        },
+      }}
+    >
+      {formatted}
+    </ReactMarkdown>
+  );
+};
 
 /**
  * Reveals `text` a few characters at a time (a staggered, simulated typing
@@ -224,12 +259,10 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     return { promptToSend: modifiedText, autoCalledFunctions };
   };
 
-  /** Detect if task is complex enough to warrant subagent delegation. */
-  const shouldAutoSpawnSubagents = (userText: string): boolean => {
-    const sentenceCount = (userText.match(/[.!?]/g) || []).length;
-    const hasMultipleTopics = /\b(and|also|plus|additionally|furthermore)\b/i.test(userText);
-    const wordCount = userText.split(/\s+/).length;
-    return (wordCount > 60 && sentenceCount >= 2) || (hasMultipleTopics && sentenceCount >= 2);
+  /** Check if a request warrants subagent delegation with parent approval. */
+  const shouldSuggestSubagents = (userText: string): boolean => {
+    const plan = planSubagent(userText);
+    return plan !== null && plan.risk !== 'low';
   };
 
   // Hard cap enforcement for autonomous sub-agents: at most
@@ -561,15 +594,11 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
 
     // Auto-detect functions and check for complex tasks
     const { promptToSend, autoCalledFunctions } = autoDetectAndCallFunctions(text);
-    const shouldSpawnSubagents = !autoCalledFunctions.length && shouldAutoSpawnSubagents(text);
 
     // Add note about auto-called functions if any
     let displayContent = text;
     if (autoCalledFunctions.length > 0) {
       displayContent = `${text}\n\n_[Auto-called: ${autoCalledFunctions.join(', ')}]_`;
-    }
-    if (shouldSpawnSubagents) {
-      displayContent = `${displayContent}\n\n_[Complex task detected — spawning subagents for parallel work]_`;
     }
 
     const userMsg: AgentChatMessage = { id: genId(), role: 'user', content: displayContent, createdAt: Date.now() };
@@ -693,14 +722,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         // ── Normal flow (no tool calls) ───────────────────────────────────
         const { displayText, ops, subAgentTasks } = parsed;
         
-        // Auto-detect multi-part tasks for subagent delegation
+        // Subagents require parent approval — only spawn if the agent explicitly requested them
         let allSubAgentTasks = [...subAgentTasks];
-        if (allSubAgentTasks.length === 0 && (shouldUseSubagents(text) || shouldSpawnSubagents)) {
-          const detectedTasks = detectSubagentTasks(text);
-          if (detectedTasks.length >= 2) {
-            allSubAgentTasks = detectedTasks;
-          }
-        }
         
 const willAutoApply = false;
         const assistantMsgId = genId();

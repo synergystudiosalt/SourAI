@@ -12,7 +12,8 @@ export function splitThinkingAndText(rawText: string): { text: string; thinking:
   }
 
   const thinking = matches.map(m => m[1].trim()).filter(Boolean).join('\n\n');
-  const text = input.replace(THINK_BLOCK_RE, '').trim();
+  // Preserve <think> tags in display text so they render in the UI
+  const text = input.trim();
   return { text, thinking };
 }
 
