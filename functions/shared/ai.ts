@@ -8,11 +8,15 @@ function parseKeyList(raw: string | undefined): string[] {
 export function getApiKeys(env: Record<string, string>) {
   const geminiKeys = parseKeyList(env.GEMINI_API_KEYS || env.GEMINI_API_KEY);
   const groqKeys = parseKeyList(env.GROQ_API_KEYS || env.GROQ_API_KEY);
-  return { geminiKeys, groqKeys };
+  const cerebrasKeys = parseKeyList(env.CEREBRAS_API_KEYS || env.CEREBRAS_API_KEY);
+  const mistralKeys = parseKeyList(env.MISTRAL_API_KEYS || env.MISTRAL_API_KEY);
+  return { geminiKeys, groqKeys, cerebrasKeys, mistralKeys };
 }
 
 let geminiKeyCursor = 0;
 let groqKeyCursor = 0;
+let cerebrasKeyCursor = 0;
+let mistralKeyCursor = 0;
 
 export function takeGeminiKey(keys: string[]): string | null {
   if (keys.length === 0) return null;
@@ -28,6 +32,20 @@ export function takeGroqKey(keys: string[]): string | null {
   return key;
 }
 
+export function takeCerebrasKey(keys: string[]): string | null {
+  if (keys.length === 0) return null;
+  const key = keys[cerebrasKeyCursor % keys.length];
+  cerebrasKeyCursor++;
+  return key;
+}
+
+export function takeMistralKey(keys: string[]): string | null {
+  if (keys.length === 0) return null;
+  const key = keys[mistralKeyCursor % keys.length];
+  mistralKeyCursor++;
+  return key;
+}
+
 export async function generateWithGemini(
   keys: string[],
   contents: any,
@@ -39,8 +57,6 @@ export async function generateWithGemini(
   for (let attempt = 0; attempt < keys.length; attempt++) {
     const key = takeGeminiKey(keys)!;
     try {
-      // Use Gemini's REST API directly so this function stays compatible with
-      // the Cloudflare Pages runtime and does not depend on Node-only SDK code.
       const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`,
         {
@@ -71,13 +87,15 @@ export async function generateWithGemini(
   throw lastErr instanceof Error ? lastErr : new Error('All Gemini API keys failed');
 }
 
-export async function generateWithGroq(
+async function generateWithOpenAICompatible(
+  baseUrl: string,
   keys: string[],
+  takeKey: (keys: string[]) => string | null,
   messages: { role: string; content: string }[],
   systemInstruction: string,
-  model: string = 'llama-3.3-70b-versatile'
+  model: string
 ): Promise<string> {
-  if (keys.length === 0) throw new Error('No Groq API keys configured');
+  if (keys.length === 0) throw new Error(`No API keys configured for ${baseUrl}`);
   const body = {
     model,
     messages: [
@@ -90,42 +108,69 @@ export async function generateWithGroq(
   };
   let lastErr: unknown;
   for (let attempt = 0; attempt < keys.length; attempt++) {
-    const key = takeGroqKey(keys)!;
+    const key = takeKey(keys)!;
     try {
-      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      const res = await fetch(`${baseUrl}/v1/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
         body: JSON.stringify(body),
       });
       if (!res.ok) {
         const errText = await res.text().catch(() => '');
-        throw new Error(`Groq HTTP ${res.status}: ${errText.slice(0, 300)}`);
+        throw new Error(`HTTP ${res.status}: ${errText.slice(0, 300)}`);
       }
       const data: any = await res.json();
       return data?.choices?.[0]?.message?.content || '';
     } catch (err: any) {
       lastErr = err;
-      console.warn(`Groq key #${attempt + 1}/${keys.length} failed:`, err?.message || err);
+      console.warn(`Attempt ${attempt + 1}/${keys.length} failed for ${model} at ${baseUrl}:`, err?.message || err);
     }
   }
-  throw lastErr instanceof Error ? lastErr : new Error('All Groq API keys failed');
+  throw lastErr instanceof Error ? lastErr : new Error(`All API keys failed for ${baseUrl}`);
 }
 
-export type Provider = 'gemini' | 'groq';
+export async function generateWithGroq(
+  keys: string[],
+  messages: { role: string; content: string }[],
+  systemInstruction: string,
+  model: string = 'llama-3.3-70b-versatile'
+): Promise<string> {
+  return generateWithOpenAICompatible('https://api.groq.com', keys, takeGroqKey, messages, systemInstruction, model);
+}
+
+export async function generateWithCerebras(
+  keys: string[],
+  messages: { role: string; content: string }[],
+  systemInstruction: string,
+  model: string
+): Promise<string> {
+  return generateWithOpenAICompatible('https://api.cerebras.ai', keys, takeCerebrasKey, messages, systemInstruction, model);
+}
+
+export async function generateWithMistral(
+  keys: string[],
+  messages: { role: string; content: string }[],
+  systemInstruction: string,
+  model: string
+): Promise<string> {
+  return generateWithOpenAICompatible('https://api.mistral.ai', keys, takeMistralKey, messages, systemInstruction, model);
+}
+
+export type Provider = 'gemini' | 'groq' | 'cerebras' | 'mistral';
 export interface ModelRoute {
   provider: Provider;
   model: string;
 }
 
 export const MODEL_ROUTES: Record<string, ModelRoute> = {
-  'sour-omni-flash': { provider: 'gemini', model: 'gemini-3.5-flash-lite' },
-  'sour-intelligence': { provider: 'gemini', model: 'gemma-4-31b-it' },
-  'sour-ultra': { provider: 'gemini', model: 'gemma-4-31b-it' },
-  'sour-overclock': { provider: 'gemini', model: 'gemma-4-31b-it' },
+  'sour-omni-flash': { provider: 'groq', model: 'llama-3.1-8b-instant' },
+  'sour-intelligence': { provider: 'groq', model: 'llama-3.3-70b-versatile' },
+  'sour-ultra': { provider: 'gemini', model: 'gemini-3.5-flash-lite' },
+  'sour-overclock': { provider: 'cerebras', model: 'zai-glm-4.7' },
+  'sour-ultracode': { provider: 'gemini', model: 'gemini-3.6-flash' },
 };
 
 const DEFAULT_ROUTE: ModelRoute = MODEL_ROUTES['sour-omni-flash'];
-const GLOBAL_FALLBACK_MODEL = 'gemini-3.5-flash-lite';
 
 export function resolveModelRoute(model: unknown): ModelRoute {
   if (typeof model === 'string' && MODEL_ROUTES[model]) return MODEL_ROUTES[model];
@@ -135,26 +180,40 @@ export function resolveModelRoute(model: unknown): ModelRoute {
 export async function generateText(opts: {
   geminiKeys: string[];
   groqKeys: string[];
+  cerebrasKeys?: string[];
+  mistralKeys?: string[];
   contents: any;
   plainMessages: { role: string; content: string }[];
   systemInstruction: string;
   route: ModelRoute;
 }): Promise<string> {
-  const { route, contents, plainMessages, systemInstruction, geminiKeys, groqKeys } = opts;
-  try {
-    if (route.provider === 'groq') {
-      return await generateWithGroq(groqKeys, plainMessages, systemInstruction, route.model);
+  const { route, contents, plainMessages, systemInstruction, geminiKeys, groqKeys, cerebrasKeys = [], mistralKeys = [] } = opts;
+
+  const tryProvider = async (): Promise<string> => {
+    switch (route.provider) {
+      case 'groq':
+        return await generateWithGroq(groqKeys, plainMessages, systemInstruction, route.model);
+      case 'cerebras':
+        return await generateWithCerebras(cerebrasKeys, plainMessages, systemInstruction, route.model);
+      case 'mistral':
+        return await generateWithMistral(mistralKeys, plainMessages, systemInstruction, route.model);
+      case 'gemini':
+      default:
+        return await generateWithGemini(geminiKeys, contents, systemInstruction, route.model);
     }
-    return await generateWithGemini(geminiKeys, contents, systemInstruction, route.model);
+  };
+
+  try {
+    return await tryProvider();
   } catch (primaryErr) {
     console.warn(
-      `Primary ${route.provider} model "${route.model}" exhausted, trying global fallback "${GLOBAL_FALLBACK_MODEL}"...`,
+      `Primary ${route.provider} model "${route.model}" exhausted, trying global Gemini fallback...`,
       primaryErr
     );
     try {
-      return await generateWithGemini(geminiKeys, contents, systemInstruction, GLOBAL_FALLBACK_MODEL);
+      return await generateWithGemini(geminiKeys, contents, systemInstruction, 'gemini-3.5-flash-lite');
     } catch (fallbackErr) {
-      console.warn('Global fallback model exhausted, falling back to Groq default...', fallbackErr);
+      console.warn('Global Gemini fallback exhausted, falling back to Groq default...', fallbackErr);
       return await generateWithGroq(groqKeys, plainMessages, systemInstruction);
     }
   }

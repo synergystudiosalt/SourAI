@@ -11,9 +11,9 @@ export const onRequest: PagesFunction = async (context) => {
 
   try {
     const env = context.env as Record<string, string>;
-    const { geminiKeys, groqKeys } = getApiKeys(env);
+    const { geminiKeys, groqKeys, cerebrasKeys, mistralKeys } = getApiKeys(env);
 
-    if (geminiKeys.length === 0 && groqKeys.length === 0) {
+    if (geminiKeys.length === 0 && groqKeys.length === 0 && cerebrasKeys.length === 0 && mistralKeys.length === 0) {
       return new Response(
         JSON.stringify({ error: 'No API keys configured' }),
         { status: 500, headers: { 'Content-Type': 'application/json' } }
@@ -78,6 +78,8 @@ export const onRequest: PagesFunction = async (context) => {
     const rawText = (await generateText({
       geminiKeys,
       groqKeys,
+      cerebrasKeys,
+      mistralKeys,
       contents,
       plainMessages,
       systemInstruction,
@@ -93,6 +95,8 @@ export const onRequest: PagesFunction = async (context) => {
         const labelText = await generateText({
           geminiKeys,
           groqKeys,
+          cerebrasKeys,
+          mistralKeys,
           contents: [{ role: 'user', parts: [{ text: labelPrompt }] }],
           plainMessages: [{ role: 'user', content: labelPrompt }],
           systemInstruction: 'You are a concise label generator. Output ONLY a 2 to 4 word phrase with no quotes or punctuation.',

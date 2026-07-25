@@ -1,4 +1,4 @@
-export type AIModel = 'sour-omni-flash' | 'sour-intelligence' | 'sour-ultra' | 'sour-overclock';
+export type AIModel = 'sour-omni-flash' | 'sour-intelligence' | 'sour-ultra' | 'sour-overclock' | 'sour-ultracode';
 
 export interface AttachmentItem {
   id: string;

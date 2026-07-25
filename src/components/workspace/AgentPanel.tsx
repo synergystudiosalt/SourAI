@@ -47,9 +47,10 @@ const MODEL_LABELS: Record<AIModel, string> = {
   'sour-intelligence': 'Intelligence',
   'sour-ultra': 'Ultra',
   'sour-overclock': 'Overclock',
+  'sour-ultracode': 'UltraCode',
 };
 
-const MODEL_OPTIONS: AIModel[] = ['sour-omni-flash', 'sour-intelligence', 'sour-ultra', 'sour-overclock'];
+const MODEL_OPTIONS: AIModel[] = ['sour-omni-flash', 'sour-intelligence', 'sour-ultra', 'sour-overclock', 'sour-ultracode'];
 
 const MiniMarkdown: React.FC<{ text: string }> = ({ text }) => (
   <ReactMarkdown

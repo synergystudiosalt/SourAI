@@ -13,27 +13,27 @@ interface ModelSelectorPopoverProps {
 const MODELS: ModelOption[] = [
   {
     id: 'sour-omni-flash',
-    name: 'Sour Omni-Flash 1.0',
+    name: 'Sour Omni-Flash',
     badge: 'Fast',
-    description: 'Ultra-fast multimodal reasoning for everyday tasks.',
+    description: 'Everyday reasoning powered by Llama 3.1 8B.',
   },
   {
     id: 'sour-intelligence',
-    name: 'Sour Intelligence 1.5',
+    name: 'Sour Intelligence',
     badge: 'Smart',
-    description: 'Deep analytical reasoning and structured problem solving.',
+    description: 'Deep analytical reasoning powered by Llama 3.3 70B.',
   },
   {
     id: 'sour-ultra',
-    name: 'Sour Ultra 1.2',
+    name: 'Sour Ultra',
     badge: 'Pro',
-    description: 'Advanced capabilities for heavy architecture & coding.',
+    description: 'Advanced capabilities powered by Gemini 3.5 Flash Lite.',
   },
   {
     id: 'sour-overclock',
-    name: 'Sour Overclock 2.0',
+    name: 'Sour Overclock',
     badge: 'Turbo',
-    description: 'Maximum speed and peak performance generation.',
+    description: 'Maximum speed powered by Cerebras zai-glm-4.7.',
   },
 ];
 

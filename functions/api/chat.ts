@@ -83,8 +83,8 @@ export const onRequest: PagesFunction = async (context) => {
       }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
-    const { geminiKeys, groqKeys } = getApiKeys(env);
-    if (geminiKeys.length === 0 && groqKeys.length === 0) {
+    const { geminiKeys, groqKeys, cerebrasKeys, mistralKeys } = getApiKeys(env);
+    if (geminiKeys.length === 0 && groqKeys.length === 0 && cerebrasKeys.length === 0 && mistralKeys.length === 0) {
       return new Response(JSON.stringify({
         error: 'No AI API keys are configured in Cloudflare Pages environment variables.',
       }), { status: 500, headers: { 'Content-Type': 'application/json' } });
@@ -125,6 +125,8 @@ Only if the user explicitly asks you to generate an image, picture, or photo (us
     const rawText = (await generateText({
       geminiKeys,
       groqKeys,
+      cerebrasKeys,
+      mistralKeys,
       contents,
       plainMessages,
       systemInstruction,

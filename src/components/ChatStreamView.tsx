@@ -620,10 +620,12 @@ export const ChatStreamView: React.FC<ChatStreamViewProps> = ({
   const modelDisplayName = selectedModel === 'sour-omni-flash'
     ? 'Omni-Flash'
     : selectedModel === 'sour-intelligence'
-    ? 'Intelligence 1.5'
+    ? 'Intelligence'
     : selectedModel === 'sour-ultra'
-    ? 'Ultra 1.2'
-    : 'Overclock 2.0';
+    ? 'Ultra'
+    : selectedModel === 'sour-overclock'
+    ? 'Overclock'
+    : 'UltraCode';
 
   return (
     <motion.div
