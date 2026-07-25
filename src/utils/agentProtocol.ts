@@ -37,35 +37,33 @@ export function parseAgentResponse(raw: string): ParsedAgentResponse {
     if (path) {
       ops.push({ type: 'write', path, content, language: lang || undefined });
     }
-    // Replace with a reference badge so the user sees operations were proposed
-    return `*📄 File: ${path}*\n`;
+    return '';
   });
 
   text = text.replace(DELETE_RE, (_match, rawPath: string) => {
     const path = normalizePath(rawPath);
     if (path) ops.push({ type: 'delete', path });
-    return `*🗑️ Delete: ${path}*\n`;
+    return '';
   });
 
   text = text.replace(SUBAGENT_RE, (_match, taskDescription: string) => {
     const task = taskDescription.trim();
     if (task) subAgentTasks.push(task);
-    return `*🤖 Subagent: ${task}*\n`;
+    return '';
   });
 
   const fileRequests: string[] = [];
   text = text.replace(READFILE_RE, (_match, rawPath: string) => {
     const p = normalizePath(rawPath);
     if (p && !fileRequests.includes(p)) fileRequests.push(p);
-    // Keep the readfile directive visible so the user sees what's being read
-    return `*📖 Read: ${p}*\n`;
+    return '';
   });
 
   const findRequests: string[] = [];
   text = text.replace(FINDALL_RE, (_match, query: string) => {
     const q = query.trim();
     if (q && !findRequests.includes(q)) findRequests.push(q);
-    return `*🔍 Search: ${q}*\n`;
+    return '';
   });
 
   text = text.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();

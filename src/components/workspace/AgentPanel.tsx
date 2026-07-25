@@ -144,7 +144,7 @@ const MiniMarkdown: React.FC<{ text: string }> = ({ text }) => (
   </ReactMarkdown>
 );
 
-/** ChatGPT-style collapsible section with lucide icon. */
+/** Expandable section with collapsible content and colored border-l. */
 const ExpandableTag: React.FC<{
   tagType: string;
   content: string;
@@ -152,21 +152,20 @@ const ExpandableTag: React.FC<{
   openSet: Set<string>;
   onToggle: (id: string) => void;
 }> = ({ tagType, content, id, openSet, onToggle }) => {
-  const { label, Icon, color, bg, border } = getTagMeta(tagType);
+  const { label, Icon, color } = getTagMeta(tagType);
   const isOpen = openSet.has(id);
-  const preview = content.split(/\n+/).filter(Boolean).slice(0, 2).join(' ').slice(0, 80);
+  const steps = content.split(/(?<=[.!?])\s+|\n+/).map(s => s.trim()).filter(Boolean).slice(0, 12);
 
   return (
-    <div className="my-1.5">
+    <div className="select-none">
       <button
         type="button"
         onClick={() => onToggle(id)}
-        className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium ${color} ${isOpen ? bg : 'hover:' + bg} cursor-pointer ws-button-smooth transition-colors`}
+        className={`flex items-center gap-1.5 text-[10.5px] font-medium ${color} hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth`}
       >
-        <Icon className="w-3.5 h-3.5 shrink-0" />
+        <Icon className="w-3 h-3 shrink-0" />
         <span>{label}</span>
-        {!isOpen && preview && <span className="opacity-50 truncate max-w-[200px] ml-1 font-normal">{preview}…</span>}
-        <ChevronDown className={`w-3 h-3 ml-auto transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
       </button>
       <AnimatePresence>
         {isOpen && (
@@ -175,11 +174,11 @@ const ExpandableTag: React.FC<{
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.15 }}
-            className={`mt-1 ml-1 pl-3 py-2 rounded-md ${bg} border-l-2 ${border} overflow-hidden`}
+            className="mt-1.5 pl-2 border-l border-[#e2dec0] dark:border-[#383836] text-[10.5px] text-[#706c62] dark:text-[#a09d98] space-y-1 leading-relaxed overflow-hidden"
           >
-            <div className={`text-[11px] leading-relaxed ${color} space-y-1 whitespace-pre-wrap`}>
-              {content}
-            </div>
+            {steps.map((step, i) => (
+              <div key={i}>{step}</div>
+            ))}
           </motion.div>
         )}
       </AnimatePresence>
@@ -543,23 +542,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       }
     }
     return { toolCalls, resultText: parts.join('\n\n') };
-  };
-
-  /** Summarises the tool calls into a short label for the collapsed button. */
-  const toolCallLabel = (calls: AgentToolCall[], busy: boolean): string => {
-    if (busy) {
-      const hasFind = calls.some((c) => c.type === 'findall');
-      const hasRead = calls.some((c) => c.type === 'readfile');
-      if (hasFind && hasRead) return 'Reading files & searching…';
-      if (hasFind) return `Searching ${calls.filter((c) => c.type === 'findall').length} term${calls.filter((c) => c.type === 'findall').length > 1 ? 's' : ''}…`;
-      return `Reading ${calls.filter((c) => c.type === 'readfile').length} file${calls.filter((c) => c.type === 'readfile').length > 1 ? 's' : ''}…`;
-    }
-    const reads = calls.filter((c) => c.type === 'readfile');
-    const finds = calls.filter((c) => c.type === 'findall');
-    const parts: string[] = [];
-    if (reads.length) parts.push(`Read ${reads.length} file${reads.length > 1 ? 's' : ''}`);
-    if (finds.length) parts.push(`Searched ${finds.length} term${finds.length > 1 ? 's' : ''}`);
-    return parts.join(', ');
   };
 
   /** Sequentially "codes" each file with a short delay so the UI can show a
@@ -973,7 +955,6 @@ const willAutoApply = false;
       );
     }
 
-    const allApplied = Boolean(msg.ops && msg.ops.length > 0 && msg.ops.every((op) => msg.appliedPaths?.includes(op.path)));
     const isLatest = idx === messages.length - 1;
     const isTyping = freshMessageIdsRef.current.has(msg.id) && isLatest;
     const thoughtOpen = openThoughts.has(msg.id);
@@ -985,15 +966,15 @@ const willAutoApply = false;
         </div>
 
         {msg.thinking && (
-          <div className="my-1.5">
+          <div className="select-none">
             <button
               type="button"
               onClick={() => toggleThought(msg.id)}
-              className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium text-[#8c887d] dark:text-[#a09c94] hover:bg-[#f5f3eb] dark:hover:bg-[#1f1f1e] cursor-pointer ws-button-smooth transition-colors"
+              className="flex items-center gap-1.5 text-[10.5px] font-medium text-[#8c887d] dark:text-[#a09c94] hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth"
             >
-              <Brain className="w-3.5 h-3.5 shrink-0" />
+              <Brain className="w-3 h-3 shrink-0" />
               <span>{msg.thinkingLabel || 'Thought process'}</span>
-              <ChevronDown className={`w-3 h-3 ml-auto transition-transform duration-200 ${thoughtOpen ? 'rotate-180' : ''}`} />
+              <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${thoughtOpen ? 'rotate-180' : ''}`} />
             </button>
             <AnimatePresence>
               {thoughtOpen && (
@@ -1002,50 +983,60 @@ const willAutoApply = false;
                   animate={{ opacity: 1, height: 'auto' }}
                   exit={{ opacity: 0, height: 0 }}
                   transition={{ duration: 0.15 }}
-                  className="mt-1 ml-1 pl-3 py-2 rounded-md bg-[#f5f3eb] dark:bg-[#1f1f1e] border-l-2 border-[#8c887d] dark:border-[#a09c94] overflow-hidden"
+                  className="mt-1.5 pl-2 border-l border-[#e2dec0] dark:border-[#383836] text-[10.5px] text-[#706c62] dark:text-[#a09d98] space-y-1 leading-relaxed overflow-hidden"
                 >
-                  <div className="text-[11px] leading-relaxed text-[#8c887d] dark:text-[#a09c94] whitespace-pre-wrap">
-                    {msg.thinking}
-                  </div>
+                  {msg.thinking
+                    .split(/(?<=[.!?])\s+|\n+/)
+                    .map((s) => s.trim())
+                    .filter(Boolean)
+                    .slice(0, 12)
+                    .map((step, i) => (
+                      <div key={i}>{step}</div>
+                    ))}
                 </motion.div>
               )}
             </AnimatePresence>
           </div>
         )}
 
-        {msg.toolCalls && msg.toolCalls.length > 0 && (
-          <div className="my-1.5">
-            <button
-              type="button"
-              onClick={() => !msg.isReadingFiles && toggleToolCalls(msg.id)}
-              className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium text-[#8c887d] dark:text-[#a09c94] hover:bg-[#f5f3eb] dark:hover:bg-[#1f1f1e] cursor-pointer ws-button-smooth transition-colors"
-            >
-              {msg.isReadingFiles
-                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /><span>{toolCallLabel(msg.toolCalls, true)}</span></>
-                : <><Search className="w-3.5 h-3.5 shrink-0" /><span>{toolCallLabel(msg.toolCalls, false)}</span><ChevronDown className={`w-3 h-3 ml-auto transition-transform duration-200 ${openToolCalls.has(msg.id) ? 'rotate-180' : ''}`} /></>}
-            </button>
-            <AnimatePresence>
-              {openToolCalls.has(msg.id) && !msg.isReadingFiles && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  transition={{ duration: 0.15 }}
-                  className="mt-1 ml-1 pl-3 py-2 rounded-md bg-[#f5f3eb] dark:bg-[#1f1f1e] border-l-2 border-[#8c887d] dark:border-[#a09c94] overflow-hidden"
-                >
-                  {msg.toolCalls.map((tc, i) =>
-                    tc.type === 'readfile' ? (
-                      <div key={i} className="flex items-center gap-1.5">
-                        {tc.found
-                          ? <Check className="w-3 h-3 text-emerald-600 shrink-0" />
-                          : <span className="w-3 h-3 text-red-400 shrink-0 font-bold leading-3 text-center">!</span>}
+        {msg.toolCalls && msg.toolCalls.length > 0 && msg.toolCalls.map((tc, ti) => {
+          const tcId = `${msg.id}-tc-${ti}`;
+          const isReading = msg.isReadingFiles;
+          return (
+            <div key={tcId} className="select-none">
+              <button
+                type="button"
+                onClick={() => !isReading && toggleToolCalls(tcId)}
+                className="flex items-center gap-1.5 text-[10.5px] font-medium text-[#8c887d] dark:text-[#a09c94] hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth"
+              >
+                {isReading ? (
+                  <Loader2 className="w-3 h-3 animate-spin shrink-0" />
+                ) : tc.type === 'readfile' ? (
+                  tc.found ? <Check className="w-3 h-3 text-emerald-600 shrink-0" /> : <Search className="w-3 h-3 shrink-0" />
+                ) : (
+                  <Search className="w-3 h-3 shrink-0" />
+                )}
+                <span>{tc.type === 'readfile' ? `Read: ${tc.path}` : `Search: ${tc.query}`}</span>
+                {!isReading && <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${openToolCalls.has(tcId) ? 'rotate-180' : ''}`} />}
+              </button>
+              <AnimatePresence>
+                {openToolCalls.has(tcId) && !isReading && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.15 }}
+                    className="mt-1.5 pl-2 border-l border-[#e2dec0] dark:border-[#383836] text-[10.5px] text-[#706c62] dark:text-[#a09d98] space-y-1 leading-relaxed overflow-hidden"
+                  >
+                    {tc.type === 'readfile' ? (
+                      <div className="flex items-center gap-1.5">
+                        {tc.found ? <Check className="w-3 h-3 text-emerald-600 shrink-0" /> : <span className="w-3 h-3 text-red-400 shrink-0 font-bold leading-3 text-center">!</span>}
                         <span className="font-mono truncate">{tc.path}</span>
                         {!tc.found && <span className="text-red-400 shrink-0">not found</span>}
                       </div>
                     ) : (
-                      <div key={i} className="space-y-1">
+                      <div className="space-y-1">
                         <div className="flex items-center gap-1.5 font-medium">
-                          <Search className="w-3 h-3 shrink-0" />
                           <span>"{tc.query}" &mdash; {tc.matchCount} match{tc.matchCount !== 1 ? 'es' : ''} in {tc.fileCount} file{tc.fileCount !== 1 ? 's' : ''}</span>
                         </div>
                         {tc.matches.slice(0, 5).map((m, j) => (
@@ -1057,13 +1048,13 @@ const willAutoApply = false;
                           <div className="pl-3 opacity-50 text-[9.5px]">…and {tc.matchCount - 5} more</div>
                         )}
                       </div>
-                    )
-                  )}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        )}
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          );
+        })}
 
         {msg.content && (
           <div className={`text-[12px] leading-relaxed wrap-break-word ${msg.isError ? 'text-red-600 dark:text-red-400' : 'text-[#3d3a33] dark:text-[#dedcd6]'}`}>
@@ -1074,62 +1065,63 @@ const willAutoApply = false;
             )}
           </div>
         )}
-        {msg.ops && msg.ops.length > 0 && (
-          <div className="space-y-1 pt-0.5">
-            {msg.ops.map((op) => {
-              const applied = msg.appliedPaths?.includes(op.path);
-              const isCoding = msg.codingPaths?.includes(op.path);
-              return (
-                <div
-                  key={op.path}
-                  className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 sm:gap-1.5 text-[9.5px] sm:text-[10.5px] px-2 py-1 border border-[#e5e3db] dark:border-[#2d2d2c] bg-white/60 dark:bg-black/10 rounded"
-                >
-                  <div className="flex items-center gap-1 sm:gap-1.5 min-w-0 w-full sm:w-auto">
-                    {isCoding ? (
-                      <Loader2 className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-[#d96b43] shrink-0 animate-spin" />
-                    ) : op.type === 'delete' ? (
-                      <Trash2 className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-red-500 shrink-0" />
-                    ) : (
-                      <FilePlus className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-emerald-600 shrink-0" />
-                    )}
-                    <span className="truncate text-[9px] sm:text-[10px]">{op.path}</span>
-                  </div>
-                  <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 w-full sm:w-auto justify-between sm:justify-end">
-                    {isCoding ? (
-                      <span className="text-[#d96b43] text-[8px] sm:text-[10px]">Coding…</span>
-                    ) : (
-                      <>
-                        {op.type !== 'delete' && (
-                          <button onClick={() => onOpenFile(op.path)} className="text-[#8c887d] hover:text-[#1c1b1a] dark:hover:text-white cursor-pointer ws-button-smooth transition-colors text-[8px] sm:text-[10px]">
-                            Open
-                          </button>
-                        )}
-                        {applied ? (
-                          <span className="flex items-center gap-0.5 text-emerald-600">
-                            <Check className="w-2 h-2 sm:w-3 sm:h-3" />
-                            <span className="text-[8px] sm:text-[10px]">Applied</span>
-                          </span>
-                        ) : (
-                          <button onClick={() => handleApplySingle(msg.id, op)} className="text-[#d96b43] hover:underline font-medium cursor-pointer ws-button-smooth transition-colors text-[8px] sm:text-[10px]">
+        {msg.ops && msg.ops.length > 0 && msg.ops.map((op) => {
+          const applied = msg.appliedPaths?.includes(op.path);
+          const isCoding = msg.codingPaths?.includes(op.path);
+          const opId = `${msg.id}-op-${op.path}`;
+          return (
+            <div key={opId} className="select-none">
+              <button
+                type="button"
+                onClick={() => !isCoding && toggleToolCalls(opId)}
+                className="flex items-center gap-1.5 text-[10.5px] font-medium text-[#8c887d] dark:text-[#a09c94] hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth"
+              >
+                {isCoding ? (
+                  <Loader2 className="w-3 h-3 animate-spin shrink-0" />
+                ) : applied ? (
+                  <Check className="w-3 h-3 text-emerald-600 shrink-0" />
+                ) : op.type === 'delete' ? (
+                  <Trash2 className="w-3 h-3 text-red-500 shrink-0" />
+                ) : (
+                  <FilePlus className="w-3 h-3 text-emerald-600 shrink-0" />
+                )}
+                <span>{op.type === 'delete' ? `Delete: ${op.path}` : `File: ${op.path}`}</span>
+                {!isCoding && <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${openToolCalls.has(opId) ? 'rotate-180' : ''}`} />}
+              </button>
+              <AnimatePresence>
+                {openToolCalls.has(opId) && !isCoding && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.15 }}
+                    className="mt-1.5 pl-2 border-l border-[#e2dec0] dark:border-[#383836] text-[10.5px] text-[#706c62] dark:text-[#a09d98] space-y-1 leading-relaxed overflow-hidden"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      {applied ? (
+                        <span className="flex items-center gap-0.5 text-emerald-600">
+                          <Check className="w-3 h-3" />
+                          <span>Applied</span>
+                        </span>
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          {op.type !== 'delete' && (
+                            <button onClick={(e) => { e.stopPropagation(); onOpenFile(op.path); }} className="text-[#8c887d] hover:text-[#1c1b1a] dark:hover:text-white cursor-pointer ws-button-smooth transition-colors">
+                              Open
+                            </button>
+                          )}
+                          <button onClick={(e) => { e.stopPropagation(); handleApplySingle(msg.id, op); }} className="text-[#d96b43] hover:underline font-medium cursor-pointer ws-button-smooth transition-colors">
                             Apply
                           </button>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-            {msg.ops.length > 1 && !allApplied && !msg.codingPaths?.length && (
-              <button
-                onClick={() => handleApplyAll(msg.id, msg.ops!)}
-                className="w-full text-[9.5px] sm:text-[10.5px] py-1 border border-[#d96b43]/40 text-[#d96b43] hover:bg-[#d96b43]/10 font-medium cursor-pointer ws-button-smooth transition-colors rounded"
-              >
-                Apply all {msg.ops.length} changes
-              </button>
-            )}
-          </div>
-        )}
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          );
+        })}
       </div>
     );
   };
