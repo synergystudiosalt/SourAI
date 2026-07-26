@@ -349,6 +349,10 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   const [openXmlTags, setOpenXmlTags] = useState<Set<string>>(new Set());
   const [openToolCalls, setOpenToolCalls] = useState<Set<string>>(new Set());
   const [subAgents, setSubAgents] = useState<SubAgentTask[]>([]);
+  const subAgentsRef = useRef<SubAgentTask[]>([]);
+
+  // Keep ref in sync so spawnSubAgents Promise can read latest state
+  useEffect(() => { subAgentsRef.current = subAgents; }, [subAgents]);
   const [showAttachmentPopover, setShowAttachmentPopover] = useState(false);
   const [agentAttachments, setAgentAttachments] = useState<AttachmentItem[]>([]);
   const attachmentPopoverRef = useRef<HTMLDivElement>(null);
@@ -436,6 +440,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   // MAX_CONCURRENT_SUBAGENTS run at once, extras wait in this queue.
   const subAgentQueueRef = useRef<{ task: SubAgentTask; prompt: string }[]>([]);
   const runningSubAgentsRef = useRef(0);
+  /** Maps task ID → resolve callback so spawnSubAgents can await completion. */
+  const subAgentResolversRef = useRef<Map<string, () => void>>(new Map());
 
   useEffect(() => {
     if (!showAttachmentPopover) return;
@@ -906,9 +912,15 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       setMessages((prev) => [...prev, subMsg]);
       if (willAutoApply) applyOpsStaggered(subMsg.id, ops);
 
-      setSubAgents((prev) => prev.map((t) => (t.id === task.id ? { ...t, status: 'done', fileCount: ops.length } : t)));
+      setSubAgents((prev) => prev.map((t) => (t.id === task.id ? { ...t, status: 'done', fileCount: ops.length, result: { displayText: displayText || '', filesChanged: ops.map(o => o.path) } } : t)));
     } catch (err: any) {
       setSubAgents((prev) => prev.map((t) => (t.id === task.id ? { ...t, status: 'error', error: err?.message } : t)));
+    } finally {
+      const resolver = subAgentResolversRef.current.get(task.id);
+      if (resolver) {
+        subAgentResolversRef.current.delete(task.id);
+        resolver();
+      }
     }
   };
 
@@ -923,14 +935,35 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     }
   };
 
-  /** The main agent autonomously decides (via `@@subagent:` directives in its
-   *  response) when a request should be split into delegated sub-tasks. This
-   *  enforces the hard concurrency cap; extra requests simply queue. */
-  const spawnSubAgents = (taskDescriptions: string[]) => {
+  /** Spawns sub-agents and returns a Promise that resolves when ALL of them
+   *  finish (done or error). The resolved array contains the final task states
+   *  including their result summaries. */
+  const spawnSubAgents = (taskDescriptions: string[]): Promise<SubAgentTask[]> => {
     const newTasks: SubAgentTask[] = taskDescriptions.map((label) => ({ id: genId(), label, status: 'queued' }));
     setSubAgents((prev) => [...prev, ...newTasks]);
     newTasks.forEach((task, idx) => subAgentQueueRef.current.push({ task, prompt: taskDescriptions[idx] }));
     kickSubAgentQueue();
+
+    return new Promise<SubAgentTask[]>((resolve) => {
+      const taskIds = new Set(newTasks.map((t) => t.id));
+      const checkDone = () => {
+        const snap = subAgentsRef.current;
+        const allDone = newTasks.every((t) => {
+          const live = snap.find((s) => s.id === t.id);
+          return live && (live.status === 'done' || live.status === 'error');
+        });
+        if (allDone) {
+          const results = newTasks.map((t) => snap.find((s) => s.id === t.id) || t);
+          resolve(results);
+        }
+      };
+      // Register resolvers for each task so runSubAgentTask can trigger re-check
+      for (const t of newTasks) {
+        subAgentResolversRef.current.set(t.id, checkDone);
+      }
+      // Also poll in case they finish instantly before resolvers are called
+      checkDone();
+    });
   };
 
   const MAX_AGENT_TURNS = 50;
@@ -1076,7 +1109,25 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                     allOps = [...allOps, ...finalParsed.ops];
 
                     if (finalParsed.subAgentTasks.length > 0) {
-                      spawnSubAgents(finalParsed.subAgentTasks.slice(0, 8));
+                      // Update UI to show subagent work is starting
+                      setMessages((prev) => prev.map((m) => m.id === msgId ? { ...m, isReadingFiles: true } : m));
+                      const completedTasks = await spawnSubAgents(finalParsed.subAgentTasks.slice(0, 8));
+                      // Build a summary of subagent results for the main agent to review
+                      const subagentSummary = completedTasks.map((t) => {
+                        const status = t.status === 'done' ? 'completed' : `failed: ${t.error || 'unknown error'}`;
+                        const files = t.result?.filesChanged?.length
+                          ? `Files changed: ${t.result.filesChanged.join(', ')}` : 'No files changed.';
+                        const preview = t.result?.displayText
+                          ? t.result.displayText.slice(0, 500) : '';
+                        return `[Sub-agent "${t.label}" — ${status}]\n${files}\n${preview}`;
+                      }).join('\n\n');
+                      conversationHistory = [
+                        ...conversationHistory,
+                        { role: 'assistant', content: event.text || streamText },
+                        { role: 'user', content: `[All sub-agents have finished. Review their work and continue with the remaining task.]\n\n${subagentSummary}` },
+                      ];
+                      hasMoreTools = true;
+                      setMessages((prev) => prev.map((m) => m.id === msgId ? { ...m, isReadingFiles: false } : m));
                     }
 
                     const hasToolCalls = finalParsed.fileRequests.length > 0 || finalParsed.findRequests.length > 0
@@ -1172,7 +1223,24 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           if (data.thinkingLabel) accumulatedThinkingLabel = data.thinkingLabel;
 
           if (parsed.subAgentTasks.length > 0) {
-            spawnSubAgents(parsed.subAgentTasks.slice(0, 8));
+            // Update UI to show subagent work is starting
+            setMessages((prev) => prev.map((m) => m.id === msgId ? { ...m, isReadingFiles: true } : m));
+            const completedTasks = await spawnSubAgents(parsed.subAgentTasks.slice(0, 8));
+            const subagentSummary = completedTasks.map((t) => {
+              const status = t.status === 'done' ? 'completed' : `failed: ${t.error || 'unknown error'}`;
+              const files = t.result?.filesChanged?.length
+                ? `Files changed: ${t.result.filesChanged.join(', ')}` : 'No files changed.';
+              const preview = t.result?.displayText
+                ? t.result.displayText.slice(0, 500) : '';
+              return `[Sub-agent "${t.label}" — ${status}]\n${files}\n${preview}`;
+            }).join('\n\n');
+            conversationHistory = [
+              ...conversationHistory,
+              { role: 'assistant', content: data.text || '' },
+              { role: 'user', content: `[All sub-agents have finished. Review their work and continue with the remaining task.]\n\n${subagentSummary}` },
+            ];
+            hasMoreTools = true;
+            setMessages((prev) => prev.map((m) => m.id === msgId ? { ...m, isReadingFiles: false } : m));
           }
 
           const hasToolCalls = parsed.fileRequests.length > 0 || parsed.findRequests.length > 0

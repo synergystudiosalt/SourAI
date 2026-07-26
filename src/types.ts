@@ -133,6 +133,8 @@ export interface SubAgentTask {
   /** Number of files the sub-agent ended up changing, once done. */
   fileCount?: number;
   error?: string;
+  /** Summary of what the sub-agent produced (display text + files changed). */
+  result?: { displayText: string; filesChanged: string[] };
 }
 
 // Minimal ambient augmentation for the File System Access API so the
