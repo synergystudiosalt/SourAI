@@ -24,6 +24,24 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+  .thin-scrollbar::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  .thin-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .thin-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(151, 148, 138, 0.25);
+    border-radius: 0;
+  }
+  .thin-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(151, 148, 138, 0.45);
+  }
+  .thin-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(151, 148, 138, 0.25) transparent;
+  }
 }
 
 @keyframes shimmer {

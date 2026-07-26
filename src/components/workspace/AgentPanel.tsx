@@ -1307,12 +1307,10 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
               >
                 {isCoding ? (
                   <Loader2 className="w-2.5 h-2.5 animate-spin shrink-0" />
-                ) : applied ? (
-                  <Check className="w-2.5 h-2.5 text-emerald-600 shrink-0" />
                 ) : op.type === 'delete' ? (
                   <Trash2 className="w-2.5 h-2.5 text-red-500 shrink-0" />
                 ) : (
-                  <FilePlus className="w-2.5 h-2.5 shrink-0" />
+                  <span className="text-[8px] font-bold uppercase shrink-0" style={{ color: dotColor }}>{ext || '?'}</span>
                 )}
                 <span className="truncate flex-1 text-left">
                   {dirPath && <span className="opacity-50">{dirPath}/</span>}
@@ -1320,22 +1318,9 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                 </span>
                 {!isCoding && <ChevronDown className={`w-2.5 h-2.5 transition-transform duration-200 shrink-0 ${isOpen ? 'rotate-180' : ''}`} />}
               </button>
-              {/* Success alert */}
-              {isOpen && !isCoding && applied && (
-                <div className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border-b border-emerald-200 dark:border-emerald-800/30">
-                  <Check className="w-2.5 h-2.5 shrink-0" />
-                  <span className="font-medium">Applied successfully</span>
-                </div>
-              )}
-              {isOpen && !isCoding && op.type === 'delete' && (
-                <div className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 border-b border-red-200 dark:border-red-800/30">
-                  <Trash2 className="w-2.5 h-2.5 shrink-0" />
-                  <span className="font-medium">Will delete this file</span>
-                </div>
-              )}
-              {/* Code lines */}
+              {/* Expanded content */}
               <AnimatePresence>
-                {isOpen && !isCoding && !applied && op.type !== 'delete' && lines.length > 0 && (
+                {isOpen && !isCoding && (
                   <motion.div
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: 'auto' }}
@@ -1343,19 +1328,24 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                     transition={{ duration: 0.15 }}
                     className="overflow-hidden"
                   >
-                    <div className="max-h-56 overflow-y-auto">
-                      {lines.slice(0, 80).map((line, li) => (
-                        <div key={li} className="flex items-center gap-1.5 px-2.5 py-[1px] hover:bg-[#efece3] dark:hover:bg-[#2a2a29] leading-[1.7]">
-                          <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: dotColor }} />
-                          <span className="font-mono text-[10px] text-[#1c1b1a] dark:text-[#e0dcd4] whitespace-pre">{line}</span>
-                        </div>
-                      ))}
-                    </div>
-                    {lines.length > 80 && (
-                      <div className="px-2.5 py-1 text-[9px] text-[#a09c94] dark:text-[#666] border-t border-[#e5e3db] dark:border-[#2d2d2c]">
-                        +{lines.length - 80} more lines
+                    {applied ? (
+                      <div className="px-2.5 py-1.5 text-[10px] text-emerald-700 dark:text-emerald-400 bg-emerald-50/50 dark:bg-emerald-950/10">
+                        Applied
                       </div>
-                    )}
+                    ) : op.type === 'delete' ? (
+                      <div className="px-2.5 py-1.5 text-[10px] text-red-600 dark:text-red-400 bg-red-50/50 dark:bg-red-950/10">
+                        Will delete this file
+                      </div>
+                    ) : lines.length > 0 ? (
+                      <div className="h-48 overflow-y-auto thin-scrollbar">
+                        {lines.map((line, li) => (
+                          <div key={li} className="flex items-stretch hover:bg-[#efece3] dark:hover:bg-[#2a2a29]">
+                            <div className="w-0.5 shrink-0 bg-emerald-400/40 dark:bg-emerald-500/30" />
+                            <pre className="flex-1 px-2.5 py-[1px] font-mono text-[10px] leading-[1.7] text-[#1c1b1a] dark:text-[#e0dcd4] whitespace-pre">{line || ' '}</pre>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
                   </motion.div>
                 )}
               </AnimatePresence>
