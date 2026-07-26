@@ -1,4 +1,4 @@
-import { generateText, resolveModelRoute, getApiKeys } from '../shared/ai';
+import { generateText, streamText, resolveModelRoute, getApiKeys } from '../shared/ai';
 import { AGENT_SYSTEM_PROMPT, AGENT_WRITE_MODE_NOTE, AGENT_PLAN_MODE_NOTE, buildAgentContextBlock } from '../shared/systemPrompts';
 import { splitThinkingAndText } from '../shared/responseFormatting';
 
@@ -27,6 +27,7 @@ export const onRequest: PagesFunction = async (context) => {
       activeFile?: { path: string; content: string } | null;
       projectFiles?: string[];
       mentionedFiles?: { path: string; content: string }[];
+      stream?: boolean;
     };
 
     const {
@@ -36,6 +37,7 @@ export const onRequest: PagesFunction = async (context) => {
       activeFile,
       projectFiles = [],
       mentionedFiles = [],
+      stream = false,
     } = body;
 
     if (!Array.isArray(messages) || messages.length === 0) {
@@ -76,6 +78,64 @@ export const onRequest: PagesFunction = async (context) => {
       content: m.content || '',
     }));
 
+    // ── Streaming mode ─────────────────────────────────────────────────────
+    if (stream) {
+      const encoder = new TextEncoder();
+      const streamResponse = new ReadableStream({
+        async start(controller) {
+          try {
+            let fullText = '';
+            for await (const token of streamText({
+              geminiKeys, groqKeys, cerebrasKeys, mistralKeys,
+              contents, plainMessages, systemInstruction, route,
+            })) {
+              fullText += token;
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ token })}\n\n`));
+            }
+            // Send final event with thinking extraction
+            const { text, thinking } = splitThinkingAndText(fullText);
+            let thinkingLabel = '';
+            if (thinking) {
+              try {
+                const firstLines = thinking.split('\n').filter(Boolean).slice(0, 3).join('\n');
+                const { generateText: genLabel } = await import('../shared/ai');
+                const labelText = await genLabel({
+                  geminiKeys, groqKeys, cerebrasKeys, mistralKeys,
+                  contents: [{ role: 'user', parts: [{ text: `Based on this thinking process:\n${firstLines}\n\nReturn ONLY a 2-4 word action label.` }] }],
+                  plainMessages: [{ role: 'user', content: `Based on this thinking process:\n${firstLines}\n\nReturn ONLY a 2-4 word action label.` }],
+                  systemInstruction: 'You are a concise label generator. Output ONLY a 2 to 4 word phrase with no quotes or punctuation.',
+                  route,
+                });
+                const generatedLabel = (labelText || '').trim().replace(/['"]/g, '');
+                if (generatedLabel && generatedLabel.split(/\s+/).length <= 5) {
+                  thinkingLabel = generatedLabel;
+                }
+              } catch { /* label generation failed, use default */ }
+            }
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+              done: true,
+              text: text || "I'm sour.ai, created by Synergy Studios.",
+              thinking: thinking || 'I reviewed the workspace context and prepared an answer.',
+              thinkingLabel: thinkingLabel || 'Reviewing workspace',
+            })}\n\n`));
+            controller.close();
+          } catch (err: any) {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: err?.message || 'Stream failed' })}\n\n`));
+            controller.close();
+          }
+        }
+      });
+      return new Response(streamResponse, {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+        },
+      });
+    }
+
+    // ── Non-streaming mode (fallback) ──────────────────────────────────────
     const rawText = (await generateText({
       geminiKeys,
       groqKeys,

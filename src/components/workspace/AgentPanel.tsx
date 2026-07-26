@@ -550,6 +550,86 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     return { toolCalls, resultText: parts.join('\n\n') };
   };
 
+  /** Resolves @@listdir: requests — lists directory contents from the workspace tree. */
+  const resolveListDirRequests = (
+    paths: string[]
+  ): { toolCalls: AgentToolCall[]; resultText: string } => {
+    const parts: string[] = [];
+    for (const p of paths) {
+      const prefix = p ? p.replace(/\/$/, '') + '/' : '';
+      const children = files
+        .filter((f) => f.path.startsWith(prefix) && f.path !== prefix)
+        .map((f) => {
+          const rel = f.path.slice(prefix.length);
+          const depth = rel.split('/').length - 1;
+          const name = rel.split('/')[0];
+          return f.type === 'folder' ? `${name}/` : name;
+        });
+      const unique = [...new Set(children)].sort((a, b) => {
+        if (a.endsWith('/') && !b.endsWith('/')) return -1;
+        if (!a.endsWith('/') && b.endsWith('/')) return 1;
+        return a.localeCompare(b);
+      });
+      if (unique.length === 0) {
+        parts.push(`[Directory: ${p || '/'}]\n(empty or not found)`);
+      } else {
+        parts.push(`[Directory: ${p || '/'}]\n${unique.join('\n')}`);
+      }
+    }
+    return { toolCalls: [], resultText: parts.join('\n\n') };
+  };
+
+  /** Resolves @@glob: requests — finds files matching a glob pattern. */
+  const resolveGlobRequests = (
+    patterns: string[]
+  ): { toolCalls: AgentToolCall[]; resultText: string } => {
+    const parts: string[] = [];
+    for (const pattern of patterns) {
+      const re = new RegExp(
+        '^' +
+        pattern
+          .replace(/\./g, '\\.')
+          .replace(/\*\*/g, '{{GLOBSTAR}}')
+          .replace(/\*/g, '[^/]*')
+          .replace(/\?/g, '[^/]')
+          .replace(/\{\{GLOBSTAR\}\}/g, '.*')
+        + '$', 'i'
+      );
+      const matches = files
+        .filter((f) => f.type === 'file' && re.test(f.path))
+        .map((f) => f.path)
+        .sort();
+      if (matches.length === 0) {
+        parts.push(`[Glob: ${pattern}]\nNo files matched.`);
+      } else {
+        parts.push(`[Glob: ${pattern}] (${matches.length} files)\n${matches.join('\n')}`);
+      }
+    }
+    return { toolCalls: [], resultText: parts.join('\n\n') };
+  };
+
+  /** Resolves @@fileinfo: requests — shows file metadata. */
+  const resolveFileInfoRequests = (
+    paths: string[]
+  ): { toolCalls: AgentToolCall[]; resultText: string } => {
+    const parts: string[] = [];
+    for (const p of paths) {
+      const node = files.find((f) => f.path === p);
+      if (node && node.content !== undefined) {
+        const lines = node.content.split('\n').length;
+        const bytes = new TextEncoder().encode(node.content).length;
+        const size = bytes > 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+          : bytes > 1024 ? `${(bytes / 1024).toFixed(1)} KB`
+          : `${bytes} B`;
+        const ext = p.split('.').pop() || '';
+        parts.push(`[File info: ${p}]\nLanguage: ${ext || 'unknown'}\nLines: ${lines}\nSize: ${size}`);
+      } else {
+        parts.push(`[File info: ${p}]\nFile not found`);
+      }
+    }
+    return { toolCalls: [], resultText: parts.join('\n\n') };
+  };
+
   /** Sequentially "codes" each file with a short delay so the UI can show a
    *  spinner per-file (rather than instantly marking every file as done). */
   const applyOpsStaggered = async (messageId: string, ops: AgentFileOp[]) => {
@@ -765,82 +845,190 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         turnCount++;
         hasMoreTools = false;
 
-        const res = await fetch(apiUrl('/api/agent'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...basePayload,
-            messages: conversationHistory,
-            attachments: agentAttachments,
-          }),
-          signal: controller.signal,
-        });
+        // Use streaming for the first turn, non-streaming for tool-result turns
+        if (turnCount === 1) {
+          const res = await fetch(apiUrl('/api/agent'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              ...basePayload,
+              messages: conversationHistory,
+              attachments: agentAttachments,
+              stream: true,
+            }),
+            signal: controller.signal,
+          });
 
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data?.error || 'The agent failed to respond.');
-
-        const parsed = parseAgentResponse(data.text || '');
-
-        if (data.thinking) accumulatedThinking = data.thinking;
-        if (data.thinkingLabel) accumulatedThinkingLabel = data.thinkingLabel;
-
-        // Spawn subagents as soon as they appear
-        if (parsed.subAgentTasks.length > 0) {
-          spawnSubAgents(parsed.subAgentTasks.slice(0, 8));
-        }
-
-        // Check for tool calls: readfile, findall, or check_for_errors
-        const hasReadFind = parsed.fileRequests.length > 0 || parsed.findRequests.length > 0;
-        const hasCheckErrors = parsed.checkErrorsContent.length > 0;
-
-        if (hasReadFind || hasCheckErrors) {
-          // Resolve readfile + findall
-          const { toolCalls: readCalls, resultText: readText } = resolveFileRequests(parsed.fileRequests);
-          const { toolCalls: findCalls, resultText: findText } = resolveFindRequests(parsed.findRequests);
-          const turnToolCalls = [...readCalls, ...findCalls];
-
-          // Resolve check_for_errors: read files mentioned in the check content, then
-          // also re-read any files that were just modified (by ops in this or prior turns)
-          const checkResultParts: string[] = [];
-          for (const content of parsed.checkErrorsContent) {
-            const paths = extractPathsFromCheckContent(content);
-            // If no specific paths mentioned, re-read files from accumulated ops
-            if (paths.length === 0) {
-              const recentPaths = allOps.filter(o => o.type === 'write').map(o => o.path);
-              for (const p of recentPaths) {
-                if (!paths.includes(p)) paths.push(p);
-              }
-            }
-            const { toolCalls: checkCalls, resultText: checkText } = resolveFileRequests(paths);
-            turnToolCalls.push(...checkCalls);
-            checkResultParts.push(`[Error check requested: ${content}]\n${checkText}`);
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData?.error || 'The agent failed to respond.');
           }
 
-          allToolCalls = [...allToolCalls, ...turnToolCalls];
+          // Read SSE stream
+          const reader = res.body?.getReader();
+          const decoder = new TextDecoder();
+          let streamBuffer = '';
+          let streamText = '';
 
-          const resultText = [readText, findText, ...checkResultParts].filter(Boolean).join('\n\n');
+          if (reader) {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              streamBuffer += decoder.decode(value, { stream: true });
+              const lines = streamBuffer.split('\n');
+              streamBuffer = lines.pop() || '';
+              for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed || !trimmed.startsWith('data: ')) continue;
+                try {
+                  const event = JSON.parse(trimmed.slice(6));
+                  if (event.error) throw new Error(event.error);
+                  if (event.token) {
+                    streamText += event.token;
+                    // Update message with live text (truncate think tags for display)
+                    const { displayText: displayPart } = parseAgentResponse(streamText);
+                    setMessages((prev) =>
+                      prev.map((m) =>
+                        m.id === msgId
+                          ? { ...m, content: displayPart || streamText }
+                          : m
+                      )
+                    );
+                  }
+                  if (event.done) {
+                    accumulatedThinking = event.thinking || accumulatedThinking;
+                    accumulatedThinkingLabel = event.thinkingLabel || accumulatedThinkingLabel;
+                    const finalParsed = parseAgentResponse(event.text || streamText);
+                    finalDisplayText = finalParsed.displayText || (finalParsed.ops.length ? '' : "I didn't find anything useful to say - try rephrasing that.");
+                    allOps = [...allOps, ...finalParsed.ops];
 
-          // Update the message with tool calls in real time
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === msgId
-                ? { ...m, toolCalls: allToolCalls, thinking: accumulatedThinking, thinkingLabel: accumulatedThinkingLabel }
-                : m
-            )
-          );
+                    if (finalParsed.subAgentTasks.length > 0) {
+                      spawnSubAgents(finalParsed.subAgentTasks.slice(0, 8));
+                    }
 
-          // Extend conversation with assistant's partial response + tool results
-          conversationHistory = [
-            ...conversationHistory,
-            { role: 'assistant', content: data.text || '' },
-            { role: 'user', content: resultText },
-          ];
+                    const hasToolCalls = finalParsed.fileRequests.length > 0 || finalParsed.findRequests.length > 0
+                      || finalParsed.listDirRequests.length > 0 || finalParsed.globRequests.length > 0 || finalParsed.fileInfoRequests.length > 0;
+                    const hasCheckErrors = finalParsed.checkErrorsContent.length > 0;
 
-          hasMoreTools = true;
+                    if (hasToolCalls || hasCheckErrors) {
+                      // Resolve all tool types
+                      const { toolCalls: readCalls, resultText: readText } = resolveFileRequests(finalParsed.fileRequests);
+                      const { toolCalls: findCalls, resultText: findText } = resolveFindRequests(finalParsed.findRequests);
+                      const { resultText: listDirText } = resolveListDirRequests(finalParsed.listDirRequests);
+                      const { resultText: globText } = resolveGlobRequests(finalParsed.globRequests);
+                      const { resultText: fileInfoText } = resolveFileInfoRequests(finalParsed.fileInfoRequests);
+                      const turnToolCalls = [...readCalls, ...findCalls];
+
+                      const checkResultParts: string[] = [];
+                      for (const content of finalParsed.checkErrorsContent) {
+                        const paths = extractPathsFromCheckContent(content);
+                        if (paths.length === 0) {
+                          const recentPaths = allOps.filter(o => o.type === 'write').map(o => o.path);
+                          for (const p of recentPaths) {
+                            if (!paths.includes(p)) paths.push(p);
+                          }
+                        }
+                        const { toolCalls: checkCalls, resultText: checkText } = resolveFileRequests(paths);
+                        turnToolCalls.push(...checkCalls);
+                        checkResultParts.push(`[Error check requested: ${content}]\n${checkText}`);
+                      }
+
+                      allToolCalls = [...allToolCalls, ...turnToolCalls];
+                      const resultText = [readText, findText, listDirText, globText, fileInfoText, ...checkResultParts].filter(Boolean).join('\n\n');
+
+                      setMessages((prev) =>
+                        prev.map((m) =>
+                          m.id === msgId
+                            ? { ...m, toolCalls: allToolCalls, thinking: accumulatedThinking, thinkingLabel: accumulatedThinkingLabel }
+                            : m
+                        )
+                      );
+
+                      conversationHistory = [
+                        ...conversationHistory,
+                        { role: 'assistant', content: event.text || streamText },
+                        { role: 'user', content: resultText },
+                      ];
+                      hasMoreTools = true;
+                    }
+                  }
+                } catch { /* skip malformed lines */ }
+              }
+            }
+          }
         } else {
-          // No more tool calls — this is the final answer
-          finalDisplayText = parsed.displayText || (allOps.length ? '' : "I didn't find anything useful to say - try rephrasing that.");
-          allOps = [...allOps, ...parsed.ops];
+          // Non-streaming for tool-result turns (faster)
+          const res = await fetch(apiUrl('/api/agent'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              ...basePayload,
+              messages: conversationHistory,
+              attachments: agentAttachments,
+              stream: false,
+            }),
+            signal: controller.signal,
+          });
+
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data?.error || 'The agent failed to respond.');
+
+          const parsed = parseAgentResponse(data.text || '');
+
+          if (data.thinking) accumulatedThinking = data.thinking;
+          if (data.thinkingLabel) accumulatedThinkingLabel = data.thinkingLabel;
+
+          if (parsed.subAgentTasks.length > 0) {
+            spawnSubAgents(parsed.subAgentTasks.slice(0, 8));
+          }
+
+          const hasToolCalls = parsed.fileRequests.length > 0 || parsed.findRequests.length > 0
+            || parsed.listDirRequests.length > 0 || parsed.globRequests.length > 0 || parsed.fileInfoRequests.length > 0;
+          const hasCheckErrors = parsed.checkErrorsContent.length > 0;
+
+          if (hasToolCalls || hasCheckErrors) {
+            const { toolCalls: readCalls, resultText: readText } = resolveFileRequests(parsed.fileRequests);
+            const { toolCalls: findCalls, resultText: findText } = resolveFindRequests(parsed.findRequests);
+            const { resultText: listDirText } = resolveListDirRequests(parsed.listDirRequests);
+            const { resultText: globText } = resolveGlobRequests(parsed.globRequests);
+            const { resultText: fileInfoText } = resolveFileInfoRequests(parsed.fileInfoRequests);
+            const turnToolCalls = [...readCalls, ...findCalls];
+
+            const checkResultParts: string[] = [];
+            for (const content of parsed.checkErrorsContent) {
+              const paths = extractPathsFromCheckContent(content);
+              if (paths.length === 0) {
+                const recentPaths = allOps.filter(o => o.type === 'write').map(o => o.path);
+                for (const p of recentPaths) {
+                  if (!paths.includes(p)) paths.push(p);
+                }
+              }
+              const { toolCalls: checkCalls, resultText: checkText } = resolveFileRequests(paths);
+              turnToolCalls.push(...checkCalls);
+              checkResultParts.push(`[Error check requested: ${content}]\n${checkText}`);
+            }
+
+            allToolCalls = [...allToolCalls, ...turnToolCalls];
+            const resultText = [readText, findText, listDirText, globText, fileInfoText, ...checkResultParts].filter(Boolean).join('\n\n');
+
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === msgId
+                  ? { ...m, toolCalls: allToolCalls, thinking: accumulatedThinking, thinkingLabel: accumulatedThinkingLabel }
+                  : m
+              )
+            );
+
+            conversationHistory = [
+              ...conversationHistory,
+              { role: 'assistant', content: data.text || '' },
+              { role: 'user', content: resultText },
+            ];
+            hasMoreTools = true;
+          } else {
+            finalDisplayText = parsed.displayText || (allOps.length ? '' : "I didn't find anything useful to say - try rephrasing that.");
+            allOps = [...allOps, ...parsed.ops];
+          }
         }
       }
 

@@ -75,10 +75,25 @@ When you need to examine files or search the project:
 
 Request multiple files at once, one per line.
 
-### Search Project
+### Search Project (content)
 @@findall: search term or regex
 
-Both tools resolve before your final answer is generated. Use them freely.
+### List Directory
+@@listdir: src/components
+
+Shows all files and folders in a directory.
+
+### Search Files by Name
+@@glob: *.tsx
+
+Finds files matching a glob pattern (e.g. *.test.*, **/*.css, components/*).
+
+### File Info
+@@fileinfo: src/App.tsx
+
+Shows file size, line count, and language.
+
+All tools resolve before your final answer is generated. Use them freely.
 
 ## Sub-Agents
 

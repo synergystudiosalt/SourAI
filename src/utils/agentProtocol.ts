@@ -11,6 +11,9 @@ const DELETE_RE = /^@@delete:\s*(.+?)\s*$/gm;
 const SUBAGENT_RE = /^@@subagent:\s*(.+?)\s*$/gm;
 const READFILE_RE = /^@@readfile:\s*(.+?)\s*$/gm;
 const FINDALL_RE = /^@@findall:\s*(.+?)\s*$/gm;
+const LISTDIR_RE = /^@@listdir:\s*(.+?)\s*$/gm;
+const GLOB_RE = /^@@glob:\s*(.+?)\s*$/gm;
+const FILEINFO_RE = /^@@fileinfo:\s*(.+?)\s*$/gm;
 const CHECK_ERRORS_RE = /<check_for_errors>([\s\S]*?)<\/check_for_errors>/gi;
 
 function normalizePath(raw: string): string {
@@ -40,6 +43,9 @@ export interface ParsedAgentResponse {
   subAgentTasks: string[];
   fileRequests: string[];
   findRequests: string[];
+  listDirRequests: string[];
+  globRequests: string[];
+  fileInfoRequests: string[];
   checkErrorsContent: string[];
 }
 
@@ -92,9 +98,30 @@ export function parseAgentResponse(raw: string): ParsedAgentResponse {
     return '';
   });
 
+  const listDirRequests: string[] = [];
+  text = text.replace(LISTDIR_RE, (_match, rawPath: string) => {
+    const p = normalizePath(rawPath);
+    if (p && !listDirRequests.includes(p)) listDirRequests.push(p);
+    return '';
+  });
+
+  const globRequests: string[] = [];
+  text = text.replace(GLOB_RE, (_match, pattern: string) => {
+    const q = pattern.trim();
+    if (q && !globRequests.includes(q)) globRequests.push(q);
+    return '';
+  });
+
+  const fileInfoRequests: string[] = [];
+  text = text.replace(FILEINFO_RE, (_match, rawPath: string) => {
+    const p = normalizePath(rawPath);
+    if (p && !fileInfoRequests.includes(p)) fileInfoRequests.push(p);
+    return '';
+  });
+
   text = text.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
 
-  return { displayText: text, ops, subAgentTasks, fileRequests, findRequests, checkErrorsContent };
+  return { displayText: text, ops, subAgentTasks, fileRequests, findRequests, listDirRequests, globRequests, fileInfoRequests, checkErrorsContent };
 }
 
 /** Strips large file blocks from a previously-sent assistant message before resending it as history, to keep payloads small. */
