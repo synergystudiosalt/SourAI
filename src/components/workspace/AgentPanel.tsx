@@ -1052,6 +1052,23 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
 
       const willAutoApply = true;
 
+      // Enrich ops with original content and diff info for highlighting
+      const enrichedOps = allOps.map((op) => {
+        if (op.type !== 'write' || !op.content) return op;
+        const existing = files.find((f) => f.path === op.path);
+        const original = existing?.content || '';
+        const oldLines = original.split('\n');
+        const newLines = op.content.split('\n');
+        const added: number[] = [];
+        const removed: { index: number; text: string }[] = [];
+        // Simple line-by-line diff: find lines in new that aren't in old, and lines in old not in new
+        const oldSet = new Set(oldLines);
+        const newSet = new Set(newLines);
+        newLines.forEach((line, i) => { if (!oldSet.has(line)) added.push(i); });
+        oldLines.forEach((line, i) => { if (!newSet.has(line)) removed.push({ index: i, text: line }); });
+        return { ...op, originalContent: original, addedLines: added, removedLines: removed };
+      });
+
       // Update the message with the final result
       setMessages((prev) =>
         prev.map((m) =>
@@ -1059,8 +1076,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
             ? {
                 ...m,
                 content: finalDisplayText,
-                ops: allOps,
-                codingPaths: willAutoApply ? allOps.map((o) => o.path) : [],
+                ops: enrichedOps,
+                codingPaths: willAutoApply ? enrichedOps.map((o) => o.path) : [],
                 thinking: accumulatedThinking,
                 thinkingLabel: accumulatedThinkingLabel,
                 toolCalls: allToolCalls,
@@ -1186,7 +1203,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   const renderMessage = (msg: AgentChatMessage, idx: number) => {
     if (msg.role === 'user') {
       return (
-        <div key={msg.id} className="flex justify-end">
+        <div key={msg.id} className="flex justify-end mb-4">
           <div className="max-w-[88%] bg-[#f0ede4] dark:bg-[#252524] text-[#1c1b1a] dark:text-[#f0efe6] px-2.5 py-1.5 text-[12px] leading-relaxed whitespace-pre-wrap wrap-break-word rounded-lg">
             {msg.content}
           </div>
@@ -1198,7 +1215,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     const isTyping = freshMessageIdsRef.current.has(msg.id) && isLatest;
 
     return (
-      <div key={msg.id} className="space-y-1.5">
+      <div key={msg.id} className="space-y-1.5 mb-5">
         <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-[#a39d8f] dark:text-[#767671]">
           <Logo size={12} /> sour.ai Agent
         </div>
@@ -1274,17 +1291,9 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           const isCoding = msg.codingPaths?.includes(op.path);
           const opId = `${msg.id}-op-${op.path}`;
           const isOpen = openToolCalls.has(opId);
-          const ext = op.path.split('.').pop()?.toLowerCase() || '';
-          const langDotColor: Record<string, string> = {
-            tsx: '#3178c6', ts: '#3178c6', jsx: '#61dafb', js: '#f7df1e',
-            css: '#264de4', scss: '#cf649a', html: '#e34c26', json: '#5b5b5b',
-            py: '#3776ab', java: '#b07219', go: '#00add8', rs: '#dea584',
-            rb: '#cc342d', php: '#4f5d95', sh: '#89e051', md: '#083fa1',
-            yaml: '#cb171e', yml: '#cb171e', xml: '#0060ac', svg: '#ff9800',
-            sql: '#e38c00', c: '#555555', cpp: '#f34b7d', h: '#a074c4',
-          };
-          const dotColor = langDotColor[ext] || '#97948A';
           const lines = op.content ? op.content.split('\n') : [];
+          const addedSet = new Set(op.addedLines || []);
+          const removedLines = op.removedLines || [];
           const pathParts = op.path.split('/');
           const fileName = pathParts.pop() || op.path;
           const dirPath = pathParts.join('/');
@@ -1297,17 +1306,17 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                 className="w-full flex items-center gap-1.5 px-2.5 py-1.5 bg-[#f5f3eb] dark:bg-[#252524] border-b border-[#e5e3db] dark:border-[#2d2d2c] text-[10.5px] text-[#706c62] dark:text-[#a09c94] hover:bg-[#efece3] dark:hover:bg-[#2a2a29] cursor-pointer ws-button-smooth"
               >
                 {isCoding ? (
-                  <Loader2 className="w-3 h-3 animate-spin shrink-0" />
+                  <Loader2 className="w-3 h-3 animate-spin shrink-0 text-[#97948A]" />
                 ) : op.type === 'delete' ? (
-                  <Trash2 className="w-3 h-3 text-red-500 shrink-0" />
+                  <Trash2 className="w-3 h-3 shrink-0 text-[#97948A]" />
                 ) : (
-                  <FilePlus className="w-3 h-3 shrink-0" style={{ color: dotColor }} />
+                  <FilePlus className="w-3 h-3 shrink-0 text-[#97948A]" />
                 )}
                 <span className="truncate flex-1 text-left">
                   {dirPath && <span className="opacity-50">{dirPath}/</span>}
                   <span className="font-medium text-[#1c1b1a] dark:text-[#f0efe6]">{fileName}</span>
                 </span>
-                {!isCoding && <ChevronDown className={`w-3 h-3 transition-transform duration-200 shrink-0 ${isOpen ? 'rotate-180' : ''}`} />}
+                {!isCoding && <ChevronDown className={`w-3 h-3 transition-transform duration-200 shrink-0 text-[#97948A] ${isOpen ? 'rotate-180' : ''}`} />}
               </button>
               {/* Expanded content */}
               <AnimatePresence>
@@ -1323,12 +1332,18 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                       <div className="px-2.5 py-1.5 text-[10.5px] text-red-600 dark:text-red-400 bg-red-50/50 dark:bg-red-950/10">
                         Will delete this file
                       </div>
-                    ) : lines.length > 0 ? (
+                    ) : lines.length > 0 || removedLines.length > 0 ? (
                       <div className="h-48 overflow-y-auto thin-scrollbar">
                         {lines.map((line, li) => (
-                          <div key={li} className="flex items-stretch">
-                            <div className={`w-0.5 shrink-0 ${applied ? 'bg-blue-400/30 dark:bg-blue-500/20' : 'bg-emerald-400/40 dark:bg-emerald-500/30'}`} />
-                            <pre className="flex-1 px-2.5 py-[1px] font-mono text-[10px] leading-[1.7] text-[#1c1b1a] dark:text-[#e0dcd4] whitespace-pre">{line || ' '}</pre>
+                          <div key={`add-${li}`} className="flex items-stretch">
+                            <div className={`w-0.5 shrink-0 ${addedSet.has(li) ? 'bg-emerald-500/50 dark:bg-emerald-400/40' : 'bg-transparent'}`} />
+                            <pre className={`flex-1 px-2.5 py-[1px] font-mono text-[10px] leading-[1.7] whitespace-pre ${addedSet.has(li) ? 'bg-emerald-100/60 dark:bg-emerald-900/20 text-emerald-900 dark:text-emerald-200' : 'text-[#1c1b1a] dark:text-[#e0dcd4]'}`}>{line || ' '}</pre>
+                          </div>
+                        ))}
+                        {removedLines.map((rm, ri) => (
+                          <div key={`del-${ri}`} className="flex items-stretch">
+                            <div className="w-0.5 shrink-0 bg-red-400/50 dark:bg-red-500/40" />
+                            <pre className="flex-1 px-2.5 py-[1px] font-mono text-[10px] leading-[1.7] whitespace-pre bg-red-100/50 dark:bg-red-900/15 text-red-700 dark:text-red-300 line-through opacity-70">{rm.text || ' '}</pre>
                           </div>
                         ))}
                       </div>

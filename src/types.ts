@@ -89,7 +89,10 @@ export interface AgentFileOp {
   type: 'write' | 'delete';
   path: string;
   content?: string;
+  originalContent?: string;
   language?: string;
+  addedLines?: number[];
+  removedLines?: { index: number; text: string }[];
 }
 
 export type AgentMode = 'write' | 'plan';
