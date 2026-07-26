@@ -163,11 +163,29 @@ const ExpandableTag: React.FC<{
 
   if (isThinkTag) {
     return (
-      <div className={`select-none ${bg ? `pl-2 border-l ${border}` : ''} py-0.5`}>
-        <div className={`flex items-center gap-1.5 text-[10.5px] font-medium ${color}`}>
-          <Icon className="w-3 h-3 shrink-0" />
-          <span>{content}</span>
-        </div>
+      <div className="select-none">
+        <button
+          type="button"
+          onClick={() => onToggle(id)}
+          className={`flex items-center gap-1 text-[9px] font-medium ${color} hover:opacity-80 cursor-pointer ws-button-smooth`}
+        >
+          <Icon className="w-2.5 h-2.5 shrink-0" />
+          <span>{label}</span>
+          <ChevronDown className={`w-2.5 h-2.5 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+        </button>
+        <AnimatePresence>
+          {isOpen && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.15 }}
+              className="mt-0.5 pl-1 text-[9px] text-[#8c887d] dark:text-[#a09c94] leading-relaxed overflow-hidden"
+            >
+              {content}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     );
   }
@@ -1187,8 +1205,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
 
         {msg.thinking && (
           <div className="select-none">
-            <div className="flex items-center gap-1.5 text-[10.5px] font-medium text-[#97948A] dark:text-[#97948A] py-0.5">
-              <Lightbulb className="w-3 h-3 shrink-0" />
+            <div className="flex items-center gap-1 text-[9px] font-medium text-[#97948A] dark:text-[#97948A] py-0.5">
+              <Lightbulb className="w-2.5 h-2.5 shrink-0" />
               <span>{msg.thinkingLabel || msg.thinking}</span>
             </div>
           </div>
@@ -1264,64 +1282,80 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           const applied = msg.appliedPaths?.includes(op.path);
           const isCoding = msg.codingPaths?.includes(op.path);
           const opId = `${msg.id}-op-${op.path}`;
+          const isOpen = openToolCalls.has(opId);
+          const ext = op.path.split('.').pop()?.toLowerCase() || '';
+          const langDotColor: Record<string, string> = {
+            tsx: '#3178c6', ts: '#3178c6', jsx: '#61dafb', js: '#f7df1e',
+            css: '#264de4', scss: '#cf649a', html: '#e34c26', json: '#5b5b5b',
+            py: '#3776ab', java: '#b07219', go: '#00add8', rs: '#dea584',
+            rb: '#cc342d', php: '#4f5d95', sh: '#89e051', md: '#083fa1',
+            yaml: '#cb171e', yml: '#cb171e', xml: '#0060ac', svg: '#ff9800',
+            sql: '#e38c00', c: '#555555', cpp: '#f34b7d', h: '#a074c4',
+          };
+          const dotColor = langDotColor[ext] || '#97948A';
+          const lines = op.content ? op.content.split('\n') : [];
+          const pathParts = op.path.split('/');
+          const fileName = pathParts.pop() || op.path;
+          const dirPath = pathParts.join('/');
           return (
-            <div key={opId} className="select-none">
+            <div key={opId} className="select-none border border-[#e5e3db] dark:border-[#2d2d2c] rounded-md overflow-hidden mb-2">
+              {/* Breadcrumb bar */}
               <button
                 type="button"
                 onClick={() => !isCoding && toggleToolCalls(opId)}
-                className="flex items-center gap-1.5 text-[10.5px] font-medium text-[#8c887d] dark:text-[#a09c94] hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth"
+                className="w-full flex items-center gap-1.5 px-2.5 py-1.5 bg-[#f5f3eb] dark:bg-[#252524] border-b border-[#e5e3db] dark:border-[#2d2d2c] text-[10px] font-mono text-[#706c62] dark:text-[#a09c94] hover:bg-[#efece3] dark:hover:bg-[#2a2a29] cursor-pointer ws-button-smooth"
               >
                 {isCoding ? (
-                  <Loader2 className="w-3 h-3 animate-spin shrink-0" />
+                  <Loader2 className="w-2.5 h-2.5 animate-spin shrink-0" />
                 ) : applied ? (
-                  <Check className="w-3 h-3 text-amber-600 shrink-0" />
+                  <Check className="w-2.5 h-2.5 text-emerald-600 shrink-0" />
                 ) : op.type === 'delete' ? (
-                  <Trash2 className="w-3 h-3 text-red-500 shrink-0" />
+                  <Trash2 className="w-2.5 h-2.5 text-red-500 shrink-0" />
                 ) : (
-                  <FilePlus className="w-3 h-3 text-amber-600 shrink-0" />
+                  <FilePlus className="w-2.5 h-2.5 shrink-0" />
                 )}
-                <span>{op.type === 'delete' ? `Delete: ${op.path}` : `File: ${op.path}`}</span>
-                {!isCoding && <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${openToolCalls.has(opId) ? 'rotate-180' : ''}`} />}
+                <span className="truncate flex-1 text-left">
+                  {dirPath && <span className="opacity-50">{dirPath}/</span>}
+                  <span className="font-medium text-[#1c1b1a] dark:text-[#f0efe6]">{fileName}</span>
+                </span>
+                {!isCoding && <ChevronDown className={`w-2.5 h-2.5 transition-transform duration-200 shrink-0 ${isOpen ? 'rotate-180' : ''}`} />}
               </button>
+              {/* Success alert */}
+              {isOpen && !isCoding && applied && (
+                <div className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border-b border-emerald-200 dark:border-emerald-800/30">
+                  <Check className="w-2.5 h-2.5 shrink-0" />
+                  <span className="font-medium">Applied successfully</span>
+                </div>
+              )}
+              {isOpen && !isCoding && op.type === 'delete' && (
+                <div className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 border-b border-red-200 dark:border-red-800/30">
+                  <Trash2 className="w-2.5 h-2.5 shrink-0" />
+                  <span className="font-medium">Will delete this file</span>
+                </div>
+              )}
+              {/* Code lines */}
               <AnimatePresence>
-                {openToolCalls.has(opId) && !isCoding && (
+                {isOpen && !isCoding && !applied && op.type !== 'delete' && lines.length > 0 && (
                   <motion.div
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: 'auto' }}
                     exit={{ opacity: 0, height: 0 }}
                     transition={{ duration: 0.15 }}
-                    className="mt-1.5 pl-2 border-l border-[#e2dec0] dark:border-[#383836] text-[10.5px] text-[#706c62] dark:text-[#a09d98] space-y-1 leading-relaxed overflow-hidden"
+                    className="overflow-hidden"
                   >
-                    {applied ? (
-                      <span className="flex items-center gap-0.5 text-amber-600">
-                        <Check className="w-3 h-3" />
-                        <span>Applied</span>
-                      </span>
-                    ) : op.type === 'delete' ? (
-                      <span className="flex items-center gap-0.5 text-red-500">
-                        <Trash2 className="w-3 h-3" />
-                        <span>Will delete this file</span>
-                      </span>
-                    ) : op.content ? (
-                      <div className="overflow-hidden">
-                        <div className="flex items-center gap-1.5 mb-1">
-                          <span className="text-[9.5px] opacity-60">{op.language || 'code'}</span>
-                          <span className="text-[9.5px] opacity-40">·</span>
-                          <span className="text-[9.5px] opacity-60">{op.content.split('\n').length} lines</span>
+                    <div className="max-h-56 overflow-y-auto">
+                      {lines.slice(0, 80).map((line, li) => (
+                        <div key={li} className="flex items-center gap-1.5 px-2.5 py-[1px] hover:bg-[#efece3] dark:hover:bg-[#2a2a29] leading-[1.7]">
+                          <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: dotColor }} />
+                          <span className="font-mono text-[10px] text-[#1c1b1a] dark:text-[#e0dcd4] whitespace-pre">{line}</span>
                         </div>
-                        <pre className="p-2 rounded bg-[#efece3] dark:bg-[#141413] overflow-x-auto text-[9.5px] font-mono leading-[1.5] max-h-48 overflow-y-auto">
-                          <code>{op.content.split('\n').slice(0, 60).map((line, li) => (
-                            <div key={li} className="flex">
-                              <span className="select-none text-[#a39d8f] dark:text-[#555] w-6 text-right pr-2 shrink-0">{li + 1}</span>
-                              <span>{line}</span>
-                            </div>
-                          ))}</code>
-                        </pre>
-                        {op.content.split('\n').length > 60 && (
-                          <div className="text-[9px] opacity-40 mt-0.5">…{op.content.split('\n').length - 60} more lines</div>
-                        )}
+                      ))}
+                    </div>
+                    {lines.length > 80 && (
+                      <div className="px-2.5 py-1 text-[9px] text-[#a09c94] dark:text-[#666] border-t border-[#e5e3db] dark:border-[#2d2d2c]">
+                        +{lines.length - 80} more lines
                       </div>
-                    ) : null}
+                    )}
                   </motion.div>
                 )}
               </AnimatePresence>
