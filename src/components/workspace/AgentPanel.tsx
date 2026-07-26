@@ -89,10 +89,10 @@ const THINK_TAGS = ['think', 'thinking', 'reasoning', 'analysis', 'reflection', 
 
 const KNOWN_TAGS: Record<string, { label: string; Icon: TagIcon; color: string; bg: string; border: string }> = {
   ...Object.fromEntries(
-    THINK_TAGS.map(t => [t, { label: 'Thinking', Icon: Lightbulb, color: 'text-[#d96b43] dark:text-[#e07e5d]', bg: '', border: '' }])
+    THINK_TAGS.map(t => [t, { label: 'Thinking', Icon: Lightbulb, color: 'text-[#97948A] dark:text-[#97948A]', bg: '', border: '' }])
   ),
-  check_for_errors:  { label: 'Error Check',     Icon: CheckCircle,   color: 'text-[#d96b43] dark:text-[#e07e5d]', bg: 'bg-[#fdf0ea] dark:bg-[#2a1a14]', border: 'border-[#d96b43] dark:border-[#e07e5d]' },
-  subagent_request:  { label: 'Subagent Request', Icon: Bot,          color: 'text-[#d96b43] dark:text-[#e07e5d]', bg: 'bg-[#fdf0ea] dark:bg-[#2a1a14]', border: 'border-[#d96b43] dark:border-[#e07e5d]' },
+  check_for_errors:  { label: 'Error Check',     Icon: CheckCircle,   color: 'text-[#97948A] dark:text-[#97948A]', bg: 'bg-[#f5f3eb] dark:bg-[#1f1f1e]', border: 'border-[#97948A] dark:border-[#97948A]' },
+  subagent_request:  { label: 'Subagent Request', Icon: Bot,          color: 'text-[#97948A] dark:text-[#97948A]', bg: 'bg-[#f5f3eb] dark:bg-[#1f1f1e]', border: 'border-[#97948A] dark:border-[#97948A]' },
   subagent_response: { label: 'Subagent Response', Icon: ClipboardList, color: 'text-blue-500 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-950/30', border: 'border-blue-500 dark:border-blue-400' },
   function_request:  { label: 'Function Request', Icon: Settings,     color: 'text-[#8c887d] dark:text-[#a09c94]', bg: 'bg-[#f5f3eb] dark:bg-[#1f1f1e]', border: 'border-[#8c887d] dark:border-[#a09c94]' },
   function_result:   { label: 'Function Result',  Icon: BarChart3,    color: 'text-[#8c887d] dark:text-[#a09c94]', bg: 'bg-[#f5f3eb] dark:bg-[#1f1f1e]', border: 'border-[#8c887d] dark:border-[#a09c94]' },
@@ -101,7 +101,7 @@ const KNOWN_TAGS: Record<string, { label: string; Icon: TagIcon; color: string; 
 
 const TAG_COLOR_CYCLE = [
   { color: 'text-[#8c887d] dark:text-[#a09c94]', bg: 'bg-[#f5f3eb] dark:bg-[#1f1f1e]', border: 'border-[#8c887d] dark:border-[#a09c94]' },
-  { color: 'text-[#d96b43] dark:text-[#e07e5d]', bg: 'bg-[#fdf0ea] dark:bg-[#2a1a14]', border: 'border-[#d96b43] dark:border-[#e07e5d]' },
+  { color: 'text-[#97948A] dark:text-[#97948A]', bg: 'bg-[#f5f3eb] dark:bg-[#1f1f1e]', border: 'border-[#97948A] dark:border-[#97948A]' },
   { color: 'text-blue-500 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-950/30', border: 'border-blue-500 dark:border-blue-400' },
   { color: 'text-purple-500 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-950/30', border: 'border-purple-500 dark:border-purple-400' },
   { color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-950/30', border: 'border-amber-500 dark:border-amber-400' },
@@ -1187,7 +1187,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
 
         {msg.thinking && (
           <div className="select-none">
-            <div className="flex items-center gap-1.5 text-[10.5px] font-medium text-[#d96b43] dark:text-[#e07e5d] py-0.5">
+            <div className="flex items-center gap-1.5 text-[10.5px] font-medium text-[#97948A] dark:text-[#97948A] py-0.5">
               <Lightbulb className="w-3 h-3 shrink-0" />
               <span>{msg.thinkingLabel || msg.thinking}</span>
             </div>

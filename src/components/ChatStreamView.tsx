@@ -137,7 +137,7 @@ const TypewriterMessage: React.FC<TypewriterMessageProps> = ({
       {/* Dynamic Thinking */}
       {thinking && !isErrorMsg && (
         <div className="mb-3 select-none">
-          <div className="flex items-center gap-1.5 text-[12px] font-medium text-[#d96b43] dark:text-[#e07e5d] py-0.5">
+          <div className="flex items-center gap-1.5 text-[12px] font-medium text-[#97948A] dark:text-[#97948A] py-0.5">
             <span>{isThinking ? 'Thinking...' : (thinkingLabel || thinking)}</span>
           </div>
         </div>
