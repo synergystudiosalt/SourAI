@@ -28,7 +28,7 @@ export function resolveRelativePath(fromPath: string, relativeHref: string): str
 // Preview kind detection
 // ---------------------------------------------------------------------------
 
-export type PreviewKind = 'html' | 'markdown' | 'svg' | 'react';
+export type PreviewKind = 'html' | 'markdown' | 'svg';
 
 const PLAIN_EXTENSION_KIND: Record<string, 'html' | 'markdown' | 'svg'> = {
   html: 'html', htm: 'html',
@@ -38,9 +38,7 @@ const PLAIN_EXTENSION_KIND: Record<string, 'html' | 'markdown' | 'svg'> = {
 
 export function getPreviewKind(name: string): PreviewKind | null {
   const ext = name.split('.').pop()?.toLowerCase() || '';
-  if (PLAIN_EXTENSION_KIND[ext]) return PLAIN_EXTENSION_KIND[ext];
-  if (['jsx', 'tsx', 'js', 'ts'].includes(ext)) return 'react';
-  return null;
+  return PLAIN_EXTENSION_KIND[ext] ?? null;
 }
 
 // ---------------------------------------------------------------------------

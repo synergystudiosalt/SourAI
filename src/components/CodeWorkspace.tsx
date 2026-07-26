@@ -107,14 +107,14 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
   const activeNode = useMemo(() => findNode(tree, activeTabPath), [tree, activeTabPath]);
   const dirtyPaths = useMemo(() => new Set(openTabs.filter((t) => t.isDirty).map((t) => t.path)), [openTabs]);
   // Preview is strictly per active tab: only show the preview button when the
-  // currently open file is itself a previewable type (HTML, Markdown, SVG, React).
+  // currently open file is itself a previewable type (HTML, Markdown, SVG).
+  // For HTML files in React projects, use the React bundler instead of plain inlining.
   const previewKind = useMemo(() => {
     if (!activeNode || activeNode.type !== 'file') return null;
-    const kind = getPreviewKind(activeNode.name);
-    if (kind === 'react' && isReactProject(allFiles)) return 'react';
-    return kind;
-  }, [activeNode, allFiles]);
+    return getPreviewKind(activeNode.name);
+  }, [activeNode]);
   const htmlEntry = previewKind ? activeNode ?? null : null;
+  const isReactPreview = previewKind === 'html' && isReactProject(allFiles);
   // Whether *this specific file tab* currently has its preview toggled on.
   const showPreview = Boolean(activeTabPath && previewOpenPaths.has(activeTabPath));
   const togglePreviewForActiveTab = () => {
@@ -129,7 +129,7 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
   const previewDoc = useMemo(() => {
     if (!showPreview || !htmlEntry) return '';
     try {
-      if (previewKind === 'react') {
+      if (isReactPreview) {
         return buildReactPreview(tree, htmlEntry);
       }
       if (previewKind === 'html') {
@@ -140,9 +140,8 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
       console.error('Failed to build preview document', err);
       return '';
     }
-    // previewNonce lets the manual refresh button force a fresh iframe reload.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showPreview, htmlEntry, previewKind, tree, previewNonce]);
+  }, [showPreview, htmlEntry, isReactPreview, previewKind, tree, previewNonce]);
 
   // ---------------------------------------------------------------------
   // Project lifecycle
@@ -702,7 +701,7 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
                       <button onClick={() => setPreviewNonce((n) => n + 1)} title="Refresh preview" className="cursor-pointer hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] blurry-hover">
                         <RotateCw className="w-3 h-3" />
                       </button>
-                      {(previewKind === 'html' || previewKind === 'react') && (
+                      {previewKind === 'html' && (
                         <button
                           onClick={() => {
                             const blob = new Blob([previewDoc], { type: 'text/html' });
@@ -718,7 +717,7 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
                       )}
                     </div>
                   </div>
-                  {(previewKind === 'html' || previewKind === 'react') && (
+                  {previewKind === 'html' && (
                     <iframe
                       key={previewNonce}
                       srcDoc={previewDoc}
