@@ -1220,6 +1220,16 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           <Logo size={12} /> sour.ai Agent
         </div>
 
+        {msg.content && (
+          <div className={`text-[12px] leading-[1.7] wrap-break-word ${msg.isError ? 'text-red-600 dark:text-red-400' : 'text-[#3d3a33] dark:text-[#dedcd6]'}`}>
+            {msg.role === 'assistant' && !msg.content.startsWith('**Sub-agent') ? (
+              <AgentContent text={msg.content} isTyping={isTyping} msgId={msg.id} openTags={openXmlTags} onToggleTag={toggleXmlTag} />
+            ) : (
+              <TypedMarkdown text={msg.content} enabled={isTyping} />
+            )}
+          </div>
+        )}
+
         {msg.toolCalls && msg.toolCalls.length > 0 && msg.toolCalls.map((tc, ti) => {
           const tcId = `${msg.id}-tc-${ti}`;
           const isReading = msg.isReadingFiles;
@@ -1256,7 +1266,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                         {!tc.found && <span className="text-red-400 shrink-0">not found</span>}
                       </div>
                     ) : (
-                      <div className="space-y-1">
+    <div className="space-y-2.5">
                         <div className="flex items-center gap-1.5 font-medium">
                           <span>"{tc.query}" &mdash; {tc.matchCount} match{tc.matchCount !== 1 ? 'es' : ''} in {tc.fileCount} file{tc.fileCount !== 1 ? 's' : ''}</span>
                         </div>
@@ -1277,15 +1287,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           );
         })}
 
-        {msg.content && (
-          <div className={`text-[12px] leading-[1.7] wrap-break-word ${msg.isError ? 'text-red-600 dark:text-red-400' : 'text-[#3d3a33] dark:text-[#dedcd6]'}`}>
-            {msg.role === 'assistant' && !msg.content.startsWith('**Sub-agent') ? (
-              <AgentContent text={msg.content} isTyping={isTyping} msgId={msg.id} openTags={openXmlTags} onToggleTag={toggleXmlTag} />
-            ) : (
-              <TypedMarkdown text={msg.content} enabled={isTyping} />
-            )}
-          </div>
-        )}
         {msg.ops && msg.ops.length > 0 && msg.ops.map((op) => {
           const applied = msg.appliedPaths?.includes(op.path);
           const isCoding = msg.codingPaths?.includes(op.path);
