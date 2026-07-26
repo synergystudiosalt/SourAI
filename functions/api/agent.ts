@@ -59,9 +59,10 @@ export const onRequest: PagesFunction = async (context) => {
       contextBlock,
       '',
       'Reasoning format:',
-      '- Use MULTIPLE  thinking... response blocks throughout your response (one per logical step).',
-      '- Each  thinking block: 1-2 sentences, plain text only, no markdown.',
-      '- Example:  thinkingPlanning the fix... responseHere is the implementation.',
+      '- Use MULTIPLE thinking/reasoning tags throughout your response (one per logical step).',
+      '- Vary the tag names: <think>, <thinking>, <reasoning>, <analysis>, <reflection>, <planning>, <step>.',
+      '- Each tag: 1-2 sentences of reassuring text, plain text only, no markdown.',
+      '- Example: <thinking>Mapping out the component structure...</thinking>Here is the implementation.',
     ].join('\n');
 
     // Prepare message content for Gemini format

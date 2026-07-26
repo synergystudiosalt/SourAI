@@ -48,10 +48,10 @@ const MODEL_LABELS: Record<AIModel, string> = {
   'sour-intelligence': 'Intelligence',
   'sour-ultra': 'Ultra',
   'sour-overclock': 'Overclock',
-  'sour-ultracode': 'UltraCode',
+  'sour-overcode': 'OverCode',
 };
 
-const MODEL_OPTIONS: AIModel[] = ['sour-omni-flash', 'sour-intelligence', 'sour-ultra', 'sour-overclock', 'sour-ultracode'];
+const MODEL_OPTIONS: AIModel[] = ['sour-omni-flash', 'sour-intelligence', 'sour-ultra', 'sour-overclock', 'sour-overcode'];
 
 // ─── XML Tag Parsing & Expandable Rendering ────────────────────────────────────
 
@@ -85,8 +85,12 @@ function parseAgentContent(text: string): ContentSegment[] {
 
 type TagIcon = React.FC<{ className?: string }>;
 
+const THINK_TAGS = ['think', 'thinking', 'reasoning', 'analysis', 'reflection', 'planning', 'step'];
+
 const KNOWN_TAGS: Record<string, { label: string; Icon: TagIcon; color: string; bg: string; border: string }> = {
-  think:             { label: 'Thinking',        Icon: Lightbulb,     color: 'text-[#8c887d] dark:text-[#a09c94]', bg: 'bg-[#f5f3eb] dark:bg-[#1f1f1e]', border: 'border-[#8c887d] dark:border-[#a09c94]' },
+  ...Object.fromEntries(
+    THINK_TAGS.map(t => [t, { label: 'Thinking', Icon: Lightbulb, color: 'text-[#8c887d] dark:text-[#a09c94]', bg: 'bg-[#f5f3eb] dark:bg-[#1f1f1e]', border: 'border-[#8c887d] dark:border-[#a09c94]' }])
+  ),
   check_for_errors:  { label: 'Error Check',     Icon: CheckCircle,   color: 'text-[#d96b43] dark:text-[#e07e5d]', bg: 'bg-[#fdf0ea] dark:bg-[#2a1a14]', border: 'border-[#d96b43] dark:border-[#e07e5d]' },
   subagent_request:  { label: 'Subagent Request', Icon: Bot,          color: 'text-[#d96b43] dark:text-[#e07e5d]', bg: 'bg-[#fdf0ea] dark:bg-[#2a1a14]', border: 'border-[#d96b43] dark:border-[#e07e5d]' },
   subagent_response: { label: 'Subagent Response', Icon: ClipboardList, color: 'text-blue-500 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-950/30', border: 'border-blue-500 dark:border-blue-400' },

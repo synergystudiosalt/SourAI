@@ -132,7 +132,7 @@ export const MainPromptCard: React.FC<MainPromptCardProps> = ({
     'sour-intelligence': 'Intelligence',
     'sour-ultra': 'Ultra',
     'sour-overclock': 'Overclock',
-    'sour-ultracode': 'UltraCode',
+    'sour-overcode': 'OverCode',
   };
   const modelDisplayName = MODEL_DISPLAY[selectedModel] || selectedModel;
 

@@ -1,4 +1,5 @@
-const THINK_BLOCK_RE = /<think>([\s\S]*?)<\/think>/gi;
+const THINK_TAG_NAMES = ['think', 'thinking', 'reasoning', 'analysis', 'reflection', 'planning', 'step'];
+const THINK_BLOCK_RE = new RegExp(`<(${THINK_TAG_NAMES.join('|')})>([\\s\\S]*?)<\\/\\1>`, 'gi');
 
 export function splitThinkingAndText(rawText: string): { text: string; thinking: string } {
   const input = (rawText || '').trim();
@@ -11,8 +12,8 @@ export function splitThinkingAndText(rawText: string): { text: string; thinking:
     return { text: input, thinking: '' };
   }
 
-  const thinking = matches.map(m => m[1].trim()).filter(Boolean).join('\n\n');
-  // Preserve <think> tags in display text so they render in the UI
+  const thinking = matches.map(m => m[2].trim()).filter(Boolean).join('\n\n');
+  // Preserve think tags in display text so they render in the UI
   const text = input.trim();
   return { text, thinking };
 }

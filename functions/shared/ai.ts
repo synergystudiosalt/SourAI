@@ -167,7 +167,7 @@ export const MODEL_ROUTES: Record<string, ModelRoute> = {
   'sour-intelligence': { provider: 'groq', model: 'llama-3.3-70b-versatile' },
   'sour-ultra': { provider: 'gemini', model: 'gemini-3.5-flash-lite' },
   'sour-overclock': { provider: 'cerebras', model: 'zai-glm-4.7' },
-  'sour-ultracode': { provider: 'gemini', model: 'gemini-3.6-flash' },
+  'sour-overcode': { provider: 'gemini', model: 'gemini-3.6-flash' },
 };
 
 const DEFAULT_ROUTE: ModelRoute = MODEL_ROUTES['sour-omni-flash'];

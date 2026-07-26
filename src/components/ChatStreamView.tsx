@@ -88,7 +88,7 @@ const TypewriterMessage: React.FC<TypewriterMessageProps> = ({
   const { cleanText } = extractQuestionBlocks(displayedContent);
 
   // Speed and thinking duration based on model tier
-  const fastModels = ['sour-omni-flash', 'sour-overclock', 'sour-ultracode'] as const;
+  const fastModels = ['sour-omni-flash', 'sour-overclock', 'sour-overcode'] as const;
   const modelSpeed = (fastModels as readonly string[]).includes(selectedModel) ? 14 : 26;
   const thinkingDuration = (fastModels as readonly string[]).includes(selectedModel) ? 900 : 1800;
 
@@ -623,7 +623,7 @@ export const ChatStreamView: React.FC<ChatStreamViewProps> = ({
     'sour-intelligence': 'Intelligence',
     'sour-ultra': 'Ultra',
     'sour-overclock': 'Overclock',
-    'sour-ultracode': 'UltraCode',
+    'sour-overcode': 'OverCode',
   };
   const modelDisplayName = MODEL_DISPLAY[selectedModel] || selectedModel;
 
