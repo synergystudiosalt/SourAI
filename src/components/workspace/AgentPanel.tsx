@@ -444,17 +444,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   const subAgentResolversRef = useRef<Map<string, () => void>>(new Map());
 
   useEffect(() => {
-    if (!showAttachmentPopover) return;
-    const onPointerDown = (e: MouseEvent) => {
-      if (attachmentPopoverRef.current && !attachmentPopoverRef.current.contains(e.target as Node)) {
-        setShowAttachmentPopover(false);
-      }
-    };
-    window.addEventListener('mousedown', onPointerDown);
-    return () => window.removeEventListener('mousedown', onPointerDown);
-  }, [showAttachmentPopover]);
-
-  useEffect(() => {
     try {
       const raw = localStorage.getItem(`sourbot_agent_thread::${projectId}`);
       setMessages(raw ? JSON.parse(raw) : []);

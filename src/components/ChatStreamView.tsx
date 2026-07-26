@@ -14,15 +14,15 @@ import {
   MicOff,
   X,
   Paperclip,
-  Code2,
+
   Volume2,
   VolumeX,
   ThumbsUp,
   ThumbsDown,
   RotateCw,
-  Clock,
+
   Sparkles,
-  FileText,
+
   Download,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -374,13 +374,13 @@ export const ChatStreamView: React.FC<ChatStreamViewProps> = ({
   const showQuestions = pendingQuestions.length > 0 && !isGenerating && !questionDismissed;
 
   // Reset dismissed when new assistant content arrives
-  const currentAssistantContent = lastAssistantMsg?.content || '';
-  if (lastQuestionContentRef.current !== currentAssistantContent) {
-    lastQuestionContentRef.current = currentAssistantContent;
-    if (questionDismissed) setQuestionDismissed(false);
-  }
-
-
+  useEffect(() => {
+    const currentContent = lastAssistantMsg?.content || '';
+    if (lastQuestionContentRef.current !== currentContent) {
+      lastQuestionContentRef.current = currentContent;
+      if (questionDismissed) setQuestionDismissed(false);
+    }
+  });
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(true);
@@ -537,18 +537,11 @@ export const ChatStreamView: React.FC<ChatStreamViewProps> = ({
         recognitionRef.current = recognition;
         setIsRecording(true);
       } catch (err) {
-        setIsRecording(true);
-        setTimeout(() => {
-          setInputText((prev) => (prev ? prev + ' ' : '') + 'Can you explain quantum physics in simple terms?');
-          setIsRecording(false);
-        }, 2000);
+        console.error('Speech recognition failed to start:', err);
+        setIsRecording(false);
       }
     } else {
-      setIsRecording(true);
-      setTimeout(() => {
-        setInputText((prev) => (prev ? prev + ' ' : '') + 'Can you explain quantum physics in simple terms?');
-        setIsRecording(false);
-      }, 2000);
+      console.warn('Speech recognition is not supported in this browser');
     }
   };
 

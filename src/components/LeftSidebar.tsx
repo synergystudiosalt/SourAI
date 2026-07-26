@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { PanelLeft, Plus, MessageSquare, Code, Search, Settings, Sun, Moon, Sparkles, X, Trash2, ArrowUpRight, Folder } from 'lucide-react';
+import { PanelLeft, Plus, MessageSquare, Code, Search, Sun, Moon, X, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Conversation } from '../types';
 import Logo from './Logo';

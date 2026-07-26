@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, Mic, ChevronDown, ArrowUp, X, MicOff, Paperclip, Code2, FileText, FileCode, Square } from 'lucide-react';
+import { Plus, Mic, ChevronDown, ArrowUp, X, MicOff, Square } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AIModel, AttachmentItem } from '../types';
 import { ModelSelectorPopover } from './ModelSelectorPopover';

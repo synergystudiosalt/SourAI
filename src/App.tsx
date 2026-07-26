@@ -491,10 +491,7 @@ export default function App() {
       <div className="flex-1 h-screen flex flex-col justify-between overflow-hidden relative bg-[#faf9f6] dark:bg-[#121212] text-[#1c1b1a] dark:text-[#f0efe6] transition-colors duration-200">
         {/* Top Bar Navigation */}
         {activeView !== 'code' && (
-          <TopBar
-            onOpenUpgrade={() => setIsUpgradeOpen(true)}
-            messageUnitsUsed={messageUnitsUsed}
-          />
+          <TopBar />
         )}
 
         {/* View Switcher with Smooth Blurry Motion Transitions */}
