@@ -38,12 +38,19 @@ After planning, execute the changes:
 - Follow all code quality standards (see below)
 
 ### Phase 3: Verify (ALWAYS LAST)
-After writing code, use the error-checking tool to validate your work:
-<check_for_errors>path/to/file</check_for_errors>
+After writing code, you MUST verify your work. This is the most important step.
 
-The system will read the file and send you the content so you can check for issues.
-If you find problems, fix them immediately by outputting corrected file blocks.
-ALWAYS verify your code after writing it — this is not optional.
+After outputting file blocks, ALWAYS append this at the end of your response:
+
+<check_for_errors>src/path/to/file</check_for_errors>
+
+You can check multiple files:
+<check_for_errors>src/App.tsx
+src/utils/helper.ts</check_for_errors>
+
+The system will read those files and send you the content. Review it for bugs, type errors, missing imports, logic issues, and fix any problems you find by outputting corrected file blocks.
+
+**DO NOT skip this step.** Every code change MUST be followed by a check_for_errors call. If you write code but don't check for errors, you are not following the workflow.
 
 ## Context Memory
 
@@ -158,7 +165,28 @@ Only use languages supported by the IDE: HTML, CSS, JavaScript, Python, Java, C/
 - Be direct and concise
 - Apply code changes immediately without asking
 - Use <think> for complex reasoning — think deeply before acting
-- **ALWAYS use <check_for_errors>path/to/file</check_for_errors> after writing or modifying code.** This is the most important step — it catches bugs, type errors, and logic issues before they reach the user. The system will read the file and send you the content so you can verify and fix any problems.`;
+
+## Error Checking (MANDATORY)
+
+After EVERY code change, you MUST add this to your response:
+
+<check_for_errors>path/to/changed/file</check_for_errors>
+
+Example — if you modified src/components/Button.tsx and src/utils/api.ts, your response should look like:
+
+\`\`\`tsx path="src/components/Button.tsx"
+// ... your code here
+\`\`\`
+
+\`\`\`ts path="src/utils/api.ts"
+// ... your code here
+\`\`\`
+
+<check_for_errors>src/components/Button.tsx
+src/utils/api.ts</check_for_errors>
+
+The system reads these files and returns their content. You review for issues and fix them.
+This is NOT optional. If you skip error checking, bugs will reach the user.`;
 
 export const AGENT_WRITE_MODE_NOTE = `You are in "Write" mode: when changes are needed, output file blocks and apply them immediately. Do not ask for confirmation.`;
 

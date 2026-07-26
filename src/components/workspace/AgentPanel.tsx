@@ -948,7 +948,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                         }
                         const { toolCalls: checkCalls, resultText: checkText } = resolveFileRequests(paths);
                         turnToolCalls.push(...checkCalls);
-                        checkResultParts.push(`[Error check requested: ${content}]\n${checkText}`);
+              checkResultParts.push(`[DIAGNOSTIC — check_for_errors result for: ${content}]\n${checkText}\n\nReview the above file content. If you find any bugs, type errors, missing imports, or logic issues, output corrected file blocks to fix them. If everything looks correct, confirm with a brief message.`);
                       }
 
                       allToolCalls = [...allToolCalls, ...turnToolCalls];
@@ -1023,7 +1023,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
               }
               const { toolCalls: checkCalls, resultText: checkText } = resolveFileRequests(paths);
               turnToolCalls.push(...checkCalls);
-              checkResultParts.push(`[Error check requested: ${content}]\n${checkText}`);
+              checkResultParts.push(`[DIAGNOSTIC — check_for_errors result for: ${content}]\n${checkText}\n\nReview the above file content. If you find any bugs, type errors, missing imports, or logic issues, output corrected file blocks to fix them. If everything looks correct, confirm with a brief message.`);
             }
 
             allToolCalls = [...allToolCalls, ...turnToolCalls];
