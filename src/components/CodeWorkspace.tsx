@@ -20,7 +20,7 @@ import {
   writeRealFile, createRealFolder, deleteRealEntry, renameRealEntry,
 } from '../utils/realFs';
 import { getLanguageName, isLikelyBinary, getFileIconMeta } from '../utils/languageMeta';
-import { buildPreviewDocument, getPreviewKind } from '../utils/webPreview';
+import { buildPreviewDocument, getPreviewKind, buildReactPreview, isReactProject } from '../utils/webPreview';
 
 interface CodeWorkspaceProps {
   isDarkMode: boolean;
@@ -107,12 +107,13 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
   const activeNode = useMemo(() => findNode(tree, activeTabPath), [tree, activeTabPath]);
   const dirtyPaths = useMemo(() => new Set(openTabs.filter((t) => t.isDirty).map((t) => t.path)), [openTabs]);
   // Preview is strictly per active tab: only show the preview button when the
-  // currently open file is itself a previewable type (HTML, Markdown, SVG).
-  // No fallback to index.html — each file owns its own preview independently.
+  // currently open file is itself a previewable type (HTML, Markdown, SVG, React).
   const previewKind = useMemo(() => {
     if (!activeNode || activeNode.type !== 'file') return null;
-    return getPreviewKind(activeNode.name);
-  }, [activeNode]);
+    const kind = getPreviewKind(activeNode.name);
+    if (kind === 'react' && isReactProject(allFiles)) return 'react';
+    return kind;
+  }, [activeNode, allFiles]);
   const htmlEntry = previewKind ? activeNode ?? null : null;
   // Whether *this specific file tab* currently has its preview toggled on.
   const showPreview = Boolean(activeTabPath && previewOpenPaths.has(activeTabPath));
@@ -126,9 +127,15 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
     });
   };
   const previewDoc = useMemo(() => {
-    if (!showPreview || !htmlEntry || previewKind !== 'html') return '';
+    if (!showPreview || !htmlEntry) return '';
     try {
-      return buildPreviewDocument(tree, htmlEntry);
+      if (previewKind === 'react') {
+        return buildReactPreview(tree, htmlEntry);
+      }
+      if (previewKind === 'html') {
+        return buildPreviewDocument(tree, htmlEntry);
+      }
+      return '';
     } catch (err) {
       console.error('Failed to build preview document', err);
       return '';
@@ -695,7 +702,7 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
                       <button onClick={() => setPreviewNonce((n) => n + 1)} title="Refresh preview" className="cursor-pointer hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] blurry-hover">
                         <RotateCw className="w-3 h-3" />
                       </button>
-                      {previewKind === 'html' && (
+                      {(previewKind === 'html' || previewKind === 'react') && (
                         <button
                           onClick={() => {
                             const blob = new Blob([previewDoc], { type: 'text/html' });
@@ -711,7 +718,7 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
                       )}
                     </div>
                   </div>
-                  {previewKind === 'html' && (
+                  {(previewKind === 'html' || previewKind === 'react') && (
                     <iframe
                       key={previewNonce}
                       srcDoc={previewDoc}
