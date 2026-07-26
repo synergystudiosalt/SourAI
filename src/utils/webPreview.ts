@@ -158,62 +158,48 @@ function collectModules(
   return modules;
 }
 
-/** Transform a single module's source: replace bare imports with global refs, strip CSS imports. */
+/** Transform a single module's source: replace bare imports with global refs, strip all imports/exports. */
 function transformModuleSource(source: string): string {
   let out = source;
 
   // Strip CSS imports
   out = out.replace(CSS_IMPORT_RE, '\n');
 
-  // Replace bare imports with global variable references
-  // import React from 'react'          →  const React = window.React;
-  // import { useState } from 'react'   →  const { useState } = window.React;
-  // import * as React from 'react'      →  const React = window.React;
-  // import ReactDOM from 'react-dom/client' → const ReactDOM = window.ReactDOM.createRoot;
-
-  out = out.replace(
-    /(?:^|\n)\s*import\s+(\w+(?:\s*,\s*\{[^}]*\})?)\s+from\s+['"]([^'"]+)['"];?\s*/g,
-    (_match: string, bindings: string, specifier: string) => {
-      if (BARE_IMPORT_MAP[specifier]) {
-        // Check for destructured import like: React, { useState }
-        const parts = bindings.split(',').map((s: string) => s.trim());
-        const statements: string[] = [];
-        for (const part of parts) {
-          if (part.startsWith('{')) {
-            // Named import: { useState, useEffect } → const { useState, useEffect } = window.React;
-            statements.push(`const ${part} = window.${specifier === 'react' ? 'React' : specifier === 'react-dom/client' ? 'ReactDOM' : specifier === 'react-dom' ? 'ReactDOM' : 'React'};`);
-          } else if (part.startsWith('*')) {
-            // Namespace import: * as React → const React = window.React;
-            const name = part.replace('* as ', '').trim();
-            statements.push(`const ${name} = window.${specifier === 'react' ? 'React' : specifier === 'react-dom/client' ? 'ReactDOM' : 'React'};`);
-          } else {
-            // Default import: React → const React = window.React;
-            const globalName = specifier === 'react-dom/client' ? 'ReactDOM'
-              : specifier === 'react-dom' ? 'ReactDOM'
-              : specifier === 'react' ? 'React'
-              : specifier;
-            statements.push(`const ${part} = window.${globalName};`);
-          }
-        }
-        return '\n' + statements.join('\n') + '\n';
+  // Step 1: Replace bare (non-relative) named/default imports with global variable refs.
+  //   import React from 'react'            → const React = window.React;
+  //   import { useState } from 'react'     → const { useState } = window.React;
+  //   import ReactDOM from 'react-dom/client' → const ReactDOM = window.ReactDOM;
+  //   import * as R from 'react'            → const R = window.React;
+  const bareImportRe = /(?:^|\n)\s*import\s+(?:(\w+(?:\s*,\s*\{[^}]*\})?|\{[^}]*\}|\*\s+as\s+\w+)\s+from\s+)?['"]([^'"]+)['"];?/gm;
+  out = out.replace(bareImportRe, (_match: string, bindings: string | undefined, specifier: string) => {
+    if (!specifier.startsWith('.') && BARE_IMPORT_MAP[specifier]) {
+      if (!bindings) return '\n'; // side-effect import like `import 'react'`
+      const globalName = specifier === 'react' ? 'React'
+        : (specifier === 'react-dom/client' || specifier === 'react-dom') ? 'ReactDOM'
+        : specifier;
+      // Named imports: { useState, useEffect }
+      if (bindings.startsWith('{')) {
+        return `\nconst ${bindings} = window.${globalName};\n`;
       }
-      return _match; // Leave non-bare imports for module resolution
+      // Namespace: * as R
+      if (bindings.startsWith('*')) {
+        const name = bindings.replace('* as ', '').trim();
+        return `\nconst ${name} = window.${globalName};\n`;
+      }
+      // Default: React
+      return `\nconst ${bindings} = window.${globalName};\n`;
     }
-  );
+    return '\n'; // strip ALL other imports (relative, CSS, unknown)
+  });
 
-  // Handle: import 'some-package' (side-effect imports)
-  out = out.replace(
-    /(?:^|\n)\s*import\s+['"]([^'"]+)['"];?\s*/g,
-    (_match: string, specifier: string) => {
-      if (BARE_IMPORT_MAP[specifier]) return '\n';
-      return _match;
-    }
-  );
+  // Strip: import 'some-package' (side-effect only)
+  out = out.replace(/(?:^|\n)\s*import\s*['"][^'"]+['"];?\s*/gm, '\n');
 
-  // Handle: export default / export const / export function
-  // Convert to plain assignments so they're in scope for the parent
+  // Strip: export ...
   out = out.replace(/export\s+default\s+/g, 'var __default__ = ');
-  out = out.replace(/export\s+(?:const|let|var|function)\s+/g, '$1 ');
+  out = out.replace(/export\s+(?:const|let|var|function|class)\s+/g, '$1 ');
+  out = out.replace(/export\s+\{[^}]*\};?\s*/g, '');
+  out = out.replace(/export\s+/g, '');
 
   return out;
 }
