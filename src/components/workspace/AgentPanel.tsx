@@ -167,11 +167,11 @@ const ExpandableTag: React.FC<{
         <button
           type="button"
           onClick={() => onToggle(id)}
-          className={`flex items-center gap-1 text-[9px] font-medium ${color} hover:opacity-80 cursor-pointer ws-button-smooth`}
+          className={`flex items-center gap-1.5 text-[10.5px] font-medium ${color} hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth`}
         >
-          <Icon className="w-2.5 h-2.5 shrink-0" />
+          <Icon className="w-3 h-3 shrink-0" />
           <span>{label}</span>
-          <ChevronDown className={`w-2.5 h-2.5 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+          <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
         </button>
         <AnimatePresence>
           {isOpen && (
@@ -180,7 +180,7 @@ const ExpandableTag: React.FC<{
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
               transition={{ duration: 0.15 }}
-              className="mt-0.5 pl-1 text-[9px] text-[#8c887d] dark:text-[#a09c94] leading-relaxed overflow-hidden"
+              className="mt-1.5 pl-2 border-l border-[#e2dec0] dark:border-[#383836] text-[10.5px] text-[#706c62] dark:text-[#a09d98] leading-relaxed overflow-hidden"
             >
               {content}
             </motion.div>
@@ -1203,15 +1203,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           <Logo size={12} /> sour.ai Agent
         </div>
 
-        {msg.thinking && (
-          <div className="select-none">
-            <div className="flex items-center gap-1 text-[9px] font-medium text-[#97948A] dark:text-[#97948A] py-0.5">
-              <Lightbulb className="w-2.5 h-2.5 shrink-0" />
-              <span>{msg.thinkingLabel || msg.thinking}</span>
-            </div>
-          </div>
-        )}
-
         {msg.toolCalls && msg.toolCalls.length > 0 && msg.toolCalls.map((tc, ti) => {
           const tcId = `${msg.id}-tc-${ti}`;
           const isReading = msg.isReadingFiles;
@@ -1303,20 +1294,20 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
               <button
                 type="button"
                 onClick={() => !isCoding && toggleToolCalls(opId)}
-                className="w-full flex items-center gap-1.5 px-2.5 py-1.5 bg-[#f5f3eb] dark:bg-[#252524] border-b border-[#e5e3db] dark:border-[#2d2d2c] text-[10px] font-mono text-[#706c62] dark:text-[#a09c94] hover:bg-[#efece3] dark:hover:bg-[#2a2a29] cursor-pointer ws-button-smooth"
+                className="w-full flex items-center gap-1.5 px-2.5 py-1.5 bg-[#f5f3eb] dark:bg-[#252524] border-b border-[#e5e3db] dark:border-[#2d2d2c] text-[10.5px] text-[#706c62] dark:text-[#a09c94] hover:bg-[#efece3] dark:hover:bg-[#2a2a29] cursor-pointer ws-button-smooth"
               >
                 {isCoding ? (
-                  <Loader2 className="w-2.5 h-2.5 animate-spin shrink-0" />
+                  <Loader2 className="w-3 h-3 animate-spin shrink-0" />
                 ) : op.type === 'delete' ? (
-                  <Trash2 className="w-2.5 h-2.5 text-red-500 shrink-0" />
+                  <Trash2 className="w-3 h-3 text-red-500 shrink-0" />
                 ) : (
-                  <span className="text-[8px] font-bold uppercase shrink-0" style={{ color: dotColor }}>{ext || '?'}</span>
+                  <FilePlus className="w-3 h-3 shrink-0" style={{ color: dotColor }} />
                 )}
                 <span className="truncate flex-1 text-left">
                   {dirPath && <span className="opacity-50">{dirPath}/</span>}
                   <span className="font-medium text-[#1c1b1a] dark:text-[#f0efe6]">{fileName}</span>
                 </span>
-                {!isCoding && <ChevronDown className={`w-2.5 h-2.5 transition-transform duration-200 shrink-0 ${isOpen ? 'rotate-180' : ''}`} />}
+                {!isCoding && <ChevronDown className={`w-3 h-3 transition-transform duration-200 shrink-0 ${isOpen ? 'rotate-180' : ''}`} />}
               </button>
               {/* Expanded content */}
               <AnimatePresence>
@@ -1328,19 +1319,15 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                     transition={{ duration: 0.15 }}
                     className="overflow-hidden"
                   >
-                    {applied ? (
-                      <div className="px-2.5 py-1.5 text-[10px] text-emerald-700 dark:text-emerald-400 bg-emerald-50/50 dark:bg-emerald-950/10">
-                        Applied
-                      </div>
-                    ) : op.type === 'delete' ? (
-                      <div className="px-2.5 py-1.5 text-[10px] text-red-600 dark:text-red-400 bg-red-50/50 dark:bg-red-950/10">
+                    {op.type === 'delete' ? (
+                      <div className="px-2.5 py-1.5 text-[10.5px] text-red-600 dark:text-red-400 bg-red-50/50 dark:bg-red-950/10">
                         Will delete this file
                       </div>
                     ) : lines.length > 0 ? (
                       <div className="h-48 overflow-y-auto thin-scrollbar">
                         {lines.map((line, li) => (
-                          <div key={li} className="flex items-stretch hover:bg-[#efece3] dark:hover:bg-[#2a2a29]">
-                            <div className="w-0.5 shrink-0 bg-emerald-400/40 dark:bg-emerald-500/30" />
+                          <div key={li} className="flex items-stretch">
+                            <div className={`w-0.5 shrink-0 ${applied ? 'bg-blue-400/30 dark:bg-blue-500/20' : 'bg-emerald-400/40 dark:bg-emerald-500/30'}`} />
                             <pre className="flex-1 px-2.5 py-[1px] font-mono text-[10px] leading-[1.7] text-[#1c1b1a] dark:text-[#e0dcd4] whitespace-pre">{line || ' '}</pre>
                           </div>
                         ))}
