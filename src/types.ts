@@ -116,27 +116,10 @@ export interface AgentChatMessage {
   thinking?: string;
   /** Short, human-friendly label describing what the reasoning above was doing. */
   thinkingLabel?: string;
-  /** Sub-agent tasks this message spawned (populated when the agent delegates work). */
-  subAgents?: SubAgentTask[];
   /** Tool calls (readfile / findall) the agent made before its final answer. */
   toolCalls?: AgentToolCall[];
   /** True while the client is resolving tool calls and waiting for the second LLM turn. */
   isReadingFiles?: boolean;
-}
-
-export type SubAgentStatus = 'queued' | 'running' | 'done' | 'error';
-
-/** A single autonomous sub-agent task spawned by the main sour.ai Agent. */
-export interface SubAgentTask {
-  id: string;
-  /** Short description of what the sub-agent was asked to do. */
-  label: string;
-  status: SubAgentStatus;
-  /** Number of files the sub-agent ended up changing, once done. */
-  fileCount?: number;
-  error?: string;
-  /** Summary of what the sub-agent produced (display text + files changed). */
-  result?: { displayText: string; filesChanged: string[] };
 }
 
 // Minimal ambient augmentation for the File System Access API so the

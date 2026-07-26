@@ -8,7 +8,6 @@ import { AgentFileOp } from '../types';
 
 const FILE_BLOCK_RE = /```[ \t]*([\w+-]*)[ \t]*path=["']([^"'\n]+)["'][^\n]*\n([\s\S]*?)\n?```/g;
 const DELETE_RE = /^@@delete:\s*(.+?)\s*$/gm;
-const SUBAGENT_RE = /^@@subagent:\s*(.+?)\s*$/gm;
 const READFILE_RE = /^@@readfile:\s*(.+?)\s*$/gm;
 const FINDALL_RE = /^@@findall:\s*(.+?)\s*$/gm;
 const LISTDIR_RE = /^@@listdir:\s*(.+?)\s*$/gm;
@@ -48,7 +47,6 @@ export function extractPathsFromCheckContent(content: string): string[] {
 export interface ParsedAgentResponse {
   displayText: string;
   ops: AgentFileOp[];
-  subAgentTasks: string[];
   fileRequests: string[];
   findRequests: string[];
   listDirRequests: string[];
@@ -67,7 +65,6 @@ export interface ParsedAgentResponse {
 
 export function parseAgentResponse(raw: string): ParsedAgentResponse {
   const ops: AgentFileOp[] = [];
-  const subAgentTasks: string[] = [];
 
   // Don't strip <think> or <check_for_errors> tags — they are visible to the user.
   // Only extract file blocks, delete markers, tool requests, and subagent directives.
@@ -84,12 +81,6 @@ export function parseAgentResponse(raw: string): ParsedAgentResponse {
   text = text.replace(DELETE_RE, (_match, rawPath: string) => {
     const path = normalizePath(rawPath);
     if (path) ops.push({ type: 'delete', path });
-    return '';
-  });
-
-  text = text.replace(SUBAGENT_RE, (_match, taskDescription: string) => {
-    const task = taskDescription.trim();
-    if (task) subAgentTasks.push(task);
     return '';
   });
 
@@ -202,7 +193,7 @@ export function parseAgentResponse(raw: string): ParsedAgentResponse {
 
   text = text.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
 
-  return { displayText: text, ops, subAgentTasks, fileRequests, findRequests, listDirRequests, globRequests, fileInfoRequests, checkErrorsContent, contextStore, contextGet, contextList, contextClear, replaceRequests, searchImportsRequests, renameRequests, todoItems };
+  return { displayText: text, ops, fileRequests, findRequests, listDirRequests, globRequests, fileInfoRequests, checkErrorsContent, contextStore, contextGet, contextList, contextClear, replaceRequests, searchImportsRequests, renameRequests, todoItems };
 }
 
 /** Strips large file blocks from a previously-sent assistant message before resending it as history, to keep payloads small. */

@@ -9,10 +9,8 @@ import {
 import { AttachmentPopover } from '../AttachmentPopover';
 import { AttachmentItem } from '../../types';
 import { parseUploadedFile } from '../../utils/fileParser';
-import { AgentChatMessage, AgentFileOp, AgentMode, AgentToolCall, AIModel, SubAgentTask, WorkspaceFileNode } from '../../types';
+import { AgentChatMessage, AgentFileOp, AgentMode, AgentToolCall, AIModel, WorkspaceFileNode } from '../../types';
 import { parseAgentResponse, summarizeForHistory, extractMentionedPaths, extractPathsFromCheckContent } from '../../utils/agentProtocol';
-import { shouldUseSubagents, planSubagent, formatSubagentPrompt } from '../../utils/subagentDetection';
-import { MAX_CONCURRENT_SUBAGENTS } from '../../utils/constants';
 import { customApiManager, type CustomApiConfig } from '../../utils/customApiManager';
 import { VoiceRecognizer } from '../../utils/voiceRecognition';
 import { apiUrl } from '../../lib/api';
@@ -127,8 +125,6 @@ const KNOWN_TAGS: Record<string, { label: string; Icon: TagIcon; color: string; 
     THINK_TAGS.map(t => [t, { label: 'Thinking', Icon: Lightbulb, color: 'text-[#97948A] dark:text-[#97948A]', bg: '', border: '' }])
   ),
   check_for_errors:  { label: 'Error Check',     Icon: CheckCircle,   color: 'text-[#97948A] dark:text-[#97948A]', bg: 'bg-[#f5f3eb] dark:bg-[#1f1f1e]', border: 'border-[#97948A] dark:border-[#97948A]' },
-  subagent_request:  { label: 'Subagent Request', Icon: Bot,          color: 'text-[#97948A] dark:text-[#97948A]', bg: 'bg-[#f5f3eb] dark:bg-[#1f1f1e]', border: 'border-[#97948A] dark:border-[#97948A]' },
-  subagent_response: { label: 'Subagent Response', Icon: ClipboardList, color: 'text-blue-500 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-950/30', border: 'border-blue-500 dark:border-blue-400' },
   function_request:  { label: 'Function Request', Icon: Settings,     color: 'text-[#8c887d] dark:text-[#a09c94]', bg: 'bg-[#f5f3eb] dark:bg-[#1f1f1e]', border: 'border-[#8c887d] dark:border-[#a09c94]' },
   function_result:   { label: 'Function Result',  Icon: BarChart3,    color: 'text-[#8c887d] dark:text-[#a09c94]', bg: 'bg-[#f5f3eb] dark:bg-[#1f1f1e]', border: 'border-[#8c887d] dark:border-[#a09c94]' },
   context_compact:   { label: 'Context Compacted', Icon: Package,      color: 'text-purple-500 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-950/30', border: 'border-purple-500 dark:border-purple-400' },
@@ -315,13 +311,6 @@ const TypedMarkdown: React.FC<{ text: string; enabled: boolean }> = ({ text, ena
   return <MiniMarkdown text={shown} />;
 };
 
-const SUBAGENT_STATUS_LABEL: Record<SubAgentTask['status'], string> = {
-  queued: 'Queued',
-  running: 'Working…',
-  done: 'Done',
-  error: 'Failed',
-};
-
 export const AgentPanel: React.FC<AgentPanelProps> = ({
   isDarkMode,
   isCollapsed,
@@ -348,8 +337,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   const [showSlash, setShowSlash] = useState(false);
   const [openXmlTags, setOpenXmlTags] = useState<Set<string>>(new Set());
   const [openToolCalls, setOpenToolCalls] = useState<Set<string>>(new Set());
-  const [subAgents, setSubAgents] = useState<SubAgentTask[]>([]);
-  const subAgentsRef = useRef<SubAgentTask[]>([]);
   const [todoItems, setTodoItems] = useState<{ id: string; text: string; priority: string; done: boolean }[]>([]);
 
   // Context usage calculation
@@ -370,8 +357,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     return Math.min(100, Math.round((totalChars / MAX_CONTEXT_CHARS) * 100));
   }, [messages, input]);
 
-  // Keep ref in sync so spawnSubAgents Promise can read latest state
-  useEffect(() => { subAgentsRef.current = subAgents; }, [subAgents]);
   const [showAttachmentPopover, setShowAttachmentPopover] = useState(false);
   const [agentAttachments, setAgentAttachments] = useState<AttachmentItem[]>([]);
   const attachmentPopoverRef = useRef<HTMLDivElement>(null);
@@ -448,19 +433,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
 
     return { promptToSend: modifiedText, autoCalledFunctions };
   };
-
-  /** Check if a request warrants subagent delegation with parent approval. */
-  const shouldSuggestSubagents = (userText: string): boolean => {
-    const plan = planSubagent(userText);
-    return plan !== null && plan.risk !== 'low';
-  };
-
-  // Hard cap enforcement for autonomous sub-agents: at most
-  // MAX_CONCURRENT_SUBAGENTS run at once, extras wait in this queue.
-  const subAgentQueueRef = useRef<{ task: SubAgentTask; prompt: string }[]>([]);
-  const runningSubAgentsRef = useRef(0);
-  /** Maps task ID → resolve callback so spawnSubAgents can await completion. */
-  const subAgentResolversRef = useRef<Map<string, () => void>>(new Map());
 
   useEffect(() => {
     try {
@@ -852,153 +824,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     }
   };
 
-  const runSubAgentTask = async (task: SubAgentTask, prompt: string, parentMsgId: string) => {
-    setSubAgents((prev) => prev.map((t) => (t.id === task.id ? { ...t, status: 'running' } : t)));
-
-    const knownPaths = files.map((f) => f.path);
-    try {
-      const res = await fetch(apiUrl('/api/agent'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: selectedModel,
-          mode,
-          messages: [{ role: 'user', content: `Sub-agent task (delegated by the main agent): ${prompt}` }],
-          activeFile: activeFile ? { path: activeFile.path, content: activeFile.content.slice(0, 8000) } : null,
-          projectFiles: knownPaths.slice(0, 300),
-          mentionedFiles: [],
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || 'Sub-agent failed to respond.');
-
-      const parsed = parseAgentResponse(data.text || '');
-      let finalParsed = parsed;
-      let finalData = data;
-
-      // Tool-call loop for sub-agents
-      if (parsed.fileRequests.length > 0 || parsed.findRequests.length > 0) {
-        const { toolCalls: readCalls, resultText: readText } = resolveFileRequests(parsed.fileRequests);
-        const { toolCalls: findCalls, resultText: findText } = resolveFindRequests(parsed.findRequests);
-        const toolCalls = [...readCalls, ...findCalls];
-        const resultText = [readText, findText].filter(Boolean).join('\n\n');
-        const subMsgId = genId();
-        const interimSubMsg: AgentChatMessage = {
-          id: subMsgId,
-          role: 'assistant',
-          content: '',
-          ops: [],
-          appliedPaths: [],
-          codingPaths: [],
-          thinking: data.thinking,
-          thinkingLabel: data.thinkingLabel,
-          toolCalls,
-          isReadingFiles: true,
-          createdAt: Date.now(),
-        };
-        freshMessageIdsRef.current.add(subMsgId);
-        setMessages((prev) => [...prev, interimSubMsg]);
-
-        const res2 = await fetch(apiUrl('/api/agent'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: selectedModel,
-            mode,
-            messages: [
-              { role: 'user', content: `Sub-agent task (delegated by the main agent): ${prompt}` },
-              { role: 'assistant', content: data.text || '' },
-              { role: 'user', content: resultText },
-            ],
-            activeFile: activeFile ? { path: activeFile.path, content: activeFile.content.slice(0, 8000) } : null,
-            projectFiles: knownPaths.slice(0, 300),
-            mentionedFiles: [],
-          }),
-        });
-        const data2 = await res2.json().catch(() => ({}));
-        if (!res2.ok) throw new Error(data2?.error || 'Sub-agent failed after reading files.');
-        finalParsed = parseAgentResponse(data2.text || '');
-        finalData = data2;
-
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === subMsgId ? { ...m, isReadingFiles: false } : m
-          )
-        );
-      }
-
-      const { displayText, ops } = finalParsed;
-      const willAutoApply = true;
-
-      const subMsg: AgentChatMessage = {
-        id: genId(),
-        role: 'assistant',
-        content: `**Sub-agent — ${task.label}**\n\n${displayText || '_No changes were necessary._'}`,
-        ops,
-        appliedPaths: [],
-        codingPaths: willAutoApply ? ops.map((o) => o.path) : [],
-        thinking: finalData.thinking,
-        thinkingLabel: finalData.thinkingLabel,
-        createdAt: Date.now(),
-      };
-      freshMessageIdsRef.current.add(subMsg.id);
-      setMessages((prev) => [...prev, subMsg]);
-      if (willAutoApply) applyOpsStaggered(subMsg.id, ops);
-
-      setSubAgents((prev) => prev.map((t) => (t.id === task.id ? { ...t, status: 'done', fileCount: ops.length, result: { displayText: displayText || '', filesChanged: ops.map(o => o.path) } } : t)));
-    } catch (err: any) {
-      setSubAgents((prev) => prev.map((t) => (t.id === task.id ? { ...t, status: 'error', error: err?.message } : t)));
-    } finally {
-      const resolver = subAgentResolversRef.current.get(task.id);
-      if (resolver) {
-        subAgentResolversRef.current.delete(task.id);
-        resolver();
-      }
-    }
-  };
-
-  const kickSubAgentQueue = () => {
-    while (runningSubAgentsRef.current < MAX_CONCURRENT_SUBAGENTS && subAgentQueueRef.current.length > 0) {
-      const next = subAgentQueueRef.current.shift()!;
-      runningSubAgentsRef.current += 1;
-      runSubAgentTask(next.task, next.prompt, next.task.id).finally(() => {
-        runningSubAgentsRef.current -= 1;
-        kickSubAgentQueue();
-      });
-    }
-  };
-
-  /** Spawns sub-agents and returns a Promise that resolves when ALL of them
-   *  finish (done or error). The resolved array contains the final task states
-   *  including their result summaries. */
-  const spawnSubAgents = (taskDescriptions: string[]): Promise<SubAgentTask[]> => {
-    const newTasks: SubAgentTask[] = taskDescriptions.map((label) => ({ id: genId(), label, status: 'queued' }));
-    setSubAgents((prev) => [...prev, ...newTasks]);
-    newTasks.forEach((task, idx) => subAgentQueueRef.current.push({ task, prompt: taskDescriptions[idx] }));
-    kickSubAgentQueue();
-
-    return new Promise<SubAgentTask[]>((resolve) => {
-      const taskIds = new Set(newTasks.map((t) => t.id));
-      const checkDone = () => {
-        const snap = subAgentsRef.current;
-        const allDone = newTasks.every((t) => {
-          const live = snap.find((s) => s.id === t.id);
-          return live && (live.status === 'done' || live.status === 'error');
-        });
-        if (allDone) {
-          const results = newTasks.map((t) => snap.find((s) => s.id === t.id) || t);
-          resolve(results);
-        }
-      };
-      // Register resolvers for each task so runSubAgentTask can trigger re-check
-      for (const t of newTasks) {
-        subAgentResolversRef.current.set(t.id, checkDone);
-      }
-      // Also poll in case they finish instantly before resolvers are called
-      checkDone();
-    });
-  };
-
   const MAX_AGENT_TURNS = 50;
 
   const handleSend = async (overrideText?: string) => {
@@ -1141,28 +966,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                     finalDisplayText = finalParsed.displayText || (finalParsed.ops.length ? '' : "I didn't find anything useful to say - try rephrasing that.");
                     allOps = [...allOps, ...finalParsed.ops];
 
-                    if (finalParsed.subAgentTasks.length > 0) {
-                      // Update UI to show subagent work is starting
-                      setMessages((prev) => prev.map((m) => m.id === msgId ? { ...m, isReadingFiles: true } : m));
-                      const completedTasks = await spawnSubAgents(finalParsed.subAgentTasks.slice(0, 8));
-                      // Build a summary of subagent results for the main agent to review
-                      const subagentSummary = completedTasks.map((t) => {
-                        const status = t.status === 'done' ? 'completed' : `failed: ${t.error || 'unknown error'}`;
-                        const files = t.result?.filesChanged?.length
-                          ? `Files changed: ${t.result.filesChanged.join(', ')}` : 'No files changed.';
-                        const preview = t.result?.displayText
-                          ? t.result.displayText.slice(0, 500) : '';
-                        return `[Sub-agent "${t.label}" — ${status}]\n${files}\n${preview}`;
-                      }).join('\n\n');
-                      conversationHistory = [
-                        ...conversationHistory,
-                        { role: 'assistant', content: event.text || streamText },
-                        { role: 'user', content: `[All sub-agents have finished. Review their work and continue with the remaining task.]\n\n${subagentSummary}` },
-                      ];
-                      hasMoreTools = true;
-                      setMessages((prev) => prev.map((m) => m.id === msgId ? { ...m, isReadingFiles: false } : m));
-                    }
-
                     const hasToolCalls = finalParsed.fileRequests.length > 0 || finalParsed.findRequests.length > 0
                       || finalParsed.listDirRequests.length > 0 || finalParsed.globRequests.length > 0 || finalParsed.fileInfoRequests.length > 0
                       || finalParsed.replaceRequests.length > 0 || finalParsed.searchImportsRequests.length > 0 || finalParsed.renameRequests.length > 0;
@@ -1258,27 +1061,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
 
           if (data.thinking) accumulatedThinking = data.thinking;
           if (data.thinkingLabel) accumulatedThinkingLabel = data.thinkingLabel;
-
-          if (parsed.subAgentTasks.length > 0) {
-            // Update UI to show subagent work is starting
-            setMessages((prev) => prev.map((m) => m.id === msgId ? { ...m, isReadingFiles: true } : m));
-            const completedTasks = await spawnSubAgents(parsed.subAgentTasks.slice(0, 8));
-            const subagentSummary = completedTasks.map((t) => {
-              const status = t.status === 'done' ? 'completed' : `failed: ${t.error || 'unknown error'}`;
-              const files = t.result?.filesChanged?.length
-                ? `Files changed: ${t.result.filesChanged.join(', ')}` : 'No files changed.';
-              const preview = t.result?.displayText
-                ? t.result.displayText.slice(0, 500) : '';
-              return `[Sub-agent "${t.label}" — ${status}]\n${files}\n${preview}`;
-            }).join('\n\n');
-            conversationHistory = [
-              ...conversationHistory,
-              { role: 'assistant', content: data.text || '' },
-              { role: 'user', content: `[All sub-agents have finished. Review their work and continue with the remaining task.]\n\n${subagentSummary}` },
-            ];
-            hasMoreTools = true;
-            setMessages((prev) => prev.map((m) => m.id === msgId ? { ...m, isReadingFiles: false } : m));
-          }
 
           const hasToolCalls = parsed.fileRequests.length > 0 || parsed.findRequests.length > 0
             || parsed.listDirRequests.length > 0 || parsed.globRequests.length > 0 || parsed.fileInfoRequests.length > 0
@@ -1737,11 +1519,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
 
   const handleNewThread = () => {
     setMessages([]);
-    setSubAgents([]);
     setAgentAttachments([]);
     freshMessageIdsRef.current.clear();
-    subAgentQueueRef.current = [];
-    runningSubAgentsRef.current = 0;
   };
 
   return (
@@ -1793,36 +1572,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           />
         )}
       </div>
-
-      {/* Sub-agent orchestration indicator: shows currently queued/running/done
-          sub-agents (hard-capped at MAX_CONCURRENT_SUBAGENTS concurrent). */}
-      <AnimatePresence>
-        {subAgents.some((t) => t.status === 'queued' || t.status === 'running') && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            className="border-t border-[#e5e3db] dark:border-[#2d2d2c] px-2 sm:px-3 py-2 space-y-1 sm:space-y-1.5 shrink-0 overflow-hidden"
-          >
-            <div className="flex items-center gap-1 sm:gap-1.5 text-[8px] sm:text-[9.5px] uppercase tracking-wide text-[#a39d8f] dark:text-[#767671]">
-              <Bot className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> Sub-agents ({subAgents.filter((t) => t.status === 'running').length}/{MAX_CONCURRENT_SUBAGENTS})
-            </div>
-            {subAgents
-              .filter((t) => t.status === 'queued' || t.status === 'running')
-              .map((t) => (
-                <div key={t.id} className="flex items-center gap-1 sm:gap-1.5 text-[9px] sm:text-[10.5px] text-[#3d3a33] dark:text-[#dedcd6]">
-                  {t.status === 'running' ? (
-                    <Loader2 className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-[#d96b43] shrink-0 animate-spin" />
-                  ) : (
-                    <span className="inline-flex rounded-full h-1.5 w-1.5 sm:h-2 sm:w-2 bg-[#c7c3b6]" />
-                  )}
-                  <span className="truncate flex-1">{t.label}</span>
-                  <span className="text-[#8c887d] dark:text-[#767671] shrink-0 text-[8px] sm:text-[9px]">{SUBAGENT_STATUS_LABEL[t.status]}</span>
-                </div>
-              ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* Todo List */}
       <AnimatePresence>
