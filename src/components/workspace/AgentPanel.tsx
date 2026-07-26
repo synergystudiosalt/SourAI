@@ -21,6 +21,40 @@ import PixelBowlIcon from '../PixelBowlIcon';
 import { CustomApiModal } from '../CustomApiModal';
 
 
+/** Persistent context memory store keyed by project name. */
+class ContextStore {
+  private key(projectName: string) { return `sourbot_context::${projectName}`; }
+
+  getAll(projectName: string): Record<string, string> {
+    try {
+      const raw = localStorage.getItem(this.key(projectName));
+      return raw ? JSON.parse(raw) : {};
+    } catch { return {}; }
+  }
+
+  set(projectName: string, k: string, v: string) {
+    const all = this.getAll(projectName);
+    all[k] = v;
+    localStorage.setItem(this.key(projectName), JSON.stringify(all));
+  }
+
+  get(projectName: string, k: string): string | undefined {
+    return this.getAll(projectName)[k];
+  }
+
+  remove(projectName: string, k: string) {
+    const all = this.getAll(projectName);
+    delete all[k];
+    localStorage.setItem(this.key(projectName), JSON.stringify(all));
+  }
+
+  clear(projectName: string) {
+    localStorage.removeItem(this.key(projectName));
+  }
+}
+
+const contextStore = new ContextStore();
+
 interface AgentPanelProps {
   isDarkMode: boolean;
   isCollapsed: boolean;
@@ -648,6 +682,42 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     return { toolCalls: [], resultText: parts.join('\n\n') };
   };
 
+  /** Resolves @@context_store: key = value — stores context in persistent memory. */
+  const resolveContextStore = (entries: { key: string; value: string }[]): string => {
+    for (const { key, value } of entries) {
+      contextStore.set(projectName, key, value);
+    }
+    return entries.map(({ key }) => `[Context stored: "${key}"]`).join('\n');
+  };
+
+  /** Resolves @@context_get: key — retrieves stored context. */
+  const resolveContextGet = (keys: string[]): string => {
+    const parts: string[] = [];
+    for (const k of keys) {
+      const val = contextStore.get(projectName, k);
+      parts.push(val !== undefined
+        ? `[Context: "${k}"]\n${val}`
+        : `[Context: "${k}"]\nNot found.`);
+    }
+    return parts.join('\n\n');
+  };
+
+  /** Resolves @@context_list — shows all stored context keys. */
+  const resolveContextList = (): string => {
+    const all = contextStore.getAll(projectName);
+    const keys = Object.keys(all);
+    if (keys.length === 0) return '[Context store is empty]';
+    return `[Stored context keys (${keys.length})]:\n${keys.map(k => `- ${k}`).join('\n')}`;
+  };
+
+  /** Resolves @@context_clear: key — removes a context entry. */
+  const resolveContextClear = (keys: string[]): string => {
+    for (const k of keys) {
+      contextStore.remove(projectName, k);
+    }
+    return keys.map(k => `[Context cleared: "${k}"]`).join('\n');
+  };
+
   /** Sequentially "codes" each file with a short delay so the UI can show a
    *  spinner per-file (rather than instantly marking every file as done). */
   const applyOpsStaggered = async (messageId: string, ops: AgentFileOp[]) => {
@@ -927,8 +997,9 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                     const hasToolCalls = finalParsed.fileRequests.length > 0 || finalParsed.findRequests.length > 0
                       || finalParsed.listDirRequests.length > 0 || finalParsed.globRequests.length > 0 || finalParsed.fileInfoRequests.length > 0;
                     const hasCheckErrors = finalParsed.checkErrorsContent.length > 0;
+                    const hasContextOps = finalParsed.contextStore.length > 0 || finalParsed.contextGet.length > 0 || finalParsed.contextList || finalParsed.contextClear.length > 0;
 
-                    if (hasToolCalls || hasCheckErrors) {
+                    if (hasToolCalls || hasCheckErrors || hasContextOps) {
                       // Resolve all tool types
                       const { toolCalls: readCalls, resultText: readText } = resolveFileRequests(finalParsed.fileRequests);
                       const { toolCalls: findCalls, resultText: findText } = resolveFindRequests(finalParsed.findRequests);
@@ -952,7 +1023,15 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                       }
 
                       allToolCalls = [...allToolCalls, ...turnToolCalls];
-                      const resultText = [readText, findText, listDirText, globText, fileInfoText, ...checkResultParts].filter(Boolean).join('\n\n');
+
+                      // Resolve context operations
+                      const contextResultParts: string[] = [];
+                      if (finalParsed.contextStore.length > 0) contextResultParts.push(resolveContextStore(finalParsed.contextStore));
+                      if (finalParsed.contextGet.length > 0) contextResultParts.push(resolveContextGet(finalParsed.contextGet));
+                      if (finalParsed.contextList) contextResultParts.push(resolveContextList());
+                      if (finalParsed.contextClear.length > 0) contextResultParts.push(resolveContextClear(finalParsed.contextClear));
+
+                      const resultText = [readText, findText, listDirText, globText, fileInfoText, ...checkResultParts, ...contextResultParts].filter(Boolean).join('\n\n');
 
                       setMessages((prev) =>
                         prev.map((m) =>
@@ -1003,8 +1082,9 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           const hasToolCalls = parsed.fileRequests.length > 0 || parsed.findRequests.length > 0
             || parsed.listDirRequests.length > 0 || parsed.globRequests.length > 0 || parsed.fileInfoRequests.length > 0;
           const hasCheckErrors = parsed.checkErrorsContent.length > 0;
+          const hasContextOps = parsed.contextStore.length > 0 || parsed.contextGet.length > 0 || parsed.contextList || parsed.contextClear.length > 0;
 
-          if (hasToolCalls || hasCheckErrors) {
+          if (hasToolCalls || hasCheckErrors || hasContextOps) {
             const { toolCalls: readCalls, resultText: readText } = resolveFileRequests(parsed.fileRequests);
             const { toolCalls: findCalls, resultText: findText } = resolveFindRequests(parsed.findRequests);
             const { resultText: listDirText } = resolveListDirRequests(parsed.listDirRequests);
@@ -1027,7 +1107,15 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
             }
 
             allToolCalls = [...allToolCalls, ...turnToolCalls];
-            const resultText = [readText, findText, listDirText, globText, fileInfoText, ...checkResultParts].filter(Boolean).join('\n\n');
+
+            // Resolve context operations
+            const contextResultParts: string[] = [];
+            if (parsed.contextStore.length > 0) contextResultParts.push(resolveContextStore(parsed.contextStore));
+            if (parsed.contextGet.length > 0) contextResultParts.push(resolveContextGet(parsed.contextGet));
+            if (parsed.contextList) contextResultParts.push(resolveContextList());
+            if (parsed.contextClear.length > 0) contextResultParts.push(resolveContextClear(parsed.contextClear));
+
+            const resultText = [readText, findText, listDirText, globText, fileInfoText, ...checkResultParts, ...contextResultParts].filter(Boolean).join('\n\n');
 
             setMessages((prev) =>
               prev.map((m) =>
@@ -1359,6 +1447,15 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     );
   };
 
+  const handleNewThread = () => {
+    setMessages([]);
+    setSubAgents([]);
+    setAgentAttachments([]);
+    freshMessageIdsRef.current.clear();
+    subAgentQueueRef.current = [];
+    runningSubAgentsRef.current = 0;
+  };
+
   return (
     <div className="w-full lg:w-72 h-full border-r border-[#e5e3db] dark:border-[#2d2d2c] flex flex-col bg-[#fbfaf7] dark:bg-[#1e1e1e] select-none shrink-0 relative">
       <div className="h-8 sm:h-9 border-b border-[#e5e3db] dark:border-[#2d2d2c] flex items-center justify-between px-2 sm:px-3 text-xs text-[#8c887d] dark:text-[#a09c94] shrink-0">
@@ -1368,7 +1465,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           <span className="sm:hidden">Agent</span>
         </span>
         <div className="flex items-center gap-1.5 sm:gap-2.5">
-          <button onClick={() => setMessages([])} title="New thread" className="hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth transition-colors">
+          <button onClick={handleNewThread} title="New thread" className="hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth transition-colors">
             <Plus className="w-3 sm:w-3.5 h-3 sm:h-3.5" />
           </button>
           <button onClick={onToggleCollapse} title="Collapse" className="hidden lg:block hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth transition-colors">

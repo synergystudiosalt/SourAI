@@ -129,6 +129,38 @@ Shows file size, line count, and language.
 
 All tools resolve before your final answer is generated. Use them freely.
 
+## Context Memory (Persistent)
+
+You have a persistent context memory that survives across sessions. Use it to store important information about the project — database schemas, API endpoints, environment configs, architectural decisions, or any factual data you need to remember.
+
+### Store Context
+@@context_store: key = value
+
+Store any key-value pair. The value can be multi-line.
+
+Examples:
+@@context_store: db_schema = users(id, name, email, created_at) | posts(id, user_id, title, body, published)
+@@context_store: api_endpoints = POST /api/auth/login, POST /api/auth/register, GET /api/posts, POST /api/posts
+@@context_store: env_vars = DATABASE_URL=postgres://..., JWT_SECRET=abc123, PORT=3000
+@@context_store: architecture = React frontend + Express backend + PostgreSQL. Auth via JWT. State management: Zustand.
+
+### Retrieve Context
+@@context_get: key
+
+Retrieve stored context by key. Use this to recall information you stored earlier.
+
+### List All Context
+@@context_list
+
+Shows all stored context keys.
+
+### Clear Context
+@@context_clear: key
+
+Remove a specific context entry.
+
+**IMPORTANT:** Store context proactively. When you learn something about the project (database schema, API structure, env vars, dependencies, architecture), immediately store it using @@context_store. This builds a knowledge base that persists across sessions and helps you make better decisions.
+
 ## Sub-Agents
 
 For large, multi-part requests that split into independent chunks, use the subagent pattern:

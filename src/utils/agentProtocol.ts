@@ -15,6 +15,10 @@ const LISTDIR_RE = /^@@listdir:\s*(.+?)\s*$/gm;
 const GLOB_RE = /^@@glob:\s*(.+?)\s*$/gm;
 const FILEINFO_RE = /^@@fileinfo:\s*(.+?)\s*$/gm;
 const CHECK_ERRORS_RE = /<check_for_errors>([\s\S]*?)<\/check_for_errors>/gi;
+const CONTEXT_STORE_RE = /^@@context_store:\s*(.+?)\s*=\s*([\s\S]+)$/gm;
+const CONTEXT_GET_RE = /^@@context_get:\s*(.+?)\s*$/gm;
+const CONTEXT_LIST_RE = /^@@context_list\s*$/gm;
+const CONTEXT_CLEAR_RE = /^@@context_clear:\s*(.+?)\s*$/gm;
 
 function normalizePath(raw: string): string {
   return raw.trim().replace(/^\.\/+/, '').replace(/^\/+/, '');
@@ -47,6 +51,10 @@ export interface ParsedAgentResponse {
   globRequests: string[];
   fileInfoRequests: string[];
   checkErrorsContent: string[];
+  contextStore: { key: string; value: string }[];
+  contextGet: string[];
+  contextList: boolean;
+  contextClear: string[];
 }
 
 export function parseAgentResponse(raw: string): ParsedAgentResponse {
@@ -119,9 +127,37 @@ export function parseAgentResponse(raw: string): ParsedAgentResponse {
     return '';
   });
 
+  const contextStore: { key: string; value: string }[] = [];
+  text = text.replace(CONTEXT_STORE_RE, (_match, key: string, value: string) => {
+    const k = key.trim();
+    const v = value.trim();
+    if (k) contextStore.push({ key: k, value: v });
+    return '';
+  });
+
+  const contextGet: string[] = [];
+  text = text.replace(CONTEXT_GET_RE, (_match, key: string) => {
+    const k = key.trim();
+    if (k && !contextGet.includes(k)) contextGet.push(k);
+    return '';
+  });
+
+  let contextList = false;
+  text = text.replace(CONTEXT_LIST_RE, () => {
+    contextList = true;
+    return '';
+  });
+
+  const contextClear: string[] = [];
+  text = text.replace(CONTEXT_CLEAR_RE, (_match, key: string) => {
+    const k = key.trim();
+    if (k && !contextClear.includes(k)) contextClear.push(k);
+    return '';
+  });
+
   text = text.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
 
-  return { displayText: text, ops, subAgentTasks, fileRequests, findRequests, listDirRequests, globRequests, fileInfoRequests, checkErrorsContent };
+  return { displayText: text, ops, subAgentTasks, fileRequests, findRequests, listDirRequests, globRequests, fileInfoRequests, checkErrorsContent, contextStore, contextGet, contextList, contextClear };
 }
 
 /** Strips large file blocks from a previously-sent assistant message before resending it as history, to keep payloads small. */
