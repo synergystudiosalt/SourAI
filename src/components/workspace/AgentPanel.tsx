@@ -635,7 +635,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           return f.type === 'folder' ? `${name}/` : name;
         });
       const unique = [...new Set(children)].sort((a, b) => {
-        if (a.endsWith('/') && !b.endsWith '/') return -1;
+        if (a.endsWith('/') && !b.endsWith('/')) return -1;
         if (!a.endsWith('/') && b.endsWith('/')) return 1;
         return a.localeCompare(b);
       });
