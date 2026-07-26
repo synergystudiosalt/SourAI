@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Plus, ChevronRight, ChevronDown, AtSign, Check, Square, Loader2,
   FilePlus, Trash2, ArrowLeft, Bot, Search, Settings, Mic, MicOff, X, Image as ImageIcon,
-  Lightbulb, CheckCircle, ClipboardList, BarChart3, Package, Tag, Zap, Hammer, Terminal,
+  Lightbulb, CheckCircle, BarChart3, Package, Tag, Terminal,
 } from 'lucide-react';
 import { AttachmentPopover } from '../AttachmentPopover';
 import { AttachmentItem } from '../../types';
@@ -1583,36 +1583,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           />
         )}
       </div>
-
-      {/* Todo List */}
-      <AnimatePresence>
-        {todoItems.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            className="border-t border-[#e5e3db] dark:border-[#2d2d2c] px-2.5 py-2"
-          >
-            <div className="flex items-center gap-1.5 text-[10.5px] font-medium text-[#8c887d] dark:text-[#a09c94] mb-1.5">
-              <Hammer className="w-3 h-3 shrink-0" />
-              <span>Task List ({todoItems.filter(t => !t.done).length} remaining)</span>
-            </div>
-            <div className="space-y-1">
-              {todoItems.map((t) => (
-                <div key={t.id} className={`flex items-center gap-1.5 text-[10.5px] ${t.done ? 'line-through opacity-50' : ''}`}>
-                  <Check className={`w-2.5 h-2.5 shrink-0 ${t.done ? 'text-[#d96b43]' : 'text-[#c7c3b6]'}`} />
-                  <span className={`px-1 py-0 rounded text-[8px] font-medium ${
-                    t.priority === 'high' ? 'bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400' :
-                    t.priority === 'medium' ? 'bg-amber-100 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400' :
-                    'bg-[#e8e6df] dark:bg-[#333230] text-[#8c887d] dark:text-[#a09c94]'
-                  }`}>{t.priority}</span>
-                  <span className="text-[#3d3a33] dark:text-[#dedcd6]">{t.text}</span>
-                </div>
-              ))}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       <div className="border-t border-[#e5e3db] dark:border-[#2d2d2c] px-2 sm:px-2.5 pt-2 relative flex flex-col shrink-0">
         {mentionState && mentionMatches.length > 0 && (
