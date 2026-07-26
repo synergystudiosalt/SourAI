@@ -56,7 +56,10 @@ export interface PromptCategory {
 
 export type AgentToolCall =
   | { type: 'readfile'; path: string; found: boolean }
-  | { type: 'findall'; query: string; matchCount: number; fileCount: number; matches: { path: string; line: number; text: string }[] };
+  | { type: 'findall'; query: string; matchCount: number; fileCount: number; matches: { path: string; line: number; text: string }[] }
+  | { type: 'replace'; path: string; search: string; replace: string; found: boolean; applied: boolean }
+  | { type: 'search_imports'; symbol: string; matchCount: number; matches: { path: string; line: number; text: string }[] }
+  | { type: 'rename'; oldPath: string; newPath: string };
 
 // ---------------------------------------------------------------------------
 // Workspace / IDE types

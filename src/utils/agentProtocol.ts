@@ -19,6 +19,9 @@ const CONTEXT_STORE_RE = /^@@context_store:\s*(.+?)\s*=\s*([\s\S]+)$/gm;
 const CONTEXT_GET_RE = /^@@context_get:\s*(.+?)\s*$/gm;
 const CONTEXT_LIST_RE = /^@@context_list\s*$/gm;
 const CONTEXT_CLEAR_RE = /^@@context_clear:\s*(.+?)\s*$/gm;
+const REPLACE_RE = /^@@replace:\s*(.+?)\s*\|\|\|\s*([\s\S]+?)\s*\|\|\|\s*([\s\S]+?)\s*$/gm;
+const SEARCH_IMPORTS_RE = /^@@search_imports:\s*(.+?)\s*$/gm;
+const RENAME_RE = /^@@rename:\s*(.+?)\s*\|\|\|\s*(.+?)\s*$/gm;
 
 function normalizePath(raw: string): string {
   return raw.trim().replace(/^\.\/+/, '').replace(/^\/+/, '');
@@ -55,6 +58,9 @@ export interface ParsedAgentResponse {
   contextGet: string[];
   contextList: boolean;
   contextClear: string[];
+  replaceRequests: { path: string; search: string; replace: string }[];
+  searchImportsRequests: string[];
+  renameRequests: { oldPath: string; newPath: string }[];
 }
 
 export function parseAgentResponse(raw: string): ParsedAgentResponse {
@@ -155,9 +161,31 @@ export function parseAgentResponse(raw: string): ParsedAgentResponse {
     return '';
   });
 
+  const replaceRequests: { path: string; search: string; replace: string }[] = [];
+  text = text.replace(REPLACE_RE, (_match, rawPath: string, search: string, replace: string) => {
+    const p = normalizePath(rawPath);
+    if (p) replaceRequests.push({ path: p, search: search.trim(), replace: replace.trim() });
+    return '';
+  });
+
+  const searchImportsRequests: string[] = [];
+  text = text.replace(SEARCH_IMPORTS_RE, (_match, symbol: string) => {
+    const s = symbol.trim();
+    if (s && !searchImportsRequests.includes(s)) searchImportsRequests.push(s);
+    return '';
+  });
+
+  const renameRequests: { oldPath: string; newPath: string }[] = [];
+  text = text.replace(RENAME_RE, (_match, oldRaw: string, newRaw: string) => {
+    const o = normalizePath(oldRaw);
+    const n = normalizePath(newRaw);
+    if (o && n) renameRequests.push({ oldPath: o, newPath: n });
+    return '';
+  });
+
   text = text.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
 
-  return { displayText: text, ops, subAgentTasks, fileRequests, findRequests, listDirRequests, globRequests, fileInfoRequests, checkErrorsContent, contextStore, contextGet, contextList, contextClear };
+  return { displayText: text, ops, subAgentTasks, fileRequests, findRequests, listDirRequests, globRequests, fileInfoRequests, checkErrorsContent, contextStore, contextGet, contextList, contextClear, replaceRequests, searchImportsRequests, renameRequests };
 }
 
 /** Strips large file blocks from a previously-sent assistant message before resending it as history, to keep payloads small. */

@@ -720,6 +720,89 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     return keys.map(k => `[Context cleared: "${k}"]`).join('\n');
   };
 
+  /** Resolves @@replace: path ||| search ||| replace — surgical in-file edit. */
+  const resolveReplaceRequests = (
+    requests: { path: string; search: string; replace: string }[]
+  ): { toolCalls: AgentToolCall[]; ops: AgentFileOp[]; resultText: string } => {
+    const toolCalls: AgentToolCall[] = [];
+    const ops: AgentFileOp[] = [];
+    const parts: string[] = [];
+    for (const { path, search, replace } of requests) {
+      const node = files.find((f) => f.path === path);
+      if (!node || node.content === undefined) {
+        toolCalls.push({ type: 'replace', path, search, replace, found: false, applied: false });
+        parts.push(`[Replace in ${path}]\nFile not found.`);
+        continue;
+      }
+      if (!node.content.includes(search)) {
+        toolCalls.push({ type: 'replace', path, search, replace, found: true, applied: false });
+        parts.push(`[Replace in ${path}]\nSearch string not found in file. The exact text must match.`);
+        continue;
+      }
+      const newContent = node.content.replace(search, replace);
+      const lang = path.split('.').pop() || '';
+      ops.push({ type: 'write', path, content: newContent, language: lang });
+      toolCalls.push({ type: 'replace', path, search, replace, found: true, applied: true });
+      parts.push(`[Replace in ${path}]\nReplaced ${search.length} chars → ${replace.length} chars.`);
+    }
+    return { toolCalls, ops, resultText: parts.join('\n\n') };
+  };
+
+  /** Resolves @@search_imports: symbol — finds all imports/usages across loaded files. */
+  const resolveSearchImportsRequests = (
+    symbols: string[]
+  ): { toolCalls: AgentToolCall[]; resultText: string } => {
+    const toolCalls: AgentToolCall[] = [];
+    const parts: string[] = [];
+    for (const symbol of symbols) {
+      const matches: { path: string; line: number; text: string }[] = [];
+      for (const file of files) {
+        if (file.type !== 'file' || file.content === undefined) continue;
+        const lines = file.content.split('\n');
+        lines.forEach((lineText, idx) => {
+          if (lineText.includes(symbol)) {
+            matches.push({ path: file.path, line: idx + 1, text: lineText.trim().slice(0, 120) });
+          }
+        });
+      }
+      const limited = matches.slice(0, 80);
+      const fileSet = new Set(limited.map((m) => m.path));
+      toolCalls.push({ type: 'search_imports', symbol, matchCount: matches.length, matches: limited });
+      if (matches.length === 0) {
+        parts.push(`[Search imports: "${symbol}"]\nNo usages found across ${files.length} files.`);
+      } else {
+        const resultLines = [`[Usages of "${symbol}"] (${matches.length} match${matches.length !== 1 ? 'es' : ''} in ${fileSet.size} file${fileSet.size !== 1 ? 's' : ''}):`];
+        for (const m of limited) resultLines.push(`${m.path}:${m.line}: ${m.text}`);
+        if (matches.length > 80) resultLines.push(`...and ${matches.length - 80} more matches (truncated).`);
+        parts.push(resultLines.join('\n'));
+      }
+    }
+    return { toolCalls, resultText: parts.join('\n\n') };
+  };
+
+  /** Resolves @@rename: oldPath ||| newPath — produces delete + write ops. */
+  const resolveRenameRequests = (
+    requests: { oldPath: string; newPath: string }[]
+  ): { toolCalls: AgentToolCall[]; ops: AgentFileOp[]; resultText: string } => {
+    const toolCalls: AgentToolCall[] = [];
+    const ops: AgentFileOp[] = [];
+    const parts: string[] = [];
+    for (const { oldPath, newPath } of requests) {
+      const node = files.find((f) => f.path === oldPath);
+      if (!node || node.content === undefined) {
+        toolCalls.push({ type: 'rename', oldPath, newPath });
+        parts.push(`[Rename ${oldPath} → ${newPath}]\nSource file not found.`);
+        continue;
+      }
+      const lang = newPath.split('.').pop() || '';
+      ops.push({ type: 'write', path: newPath, content: node.content, language: lang });
+      ops.push({ type: 'delete', path: oldPath });
+      toolCalls.push({ type: 'rename', oldPath, newPath });
+      parts.push(`[Rename ${oldPath} → ${newPath}]\nFile moved successfully.`);
+    }
+    return { toolCalls, ops, resultText: parts.join('\n\n') };
+  };
+
   /** Sequentially "codes" each file with a short delay so the UI can show a
    *  spinner per-file (rather than instantly marking every file as done). */
   const applyOpsStaggered = async (messageId: string, ops: AgentFileOp[]) => {
@@ -997,7 +1080,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                     }
 
                     const hasToolCalls = finalParsed.fileRequests.length > 0 || finalParsed.findRequests.length > 0
-                      || finalParsed.listDirRequests.length > 0 || finalParsed.globRequests.length > 0 || finalParsed.fileInfoRequests.length > 0;
+                      || finalParsed.listDirRequests.length > 0 || finalParsed.globRequests.length > 0 || finalParsed.fileInfoRequests.length > 0
+                      || finalParsed.replaceRequests.length > 0 || finalParsed.searchImportsRequests.length > 0 || finalParsed.renameRequests.length > 0;
                     const hasCheckErrors = finalParsed.checkErrorsContent.length > 0;
                     const hasContextOps = finalParsed.contextStore.length > 0 || finalParsed.contextGet.length > 0 || finalParsed.contextList || finalParsed.contextClear.length > 0;
 
@@ -1033,7 +1117,17 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                       if (finalParsed.contextList) contextResultParts.push(resolveContextList());
                       if (finalParsed.contextClear.length > 0) contextResultParts.push(resolveContextClear(finalParsed.contextClear));
 
-                      const resultText = [readText, findText, listDirText, globText, fileInfoText, ...checkResultParts, ...contextResultParts].filter(Boolean).join('\n\n');
+                      // Resolve replace / search_imports / rename
+                      const replaceResult: { toolCalls: AgentToolCall[]; ops: AgentFileOp[]; resultText: string } = finalParsed.replaceRequests.length > 0
+                        ? resolveReplaceRequests(finalParsed.replaceRequests) : { toolCalls: [], ops: [], resultText: '' };
+                      const importsResult: { toolCalls: AgentToolCall[]; resultText: string } = finalParsed.searchImportsRequests.length > 0
+                        ? resolveSearchImportsRequests(finalParsed.searchImportsRequests) : { toolCalls: [], resultText: '' };
+                      const renameResult: { toolCalls: AgentToolCall[]; ops: AgentFileOp[]; resultText: string } = finalParsed.renameRequests.length > 0
+                        ? resolveRenameRequests(finalParsed.renameRequests) : { toolCalls: [], ops: [], resultText: '' };
+                      turnToolCalls.push(...replaceResult.toolCalls, ...importsResult.toolCalls, ...renameResult.toolCalls);
+                      allOps = [...allOps, ...replaceResult.ops, ...renameResult.ops];
+
+                      const resultText = [readText, findText, listDirText, globText, fileInfoText, replaceResult.resultText, importsResult.resultText, renameResult.resultText, ...checkResultParts, ...contextResultParts].filter(Boolean).join('\n\n');
 
                       setMessages((prev) =>
                         prev.map((m) =>
@@ -1082,7 +1176,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           }
 
           const hasToolCalls = parsed.fileRequests.length > 0 || parsed.findRequests.length > 0
-            || parsed.listDirRequests.length > 0 || parsed.globRequests.length > 0 || parsed.fileInfoRequests.length > 0;
+            || parsed.listDirRequests.length > 0 || parsed.globRequests.length > 0 || parsed.fileInfoRequests.length > 0
+            || parsed.replaceRequests.length > 0 || parsed.searchImportsRequests.length > 0 || parsed.renameRequests.length > 0;
           const hasCheckErrors = parsed.checkErrorsContent.length > 0;
           const hasContextOps = parsed.contextStore.length > 0 || parsed.contextGet.length > 0 || parsed.contextList || parsed.contextClear.length > 0;
 
@@ -1117,7 +1212,17 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
             if (parsed.contextList) contextResultParts.push(resolveContextList());
             if (parsed.contextClear.length > 0) contextResultParts.push(resolveContextClear(parsed.contextClear));
 
-            const resultText = [readText, findText, listDirText, globText, fileInfoText, ...checkResultParts, ...contextResultParts].filter(Boolean).join('\n\n');
+            // Resolve replace / search_imports / rename
+            const replaceResult: { toolCalls: AgentToolCall[]; ops: AgentFileOp[]; resultText: string } = parsed.replaceRequests.length > 0
+              ? resolveReplaceRequests(parsed.replaceRequests) : { toolCalls: [], ops: [], resultText: '' };
+            const importsResult: { toolCalls: AgentToolCall[]; resultText: string } = parsed.searchImportsRequests.length > 0
+              ? resolveSearchImportsRequests(parsed.searchImportsRequests) : { toolCalls: [], resultText: '' };
+            const renameResult: { toolCalls: AgentToolCall[]; ops: AgentFileOp[]; resultText: string } = parsed.renameRequests.length > 0
+              ? resolveRenameRequests(parsed.renameRequests) : { toolCalls: [], ops: [], resultText: '' };
+            turnToolCalls.push(...replaceResult.toolCalls, ...importsResult.toolCalls, ...renameResult.toolCalls);
+            allOps = [...allOps, ...replaceResult.ops, ...renameResult.ops];
+
+            const resultText = [readText, findText, listDirText, globText, fileInfoText, replaceResult.resultText, importsResult.resultText, renameResult.resultText, ...checkResultParts, ...contextResultParts].filter(Boolean).join('\n\n');
 
             setMessages((prev) =>
               prev.map((m) =>
@@ -1337,7 +1442,14 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                 ) : (
                   <Search className="w-3 h-3 shrink-0" />
                 )}
-                <span>{tc.type === 'readfile' ? `Read: ${tc.path}` : `Search: ${tc.query}`}</span>
+                <span>{
+                  tc.type === 'readfile' ? `Read: ${tc.path}`
+                  : tc.type === 'findall' ? `Search: ${tc.query}`
+                  : tc.type === 'replace' ? `Replace: ${tc.path}`
+                  : tc.type === 'search_imports' ? `Imports: ${tc.symbol}`
+                  : tc.type === 'rename' ? `Rename: ${tc.oldPath} → ${tc.newPath}`
+                  : 'Tool call'
+                }</span>
                 {!isReading && <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${openToolCalls.has(tcId) ? 'rotate-180' : ''}`} />}
               </button>
               <AnimatePresence>
@@ -1355,7 +1467,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                         <span className="font-mono truncate">{tc.path}</span>
                         {!tc.found && <span className="text-red-400 shrink-0">not found</span>}
                       </div>
-                    ) : (
+                    ) : tc.type === 'findall' ? (
     <div className="space-y-2.5">
                         <div className="flex items-center gap-1.5 font-medium">
                           <span>"{tc.query}" &mdash; {tc.matchCount} match{tc.matchCount !== 1 ? 'es' : ''} in {tc.fileCount} file{tc.fileCount !== 1 ? 's' : ''}</span>
@@ -1369,7 +1481,36 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                           <div className="pl-3 opacity-50 text-[9.5px]">…and {tc.matchCount - 5} more</div>
                         )}
                       </div>
-                    )}
+                    ) : tc.type === 'replace' ? (
+                      <div className="space-y-1">
+                        <div className="font-mono truncate">{tc.path}</div>
+                        {tc.applied ? (
+                          <div className="text-amber-600">Applied ({tc.search.length} → {tc.replace.length} chars)</div>
+                        ) : tc.found ? (
+                          <div className="text-red-400">Search string not found</div>
+                        ) : (
+                          <div className="text-red-400">File not found</div>
+                        )}
+                      </div>
+                    ) : tc.type === 'search_imports' ? (
+                      <div className="space-y-2.5">
+                        <div className="font-medium">
+                          "{tc.symbol}" &mdash; {tc.matchCount} usage{tc.matchCount !== 1 ? 's' : ''}
+                        </div>
+                        {tc.matches.slice(0, 5).map((m, j) => (
+                          <div key={j} className="pl-3 font-mono text-[9.5px] truncate">
+                            <span className="opacity-60">{m.path}:{m.line}</span>{' '}{m.text}
+                          </div>
+                        ))}
+                        {tc.matchCount > 5 && (
+                          <div className="pl-3 opacity-50 text-[9.5px]">…and {tc.matchCount - 5} more</div>
+                        )}
+                      </div>
+                    ) : tc.type === 'rename' ? (
+                      <div className="font-mono text-[9.5px]">
+                        {tc.oldPath} → {tc.newPath}
+                      </div>
+                    ) : null}
                   </motion.div>
                 )}
               </AnimatePresence>

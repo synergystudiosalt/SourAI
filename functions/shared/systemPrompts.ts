@@ -127,6 +127,21 @@ Finds files matching a glob pattern (e.g. *.test.*, **/*.css, components/*).
 
 Shows file size, line count, and language.
 
+### Replace in File
+@@replace: src/utils.ts ||| old code here ||| new code here
+
+Surgically replace a string inside a file without rewriting the whole file. Use ||| as delimiter. The search string must match exactly (including whitespace/indentation). Preferred over full file rewrites for small targeted edits.
+
+### Search Imports / Usages
+@@search_imports: ComponentName
+
+Find every file that imports or uses a given symbol (function, component, variable, class). Shows file paths, line numbers, and the matching lines.
+
+### Rename / Move File
+@@rename: old/path/file.tsx ||| new/path/file.tsx
+
+Rename or move a file. The system will create the file at the new path with the same content and delete the old one.
+
 All tools resolve before your final answer is generated. Use them freely.
 
 ## Context Memory (Persistent)
