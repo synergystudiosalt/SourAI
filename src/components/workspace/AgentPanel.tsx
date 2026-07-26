@@ -339,7 +339,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   const [openToolCalls, setOpenToolCalls] = useState<Set<string>>(new Set());
   const [todoItems, setTodoItems] = useState<{ id: string; text: string; priority: string; done: boolean }[]>([]);
 
-  // Context usage calculation
+  // Context usage calculation — excludes input to avoid dip after sending
   const MAX_CONTEXT_CHARS = 128000;
   const contextUsage = useMemo(() => {
     let totalChars = 0;
@@ -353,9 +353,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         }
       }
     }
-    totalChars += input.length;
     return Math.min(100, Math.round((totalChars / MAX_CONTEXT_CHARS) * 100));
-  }, [messages, input]);
+  }, [messages]);
 
   const [showAttachmentPopover, setShowAttachmentPopover] = useState(false);
   const [agentAttachments, setAgentAttachments] = useState<AttachmentItem[]>([]);
@@ -434,7 +433,13 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     return { promptToSend: modifiedText, autoCalledFunctions };
   };
 
+  // Ref to suppress Save during a project transition — without this the Save
+  // effect fires with stale messages and writes the old conversation to the
+  // new projectId's localStorage key before the Load effect's setState lands.
+  const projectSwitchingRef = useRef(false);
+
   useEffect(() => {
+    projectSwitchingRef.current = true;
     try {
       const raw = localStorage.getItem(`sourbot_agent_thread::${projectId}`);
       setMessages(raw ? JSON.parse(raw) : []);
@@ -444,6 +449,12 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   }, [projectId]);
 
   useEffect(() => {
+    // During a project switch, skip the first Persist so the Load effect's
+    // setState can land first.
+    if (projectSwitchingRef.current) {
+      projectSwitchingRef.current = false;
+      return;
+    }
     try {
       localStorage.setItem(`sourbot_agent_thread::${projectId}`, JSON.stringify(messages));
     } catch {
