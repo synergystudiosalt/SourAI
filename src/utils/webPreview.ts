@@ -338,6 +338,7 @@ export function buildReactPreview(
   const bundleScript = doc.createElement('script');
   bundleScript.type = 'text/babel';
   bundleScript.setAttribute('data-type', 'module');
+  bundleScript.setAttribute('data-presets', 'typescript,react');
   bundleScript.textContent = bundledJs;
   doc.body.appendChild(bundleScript);
 

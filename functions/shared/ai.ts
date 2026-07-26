@@ -163,8 +163,8 @@ export interface ModelRoute {
 }
 
 export const MODEL_ROUTES: Record<string, ModelRoute> = {
-  'sour-omni-flash': { provider: 'groq', model: 'llama-3.1-8b-instant' },
-  'sour-intelligence': { provider: 'groq', model: 'llama-3.3-70b-versatile' },
+  'sour-omni-flash': { provider: 'groq', model: 'openai/gpt-oss-20b' },
+  'sour-intelligence': { provider: 'groq', model: 'qwen/qwen3.6-27b' },
   'sour-ultra': { provider: 'gemini', model: 'gemini-3.5-flash-lite' },
   'sour-overclock': { provider: 'cerebras', model: 'zai-glm-4.7' },
   'sour-overcode': { provider: 'gemini', model: 'gemini-3.6-flash' },

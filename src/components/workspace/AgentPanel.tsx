@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Plus, ChevronRight, ChevronDown, AtSign, Check, Square, Loader2,
   FilePlus, Trash2, ArrowLeft, Bot, Search, Settings, Mic, MicOff, X, Image as ImageIcon,
-  Lightbulb, CheckCircle, ClipboardList, BarChart3, Package, Tag, Zap,
+  Lightbulb, CheckCircle, ClipboardList, BarChart3, Package, Tag, Zap, Hammer,
 } from 'lucide-react';
 import { AttachmentPopover } from '../AttachmentPopover';
 import { AttachmentItem } from '../../types';
@@ -350,6 +350,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   const [openToolCalls, setOpenToolCalls] = useState<Set<string>>(new Set());
   const [subAgents, setSubAgents] = useState<SubAgentTask[]>([]);
   const subAgentsRef = useRef<SubAgentTask[]>([]);
+  const [todoItems, setTodoItems] = useState<{ id: string; text: string; priority: string; done: boolean }[]>([]);
 
   // Keep ref in sync so spawnSubAgents Promise can read latest state
   useEffect(() => { subAgentsRef.current = subAgents; }, [subAgents]);
@@ -713,6 +714,27 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       contextStore.remove(projectName, k);
     }
     return keys.map(k => `[Context cleared: "${k}"]`).join('\n');
+  };
+
+  /** Resolves @@todo: [priority] task — manages the in-session todo list. */
+  const resolveTodo = (items: { action: 'add' | 'done' | 'remove'; priority: string; text: string }[]): string => {
+    if (items.length === 0) return '';
+    setTodoItems((prev) => {
+      let next = [...prev];
+      for (const item of items) {
+        if (item.action === 'add') {
+          const id = `todo-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+          next.push({ id, text: item.text, priority: item.priority, done: false });
+        } else if (item.action === 'done') {
+          const match = next.find(t => t.text.toLowerCase() === item.text.toLowerCase() && !t.done);
+          if (match) match.done = true;
+        } else if (item.action === 'remove') {
+          next = next.filter(t => t.text.toLowerCase() !== item.text.toLowerCase());
+        }
+      }
+      return next;
+    });
+    return `[Todo updated — ${items.length} item(s)]`;
   };
 
   /** Resolves @@replace: path ||| search ||| replace — surgical in-file edit. */
@@ -1124,8 +1146,9 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                       || finalParsed.replaceRequests.length > 0 || finalParsed.searchImportsRequests.length > 0 || finalParsed.renameRequests.length > 0;
                     const hasCheckErrors = finalParsed.checkErrorsContent.length > 0;
                     const hasContextOps = finalParsed.contextStore.length > 0 || finalParsed.contextGet.length > 0 || finalParsed.contextList || finalParsed.contextClear.length > 0;
+                    const hasTodoOps = finalParsed.todoItems.length > 0;
 
-                    if (hasToolCalls || hasCheckErrors || hasContextOps) {
+                    if (hasToolCalls || hasCheckErrors || hasContextOps || hasTodoOps) {
                       // Resolve all tool types
                       const { toolCalls: readCalls, resultText: readText } = resolveFileRequests(finalParsed.fileRequests);
                       const { toolCalls: findCalls, resultText: findText } = resolveFindRequests(finalParsed.findRequests);
@@ -1157,6 +1180,9 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                       if (finalParsed.contextList) contextResultParts.push(resolveContextList());
                       if (finalParsed.contextClear.length > 0) contextResultParts.push(resolveContextClear(finalParsed.contextClear));
 
+                      // Resolve todo operations
+                      const todoResultText = finalParsed.todoItems.length > 0 ? resolveTodo(finalParsed.todoItems) : '';
+
                       // Resolve replace / search_imports / rename
                       const replaceResult: { toolCalls: AgentToolCall[]; ops: AgentFileOp[]; resultText: string } = finalParsed.replaceRequests.length > 0
                         ? resolveReplaceRequests(finalParsed.replaceRequests) : { toolCalls: [], ops: [], resultText: '' };
@@ -1167,7 +1193,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                       turnToolCalls.push(...replaceResult.toolCalls, ...importsResult.toolCalls, ...renameResult.toolCalls);
                       allOps = [...allOps, ...replaceResult.ops, ...renameResult.ops];
 
-                      const resultText = [readText, findText, listDirText, globText, fileInfoText, replaceResult.resultText, importsResult.resultText, renameResult.resultText, ...checkResultParts, ...contextResultParts].filter(Boolean).join('\n\n');
+                      const resultText = [readText, findText, listDirText, globText, fileInfoText, replaceResult.resultText, importsResult.resultText, renameResult.resultText, todoResultText, ...checkResultParts, ...contextResultParts].filter(Boolean).join('\n\n');
 
                       setMessages((prev) =>
                         prev.map((m) =>
@@ -1237,8 +1263,9 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
             || parsed.replaceRequests.length > 0 || parsed.searchImportsRequests.length > 0 || parsed.renameRequests.length > 0;
           const hasCheckErrors = parsed.checkErrorsContent.length > 0;
           const hasContextOps = parsed.contextStore.length > 0 || parsed.contextGet.length > 0 || parsed.contextList || parsed.contextClear.length > 0;
+          const hasTodoOps = parsed.todoItems.length > 0;
 
-          if (hasToolCalls || hasCheckErrors || hasContextOps) {
+          if (hasToolCalls || hasCheckErrors || hasContextOps || hasTodoOps) {
             const { toolCalls: readCalls, resultText: readText } = resolveFileRequests(parsed.fileRequests);
             const { toolCalls: findCalls, resultText: findText } = resolveFindRequests(parsed.findRequests);
             const { resultText: listDirText } = resolveListDirRequests(parsed.listDirRequests);
@@ -1269,6 +1296,9 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
             if (parsed.contextList) contextResultParts.push(resolveContextList());
             if (parsed.contextClear.length > 0) contextResultParts.push(resolveContextClear(parsed.contextClear));
 
+            // Resolve todo operations
+            const todoResultText = parsed.todoItems.length > 0 ? resolveTodo(parsed.todoItems) : '';
+
             // Resolve replace / search_imports / rename
             const replaceResult: { toolCalls: AgentToolCall[]; ops: AgentFileOp[]; resultText: string } = parsed.replaceRequests.length > 0
               ? resolveReplaceRequests(parsed.replaceRequests) : { toolCalls: [], ops: [], resultText: '' };
@@ -1279,7 +1309,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
             turnToolCalls.push(...replaceResult.toolCalls, ...importsResult.toolCalls, ...renameResult.toolCalls);
             allOps = [...allOps, ...replaceResult.ops, ...renameResult.ops];
 
-            const resultText = [readText, findText, listDirText, globText, fileInfoText, replaceResult.resultText, importsResult.resultText, renameResult.resultText, ...checkResultParts, ...contextResultParts].filter(Boolean).join('\n\n');
+            const resultText = [readText, findText, listDirText, globText, fileInfoText, replaceResult.resultText, importsResult.resultText, renameResult.resultText, todoResultText, ...checkResultParts, ...contextResultParts].filter(Boolean).join('\n\n');
 
             setMessages((prev) =>
               prev.map((m) =>
@@ -1732,6 +1762,36 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                   <span className="text-[#8c887d] dark:text-[#767671] shrink-0 text-[8px] sm:text-[9px]">{SUBAGENT_STATUS_LABEL[t.status]}</span>
                 </div>
               ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Todo List */}
+      <AnimatePresence>
+        {todoItems.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="border-t border-[#e5e3db] dark:border-[#2d2d2c] px-2.5 py-2"
+          >
+            <div className="flex items-center gap-1.5 text-[10.5px] font-medium text-[#8c887d] dark:text-[#a09c94] mb-1.5">
+              <Hammer className="w-3 h-3 shrink-0" />
+              <span>Task List ({todoItems.filter(t => !t.done).length} remaining)</span>
+            </div>
+            <div className="space-y-1">
+              {todoItems.map((t) => (
+                <div key={t.id} className={`flex items-center gap-1.5 text-[10.5px] ${t.done ? 'line-through opacity-50' : ''}`}>
+                  <Check className={`w-2.5 h-2.5 shrink-0 ${t.done ? 'text-[#d96b43]' : 'text-[#c7c3b6]'}`} />
+                  <span className={`px-1 py-0 rounded text-[8px] font-medium ${
+                    t.priority === 'high' ? 'bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400' :
+                    t.priority === 'medium' ? 'bg-amber-100 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400' :
+                    'bg-[#e8e6df] dark:bg-[#333230] text-[#8c887d] dark:text-[#a09c94]'
+                  }`}>{t.priority}</span>
+                  <span className="text-[#3d3a33] dark:text-[#dedcd6]">{t.text}</span>
+                </div>
+              ))}
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

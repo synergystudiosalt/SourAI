@@ -116,10 +116,10 @@ export const onRequest: PagesFunction = async (context) => {
     const systemInstruction = `${CHAT_SYSTEM_PROMPT}
 
 Reasoning format:
-- Use MULTIPLE thinking/reasoning tags throughout your response (one per logical step).
-- Vary the tag names: <think>, <thinking>, <reasoning>, <analysis>, <reflection>, <planning>, <step>.
-- Each tag: 1-2 sentences of reassuring text, plain text only, no markdown.
-- Example: <thinking>Analyzing the code structure...</thinking>Here's the fix.
+- Use <think> tags for internal reasoning when solving complex problems.
+- Keep thinking brief (1-2 sentences). Do NOT use <check_for_errors>, <planning>, or any other XML tags.
+- Do NOT use @@readfile, @@findall, @@context_store, or any @@ tool commands. Those are agent-only.
+- Just answer directly after thinking.
 
 Only if the user explicitly asks you to generate an image, picture, or photo (using words like "image", "picture", "photo", "draw", "paint"), include a single [GENERATE_IMAGE: ...] directive for the image description. Do NOT generate images for flowcharts, diagrams, charts, graphs, mind maps, wireframes, or other diagrams — describe those in text/code instead.`;
 

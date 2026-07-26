@@ -22,6 +22,7 @@ const CONTEXT_CLEAR_RE = /^@@context_clear:\s*(.+?)\s*$/gm;
 const REPLACE_RE = /^@@replace:\s*(.+?)\s*\|\|\|\s*([\s\S]+?)\s*\|\|\|\s*([\s\S]+?)\s*$/gm;
 const SEARCH_IMPORTS_RE = /^@@search_imports:\s*(.+?)\s*$/gm;
 const RENAME_RE = /^@@rename:\s*(.+?)\s*\|\|\|\s*(.+?)\s*$/gm;
+const TODO_RE = /^@@todo:\s*\[(\w+)\]\s*(.+?)\s*$/gm;
 
 function normalizePath(raw: string): string {
   return raw.trim().replace(/^\.\/+/, '').replace(/^\/+/, '');
@@ -61,6 +62,7 @@ export interface ParsedAgentResponse {
   replaceRequests: { path: string; search: string; replace: string }[];
   searchImportsRequests: string[];
   renameRequests: { oldPath: string; newPath: string }[];
+  todoItems: { action: 'add' | 'done' | 'remove'; priority: string; text: string }[];
 }
 
 export function parseAgentResponse(raw: string): ParsedAgentResponse {
@@ -183,9 +185,24 @@ export function parseAgentResponse(raw: string): ParsedAgentResponse {
     return '';
   });
 
+  const todoItems: { action: 'add' | 'done' | 'remove'; priority: string; text: string }[] = [];
+  text = text.replace(TODO_RE, (_match, priority: string, taskText: string) => {
+    const p = priority.toLowerCase().trim();
+    const t = taskText.trim();
+    if (!t) return '';
+    if (p === 'done') {
+      todoItems.push({ action: 'done', priority: 'done', text: t });
+    } else if (p === 'remove') {
+      todoItems.push({ action: 'remove', priority: 'remove', text: t });
+    } else {
+      todoItems.push({ action: 'add', priority: p, text: t });
+    }
+    return '';
+  });
+
   text = text.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
 
-  return { displayText: text, ops, subAgentTasks, fileRequests, findRequests, listDirRequests, globRequests, fileInfoRequests, checkErrorsContent, contextStore, contextGet, contextList, contextClear, replaceRequests, searchImportsRequests, renameRequests };
+  return { displayText: text, ops, subAgentTasks, fileRequests, findRequests, listDirRequests, globRequests, fileInfoRequests, checkErrorsContent, contextStore, contextGet, contextList, contextClear, replaceRequests, searchImportsRequests, renameRequests, todoItems };
 }
 
 /** Strips large file blocks from a previously-sent assistant message before resending it as history, to keep payloads small. */
