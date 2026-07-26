@@ -89,7 +89,7 @@ const THINK_TAGS = ['think', 'thinking', 'reasoning', 'analysis', 'reflection', 
 
 const KNOWN_TAGS: Record<string, { label: string; Icon: TagIcon; color: string; bg: string; border: string }> = {
   ...Object.fromEntries(
-    THINK_TAGS.map(t => [t, { label: 'Thinking', Icon: Lightbulb, color: 'text-[#8c887d] dark:text-[#a09c94]', bg: 'bg-[#f5f3eb] dark:bg-[#1f1f1e]', border: 'border-[#8c887d] dark:border-[#a09c94]' }])
+    THINK_TAGS.map(t => [t, { label: 'Thinking', Icon: Lightbulb, color: 'text-[#d96b43] dark:text-[#e07e5d]', bg: '', border: '' }])
   ),
   check_for_errors:  { label: 'Error Check',     Icon: CheckCircle,   color: 'text-[#d96b43] dark:text-[#e07e5d]', bg: 'bg-[#fdf0ea] dark:bg-[#2a1a14]', border: 'border-[#d96b43] dark:border-[#e07e5d]' },
   subagent_request:  { label: 'Subagent Request', Icon: Bot,          color: 'text-[#d96b43] dark:text-[#e07e5d]', bg: 'bg-[#fdf0ea] dark:bg-[#2a1a14]', border: 'border-[#d96b43] dark:border-[#e07e5d]' },
@@ -156,9 +156,21 @@ const ExpandableTag: React.FC<{
   openSet: Set<string>;
   onToggle: (id: string) => void;
 }> = ({ tagType, content, id, openSet, onToggle }) => {
-  const { label, Icon, color } = getTagMeta(tagType);
+  const { label, Icon, color, bg, border } = getTagMeta(tagType);
   const isOpen = openSet.has(id);
+  const isThinkTag = THINK_TAGS.includes(tagType);
   const steps = content.split(/(?<=[.!?])\s+|\n+/).map(s => s.trim()).filter(Boolean).slice(0, 12);
+
+  if (isThinkTag) {
+    return (
+      <div className={`select-none ${bg ? `pl-2 border-l ${border}` : ''} py-0.5`}>
+        <div className={`flex items-center gap-1.5 text-[10.5px] font-medium ${color}`}>
+          <Icon className="w-3 h-3 shrink-0" />
+          <span>{content}</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="select-none">
@@ -178,7 +190,7 @@ const ExpandableTag: React.FC<{
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.15 }}
-            className="mt-1.5 pl-2 border-l border-[#e2dec0] dark:border-[#383836] text-[10.5px] text-[#706c62] dark:text-[#a09d98] space-y-1 leading-relaxed overflow-hidden"
+            className={`mt-1.5 pl-2 border-l ${border} text-[10.5px] ${color} space-y-1 leading-relaxed overflow-hidden`}
           >
             {steps.map((step, i) => (
               <div key={i}>{step}</div>
@@ -280,7 +292,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   const [isListening, setIsListening] = useState(false);
   const [mentionState, setMentionState] = useState<{ query: string; start: number } | null>(null);
   const [showSlash, setShowSlash] = useState(false);
-  const [openThoughts, setOpenThoughts] = useState<Set<string>>(new Set());
   const [openXmlTags, setOpenXmlTags] = useState<Set<string>>(new Set());
   const [openToolCalls, setOpenToolCalls] = useState<Set<string>>(new Set());
   const [subAgents, setSubAgents] = useState<SubAgentTask[]>([]);
@@ -464,15 +475,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   const handleApplyAll = (messageId: string, ops: AgentFileOp[]) => {
     onApplyOps(ops);
     markApplied(messageId, ops.map((o) => o.path));
-  };
-
-  const toggleThought = (messageId: string) => {
-    setOpenThoughts((prev) => {
-      const next = new Set(prev);
-      if (next.has(messageId)) next.delete(messageId);
-      else next.add(messageId);
-      return next;
-    });
   };
 
   const toggleXmlTag = (tagId: string) => {
@@ -678,6 +680,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     kickSubAgentQueue();
   };
 
+  const MAX_AGENT_TURNS = 8;
+
   const handleSend = async (overrideText?: string) => {
     const text = (overrideText ?? input).trim();
     if (!text || isSending) return;
@@ -719,124 +723,123 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         mentionedFiles,
       };
 
-      // ── First LLM turn ────────────────────────────────────────────────────
-      // Use modified text with auto-called functions
-      const messagesForAgent = historyBase.slice(-16).map((m) => ({
-        role: m.role,
-        content: m.role === 'assistant' ? summarizeForHistory(m.content, m.ops) : m.content,
-      }));
+      // ── Agent loop: send prompt, resolve tools, repeat until no more tool calls ──
+      let conversationHistory: { role: 'user' | 'assistant'; content: string }[] =
+        historyBase.slice(-16).map((m) => ({
+          role: m.role,
+          content: m.role === 'assistant' ? summarizeForHistory(m.content, m.ops) : m.content,
+        }));
       // Update the last user message with auto-called functions
-      if (messagesForAgent.length > 0 && messagesForAgent[messagesForAgent.length - 1].role === 'user') {
-        messagesForAgent[messagesForAgent.length - 1].content = promptToSend;
+      if (conversationHistory.length > 0 && conversationHistory[conversationHistory.length - 1].role === 'user') {
+        conversationHistory[conversationHistory.length - 1].content = promptToSend;
       }
 
-      const res = await fetch(apiUrl('/api/agent'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...basePayload,
-          messages: messagesForAgent,
-          attachments: agentAttachments,
-        }),
-        signal: controller.signal,
-      });
+      const msgId = genId();
+      let accumulatedThinking = '';
+      let accumulatedThinkingLabel = '';
+      let allOps: AgentFileOp[] = [];
+      let allToolCalls: AgentToolCall[] = [];
+      let finalDisplayText = '';
+      let turnCount = 0;
+      let hasMoreTools = true;
 
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || 'The agent failed to respond.');
+      // Create the message placeholder immediately
+      const assistantMsg: AgentChatMessage = {
+        id: msgId,
+        role: 'assistant',
+        content: '',
+        ops: [],
+        appliedPaths: [],
+        codingPaths: [],
+        thinking: '',
+        thinkingLabel: '',
+        toolCalls: [],
+        isReadingFiles: true,
+        createdAt: Date.now(),
+      };
+      freshMessageIdsRef.current.add(msgId);
+      setMessages((prev) => [...prev, assistantMsg]);
 
-      const parsed = parseAgentResponse(data.text || '');
+      while (hasMoreTools && turnCount < MAX_AGENT_TURNS) {
+        turnCount++;
+        hasMoreTools = false;
 
-      // ── Tool-call loop: agent requested files and/or searches ─────────────
-      if (parsed.fileRequests.length > 0 || parsed.findRequests.length > 0) {
-        const { toolCalls: readCalls, resultText: readText } = resolveFileRequests(parsed.fileRequests);
-        const { toolCalls: findCalls, resultText: findText } = resolveFindRequests(parsed.findRequests);
-        const allToolCalls = [...readCalls, ...findCalls];
-        const resultText = [readText, findText].filter(Boolean).join('\n\n');
-
-        // Show an interim message immediately so the user sees progress
-        const msgId = genId();
-        const interimMsg: AgentChatMessage = {
-          id: msgId,
-          role: 'assistant',
-          content: '',
-          ops: [],
-          appliedPaths: [],
-          codingPaths: [],
-          thinking: data.thinking,
-          thinkingLabel: data.thinkingLabel,
-          toolCalls: allToolCalls,
-          isReadingFiles: true,
-          createdAt: Date.now(),
-        };
-        freshMessageIdsRef.current.add(msgId);
-        setMessages((prev) => [...prev, interimMsg]);
-
-        // ── Second LLM turn with tool results injected ───────────────────
-        const continuationMessages = [
-          ...historyBase.slice(-16).map((m) => ({
-            role: m.role,
-            content: m.role === 'assistant' ? summarizeForHistory(m.content, m.ops) : m.content,
-          })),
-          { role: 'assistant' as const, content: data.text || '' },
-          { role: 'user' as const, content: resultText },
-        ];
-
-        const res2 = await fetch(apiUrl('/api/agent'), {
+        const res = await fetch(apiUrl('/api/agent'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...basePayload, messages: continuationMessages, attachments: agentAttachments }),
+          body: JSON.stringify({
+            ...basePayload,
+            messages: conversationHistory,
+            attachments: agentAttachments,
+          }),
           signal: controller.signal,
         });
-        const data2 = await res2.json().catch(() => ({}));
-        if (!res2.ok) throw new Error(data2?.error || 'The agent failed to respond after using tools.');
 
-        const parsed2 = parseAgentResponse(data2.text || '');
-        const willAutoApply = true;
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.error || 'The agent failed to respond.');
 
-        // Update the interim message in-place with the final answer
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === msgId
-              ? {
-                  ...m,
-                  content: parsed2.displayText || (parsed2.ops.length ? '' : "I didn't find anything useful to say - try rephrasing that."),
-                  ops: parsed2.ops,
-                  codingPaths: willAutoApply ? parsed2.ops.map((o) => o.path) : [],
-                  thinking: data2.thinking || m.thinking,
-                  thinkingLabel: data2.thinkingLabel || m.thinkingLabel,
-                  isReadingFiles: false,
-                }
-              : m
-          )
-        );
-        if (willAutoApply) applyOpsStaggered(msgId, parsed2.ops);
-        if (parsed2.subAgentTasks.length > 0) spawnSubAgents(parsed2.subAgentTasks.slice(0, 8));
+        const parsed = parseAgentResponse(data.text || '');
 
-      } else {
-        // ── Normal flow (no tool calls) ───────────────────────────────────
-        const { displayText, ops, subAgentTasks } = parsed;
-        
-        // Subagents require parent approval — only spawn if the agent explicitly requested them
-        let allSubAgentTasks = [...subAgentTasks];
-        
-const willAutoApply = true;
-        const assistantMsgId = genId();
-        const assistantMsg: AgentChatMessage = {
-          id: assistantMsgId,
-          role: 'assistant',
-          content: displayText || (ops.length ? '' : "I didn't find anything useful to say - try rephrasing that."),
-          ops,
-          appliedPaths: [],
-          codingPaths: willAutoApply ? ops.map((o) => o.path) : [],
-          thinking: data.thinking,
-          thinkingLabel: data.thinkingLabel,
-          createdAt: Date.now(),
-        };
-        freshMessageIdsRef.current.add(assistantMsgId);
-        setMessages((prev) => [...prev, assistantMsg]);
-        if (willAutoApply) applyOpsStaggered(assistantMsgId, ops);
-        if (allSubAgentTasks.length > 0) spawnSubAgents(allSubAgentTasks.slice(0, 8));
+        if (data.thinking) accumulatedThinking = data.thinking;
+        if (data.thinkingLabel) accumulatedThinkingLabel = data.thinkingLabel;
+
+        // Check for more tool calls
+        if (parsed.fileRequests.length > 0 || parsed.findRequests.length > 0) {
+          const { toolCalls: readCalls, resultText: readText } = resolveFileRequests(parsed.fileRequests);
+          const { toolCalls: findCalls, resultText: findText } = resolveFindRequests(parsed.findRequests);
+          const turnToolCalls = [...readCalls, ...findCalls];
+          allToolCalls = [...allToolCalls, ...turnToolCalls];
+          const resultText = [readText, findText].filter(Boolean).join('\n\n');
+
+          // Update the message with tool calls in real time
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === msgId
+                ? { ...m, toolCalls: allToolCalls, thinking: accumulatedThinking, thinkingLabel: accumulatedThinkingLabel }
+                : m
+            )
+          );
+
+          // Extend conversation with assistant's partial response + tool results
+          conversationHistory = [
+            ...conversationHistory,
+            { role: 'assistant', content: data.text || '' },
+            { role: 'user', content: resultText },
+          ];
+
+          hasMoreTools = true;
+        } else {
+          // No more tool calls — this is the final answer
+          finalDisplayText = parsed.displayText || (allOps.length ? '' : "I didn't find anything useful to say - try rephrasing that.");
+          allOps = [...allOps, ...parsed.ops];
+        }
       }
+
+      const willAutoApply = true;
+
+      // Update the message with the final result
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === msgId
+            ? {
+                ...m,
+                content: finalDisplayText,
+                ops: allOps,
+                codingPaths: willAutoApply ? allOps.map((o) => o.path) : [],
+                thinking: accumulatedThinking,
+                thinkingLabel: accumulatedThinkingLabel,
+                toolCalls: allToolCalls,
+                isReadingFiles: false,
+              }
+            : m
+        )
+      );
+
+      if (willAutoApply) applyOpsStaggered(msgId, allOps);
+      // Check for subagent tasks in the final response
+      const finalParsed = parseAgentResponse(finalDisplayText);
+      if (finalParsed.subAgentTasks.length > 0) spawnSubAgents(finalParsed.subAgentTasks.slice(0, 8));
+
     } catch (err: any) {
       if (err?.name === 'AbortError') {
         setMessages((prev) => [...prev, { id: genId(), role: 'assistant', content: '_Stopped._', createdAt: Date.now() }]);
@@ -961,7 +964,6 @@ const willAutoApply = true;
 
     const isLatest = idx === messages.length - 1;
     const isTyping = freshMessageIdsRef.current.has(msg.id) && isLatest;
-    const thoughtOpen = openThoughts.has(msg.id);
 
     return (
       <div key={msg.id} className="space-y-1.5">
@@ -971,35 +973,10 @@ const willAutoApply = true;
 
         {msg.thinking && (
           <div className="select-none">
-            <button
-              type="button"
-              onClick={() => toggleThought(msg.id)}
-              className="flex items-center gap-1.5 text-[10.5px] font-medium text-[#8c887d] dark:text-[#a09c94] hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth"
-            >
+            <div className="flex items-center gap-1.5 text-[10.5px] font-medium text-[#d96b43] dark:text-[#e07e5d] py-0.5">
               <Lightbulb className="w-3 h-3 shrink-0" />
-              <span>{msg.thinkingLabel || 'Thought process'}</span>
-              <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${thoughtOpen ? 'rotate-180' : ''}`} />
-            </button>
-            <AnimatePresence>
-              {thoughtOpen && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  transition={{ duration: 0.15 }}
-                  className="mt-1.5 pl-2 border-l border-[#e2dec0] dark:border-[#383836] text-[10.5px] text-[#706c62] dark:text-[#a09d98] space-y-1 leading-relaxed overflow-hidden"
-                >
-                  {msg.thinking
-                    .split(/(?<=[.!?])\s+|\n+/)
-                    .map((s) => s.trim())
-                    .filter(Boolean)
-                    .slice(0, 12)
-                    .map((step, i) => (
-                      <div key={i}>{step}</div>
-                    ))}
-                </motion.div>
-              )}
-            </AnimatePresence>
+              <span>{msg.thinkingLabel || msg.thinking}</span>
+            </div>
           </div>
         )}
 

@@ -81,7 +81,6 @@ const TypewriterMessage: React.FC<TypewriterMessageProps> = ({
 }) => {
   const [displayedContent, setDisplayedContent] = useState(isLatest ? '' : content);
   const [isThinking, setIsThinking] = useState(isLatest);
-  const [showThoughtDetails, setShowThoughtDetails] = useState(false);
   const [isLiked, setIsLiked] = useState<boolean | null>(null);
   const hasFinishedTypewritingRef = useRef(!isLatest);
 
@@ -133,63 +132,14 @@ const TypewriterMessage: React.FC<TypewriterMessageProps> = ({
 
   const isErrorMsg = content.startsWith('Error:') || content.startsWith('Failed to retrieve');
 
-  // Split thinking into 2-5 short meaningful steps (1 sentence max each) and strip markdown
-  const rawThinkingSteps = thinking
-    ? thinking
-        .split(/(?<=[.!?])\s+|\n+/)
-        .map((s) => s.trim().replace(/^[-*•0-9.]+\s*/, '').replace(/[*_#`~]/g, '').trim())
-        .filter((s) => s.length > 0)
-    : [];
-
-  // Group or constrain to 2-12 steps max
-  const thinkingSteps = rawThinkingSteps.slice(0, 12);
-
   return (
     <div className="w-full text-left py-2">
-      {/* Dynamic Thinking Dropdown */}
+      {/* Dynamic Thinking */}
       {thinking && !isErrorMsg && (
         <div className="mb-3 select-none">
-          <button
-            type="button"
-            onClick={() => setShowThoughtDetails(!showThoughtDetails)}
-            className="flex items-center gap-1.5 text-[12px] font-medium text-[#8c887d] dark:text-[#a09c94] hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] transition-colors cursor-pointer"
-          >
-            {isThinking ? (
-              <span>Thinking...</span>
-            ) : (
-              <>
-                <span>{thinkingLabel || "Thought process"}</span>
-                <ChevronDown
-                  className={`w-3.5 h-3.5 text-[#8c887d] transition-transform duration-200 ${
-                    showThoughtDetails ? 'rotate-180' : ''
-                  }`}
-                />
-              </>
-            )}
-          </button>
-
-          <AnimatePresence>
-            {showThoughtDetails && !isThinking && (
-              <motion.div
-                initial={{ opacity: 0, y: -2 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -2 }}
-                transition={{ duration: 0.2, ease: 'easeOut' }}
-                className="mt-2.5 pl-3 relative text-[12px] text-[#706c62] dark:text-[#a09d98]"
-              >
-                {/* Thin vertical timeline line on the far left */}
-                <div className="absolute left-0 top-1 bottom-1 w-[1px] bg-[#e2dec0] dark:bg-[#383836]" />
-
-                <div className="space-y-2.5 leading-[1.8]">
-                  {thinkingSteps.map((step, idx) => (
-                    <div key={idx} className="pl-1">
-                      {step}
-                    </div>
-                  ))}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          <div className="flex items-center gap-1.5 text-[12px] font-medium text-[#d96b43] dark:text-[#e07e5d] py-0.5">
+            <span>{isThinking ? 'Thinking...' : (thinkingLabel || thinking)}</span>
+          </div>
         </div>
       )}
 
