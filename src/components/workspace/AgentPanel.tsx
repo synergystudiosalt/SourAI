@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Plus, ChevronRight, ChevronDown, AtSign, Check, Square, Loader2,
   FilePlus, Trash2, ArrowLeft, Bot, Search, Settings, Mic, MicOff, X, Image as ImageIcon,
-  Brain, CheckCircle, ClipboardList, BarChart3, Package, Tag, Zap,
+  Lightbulb, CheckCircle, ClipboardList, BarChart3, Package, Tag, Zap,
 } from 'lucide-react';
 import { AttachmentPopover } from '../AttachmentPopover';
 import { AttachmentItem } from '../../types';
@@ -86,8 +86,8 @@ function parseAgentContent(text: string): ContentSegment[] {
 type TagIcon = React.FC<{ className?: string }>;
 
 const KNOWN_TAGS: Record<string, { label: string; Icon: TagIcon; color: string; bg: string; border: string }> = {
-  think:             { label: 'Thinking',        Icon: Brain,         color: 'text-[#8c887d] dark:text-[#a09c94]', bg: 'bg-[#f5f3eb] dark:bg-[#1f1f1e]', border: 'border-[#8c887d] dark:border-[#a09c94]' },
-  check_for_errors:  { label: 'Error Check',     Icon: CheckCircle,   color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-950/30', border: 'border-emerald-500 dark:border-emerald-400' },
+  think:             { label: 'Thinking',        Icon: Lightbulb,     color: 'text-[#8c887d] dark:text-[#a09c94]', bg: 'bg-[#f5f3eb] dark:bg-[#1f1f1e]', border: 'border-[#8c887d] dark:border-[#a09c94]' },
+  check_for_errors:  { label: 'Error Check',     Icon: CheckCircle,   color: 'text-[#d96b43] dark:text-[#e07e5d]', bg: 'bg-[#fdf0ea] dark:bg-[#2a1a14]', border: 'border-[#d96b43] dark:border-[#e07e5d]' },
   subagent_request:  { label: 'Subagent Request', Icon: Bot,          color: 'text-[#d96b43] dark:text-[#e07e5d]', bg: 'bg-[#fdf0ea] dark:bg-[#2a1a14]', border: 'border-[#d96b43] dark:border-[#e07e5d]' },
   subagent_response: { label: 'Subagent Response', Icon: ClipboardList, color: 'text-blue-500 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-950/30', border: 'border-blue-500 dark:border-blue-400' },
   function_request:  { label: 'Function Request', Icon: Settings,     color: 'text-[#8c887d] dark:text-[#a09c94]', bg: 'bg-[#f5f3eb] dark:bg-[#1f1f1e]', border: 'border-[#8c887d] dark:border-[#a09c94]' },
@@ -97,13 +97,13 @@ const KNOWN_TAGS: Record<string, { label: string; Icon: TagIcon; color: string; 
 
 const TAG_COLOR_CYCLE = [
   { color: 'text-[#8c887d] dark:text-[#a09c94]', bg: 'bg-[#f5f3eb] dark:bg-[#1f1f1e]', border: 'border-[#8c887d] dark:border-[#a09c94]' },
-  { color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-950/30', border: 'border-emerald-500 dark:border-emerald-400' },
   { color: 'text-[#d96b43] dark:text-[#e07e5d]', bg: 'bg-[#fdf0ea] dark:bg-[#2a1a14]', border: 'border-[#d96b43] dark:border-[#e07e5d]' },
   { color: 'text-blue-500 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-950/30', border: 'border-blue-500 dark:border-blue-400' },
   { color: 'text-purple-500 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-950/30', border: 'border-purple-500 dark:border-purple-400' },
   { color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-950/30', border: 'border-amber-500 dark:border-amber-400' },
   { color: 'text-rose-500 dark:text-rose-400', bg: 'bg-rose-50 dark:bg-rose-950/30', border: 'border-rose-500 dark:border-rose-400' },
   { color: 'text-cyan-600 dark:text-cyan-400', bg: 'bg-cyan-50 dark:bg-cyan-950/30', border: 'border-cyan-500 dark:border-cyan-400' },
+  { color: 'text-slate-500 dark:text-slate-400', bg: 'bg-slate-50 dark:bg-slate-950/30', border: 'border-slate-500 dark:border-slate-400' },
 ];
 
 function getTagMeta(tagName: string): { label: string; Icon: TagIcon; color: string; bg: string; border: string } {
@@ -118,9 +118,9 @@ function getTagMeta(tagName: string): { label: string; Icon: TagIcon; color: str
 const MiniMarkdown: React.FC<{ text: string }> = ({ text }) => (
   <ReactMarkdown
     components={{
-      p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-      ul: ({ children }) => <ul className="list-disc pl-5 mb-2 space-y-1">{children}</ul>,
-      ol: ({ children }) => <ol className="list-decimal pl-5 mb-2 space-y-1">{children}</ol>,
+      p: ({ children }) => <p className="mb-2 last:mb-0 leading-[1.7]">{children}</p>,
+      ul: ({ children }) => <ul className="list-disc pl-5 mb-2 space-y-1 leading-[1.7]">{children}</ul>,
+      ol: ({ children }) => <ol className="list-decimal pl-5 mb-2 space-y-1 leading-[1.7]">{children}</ol>,
       li: ({ children }) => <li>{children}</li>,
       strong: ({ children }) => <strong className="font-semibold text-[#1c1b1a] dark:text-[#f0efe6]">{children}</strong>,
       a: ({ children, href }) => (
@@ -630,7 +630,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       }
 
       const { displayText, ops } = finalParsed;
-      const willAutoApply = false;
+      const willAutoApply = true;
 
       const subMsg: AgentChatMessage = {
         id: genId(),
@@ -787,7 +787,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         if (!res2.ok) throw new Error(data2?.error || 'The agent failed to respond after using tools.');
 
         const parsed2 = parseAgentResponse(data2.text || '');
-        const willAutoApply = false;
+        const willAutoApply = true;
 
         // Update the interim message in-place with the final answer
         setMessages((prev) =>
@@ -815,7 +815,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         // Subagents require parent approval — only spawn if the agent explicitly requested them
         let allSubAgentTasks = [...subAgentTasks];
         
-const willAutoApply = false;
+const willAutoApply = true;
         const assistantMsgId = genId();
         const assistantMsg: AgentChatMessage = {
           id: assistantMsgId,
@@ -972,7 +972,7 @@ const willAutoApply = false;
               onClick={() => toggleThought(msg.id)}
               className="flex items-center gap-1.5 text-[10.5px] font-medium text-[#8c887d] dark:text-[#a09c94] hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth"
             >
-              <Brain className="w-3 h-3 shrink-0" />
+              <Lightbulb className="w-3 h-3 shrink-0" />
               <span>{msg.thinkingLabel || 'Thought process'}</span>
               <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${thoughtOpen ? 'rotate-180' : ''}`} />
             </button>
@@ -1012,7 +1012,7 @@ const willAutoApply = false;
                 {isReading ? (
                   <Loader2 className="w-3 h-3 animate-spin shrink-0" />
                 ) : tc.type === 'readfile' ? (
-                  tc.found ? <Check className="w-3 h-3 text-emerald-600 shrink-0" /> : <Search className="w-3 h-3 shrink-0" />
+                  tc.found ? <Check className="w-3 h-3 text-amber-600 shrink-0" /> : <Search className="w-3 h-3 shrink-0" />
                 ) : (
                   <Search className="w-3 h-3 shrink-0" />
                 )}
@@ -1030,7 +1030,7 @@ const willAutoApply = false;
                   >
                     {tc.type === 'readfile' ? (
                       <div className="flex items-center gap-1.5">
-                        {tc.found ? <Check className="w-3 h-3 text-emerald-600 shrink-0" /> : <span className="w-3 h-3 text-red-400 shrink-0 font-bold leading-3 text-center">!</span>}
+                        {tc.found ? <Check className="w-3 h-3 text-amber-600 shrink-0" /> : <span className="w-3 h-3 text-red-400 shrink-0 font-bold leading-3 text-center">!</span>}
                         <span className="font-mono truncate">{tc.path}</span>
                         {!tc.found && <span className="text-red-400 shrink-0">not found</span>}
                       </div>
@@ -1057,7 +1057,7 @@ const willAutoApply = false;
         })}
 
         {msg.content && (
-          <div className={`text-[12px] leading-relaxed wrap-break-word ${msg.isError ? 'text-red-600 dark:text-red-400' : 'text-[#3d3a33] dark:text-[#dedcd6]'}`}>
+          <div className={`text-[12px] leading-[1.7] wrap-break-word ${msg.isError ? 'text-red-600 dark:text-red-400' : 'text-[#3d3a33] dark:text-[#dedcd6]'}`}>
             {msg.role === 'assistant' && !msg.content.startsWith('**Sub-agent') ? (
               <AgentContent text={msg.content} isTyping={isTyping} msgId={msg.id} openTags={openXmlTags} onToggleTag={toggleXmlTag} />
             ) : (
@@ -1079,11 +1079,11 @@ const willAutoApply = false;
                 {isCoding ? (
                   <Loader2 className="w-3 h-3 animate-spin shrink-0" />
                 ) : applied ? (
-                  <Check className="w-3 h-3 text-emerald-600 shrink-0" />
+                  <Check className="w-3 h-3 text-amber-600 shrink-0" />
                 ) : op.type === 'delete' ? (
                   <Trash2 className="w-3 h-3 text-red-500 shrink-0" />
                 ) : (
-                  <FilePlus className="w-3 h-3 text-emerald-600 shrink-0" />
+                  <FilePlus className="w-3 h-3 text-amber-600 shrink-0" />
                 )}
                 <span>{op.type === 'delete' ? `Delete: ${op.path}` : `File: ${op.path}`}</span>
                 {!isCoding && <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${openToolCalls.has(opId) ? 'rotate-180' : ''}`} />}
@@ -1097,25 +1097,36 @@ const willAutoApply = false;
                     transition={{ duration: 0.15 }}
                     className="mt-1.5 pl-2 border-l border-[#e2dec0] dark:border-[#383836] text-[10.5px] text-[#706c62] dark:text-[#a09d98] space-y-1 leading-relaxed overflow-hidden"
                   >
-                    <div className="flex items-center gap-1.5">
-                      {applied ? (
-                        <span className="flex items-center gap-0.5 text-emerald-600">
-                          <Check className="w-3 h-3" />
-                          <span>Applied</span>
-                        </span>
-                      ) : (
-                        <div className="flex items-center gap-1.5">
-                          {op.type !== 'delete' && (
-                            <button onClick={(e) => { e.stopPropagation(); onOpenFile(op.path); }} className="text-[#8c887d] hover:text-[#1c1b1a] dark:hover:text-white cursor-pointer ws-button-smooth transition-colors">
-                              Open
-                            </button>
-                          )}
-                          <button onClick={(e) => { e.stopPropagation(); handleApplySingle(msg.id, op); }} className="text-[#d96b43] hover:underline font-medium cursor-pointer ws-button-smooth transition-colors">
-                            Apply
-                          </button>
+                    {applied ? (
+                      <span className="flex items-center gap-0.5 text-amber-600">
+                        <Check className="w-3 h-3" />
+                        <span>Applied</span>
+                      </span>
+                    ) : op.type === 'delete' ? (
+                      <span className="flex items-center gap-0.5 text-red-500">
+                        <Trash2 className="w-3 h-3" />
+                        <span>Will delete this file</span>
+                      </span>
+                    ) : op.content ? (
+                      <div className="overflow-hidden">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <span className="text-[9.5px] opacity-60">{op.language || 'code'}</span>
+                          <span className="text-[9.5px] opacity-40">·</span>
+                          <span className="text-[9.5px] opacity-60">{op.content.split('\n').length} lines</span>
                         </div>
-                      )}
-                    </div>
+                        <pre className="p-2 rounded bg-[#efece3] dark:bg-[#141413] overflow-x-auto text-[9.5px] font-mono leading-[1.5] max-h-48 overflow-y-auto">
+                          <code>{op.content.split('\n').slice(0, 60).map((line, li) => (
+                            <div key={li} className="flex">
+                              <span className="select-none text-[#a39d8f] dark:text-[#555] w-6 text-right pr-2 shrink-0">{li + 1}</span>
+                              <span>{line}</span>
+                            </div>
+                          ))}</code>
+                        </pre>
+                        {op.content.split('\n').length > 60 && (
+                          <div className="text-[9px] opacity-40 mt-0.5">…{op.content.split('\n').length - 60} more lines</div>
+                        )}
+                      </div>
+                    ) : null}
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -1279,7 +1290,7 @@ const willAutoApply = false;
             </button>
             <button
               onClick={() => setMode((m) => (m === 'write' ? 'plan' : 'write'))}
-              title={mode === 'write' ? 'Write: review & approve changes' : 'Plan: guidance only, no code changes'}
+              title={mode === 'write' ? 'Write: auto-apply changes' : 'Plan: guidance only, no code changes'}
               className="flex items-center justify-center p-1.5 sm:p-0 gap-1 sm:gap-1.5 hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth transition-colors min-w-[44px] sm:min-w-auto h-[44px] sm:h-auto"
             >
               <span className="w-3 h-3 sm:w-3.5 sm:h-3.5 border border-current flex items-center justify-center text-[6px] sm:text-[8px] font-bold">
