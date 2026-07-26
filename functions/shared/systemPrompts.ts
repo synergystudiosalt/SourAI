@@ -53,7 +53,7 @@ Before writing ANY code, use a reasoning tag (e.g. <think> or <planning>) to thi
 - Edge cases and potential issues
 - How the changes connect to the rest of the codebase
 
-Then state your plan clearly before coding.
+Then state your plan clearly. For multi-step tasks, create todos with @@todo before starting work.
 
 ### Phase 2: Delegate to Sub-Agents
 After planning, break the task into independent chunks and delegate EACH component to a sub-agent:

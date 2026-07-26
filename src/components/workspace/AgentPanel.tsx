@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Plus, ChevronRight, ChevronDown, AtSign, Check, Square, Loader2,
   FilePlus, Trash2, ArrowLeft, Bot, Search, Settings, Mic, MicOff, X, Image as ImageIcon,
-  Lightbulb, CheckCircle, ClipboardList, BarChart3, Package, Tag, Zap, Hammer,
+  Lightbulb, CheckCircle, ClipboardList, BarChart3, Package, Tag, Zap, Hammer, Terminal,
 } from 'lucide-react';
 import { AttachmentPopover } from '../AttachmentPopover';
 import { AttachmentItem } from '../../types';
@@ -352,6 +352,24 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   const subAgentsRef = useRef<SubAgentTask[]>([]);
   const [todoItems, setTodoItems] = useState<{ id: string; text: string; priority: string; done: boolean }[]>([]);
 
+  // Context usage calculation
+  const MAX_CONTEXT_CHARS = 128000;
+  const contextUsage = useMemo(() => {
+    let totalChars = 0;
+    for (const msg of messages) {
+      totalChars += (msg.content || '').length;
+      if (msg.thinking) totalChars += msg.thinking.length;
+      if (msg.toolCalls) {
+        for (const tc of msg.toolCalls) {
+          if (tc.type === 'readfile') totalChars += 200;
+          if (tc.type === 'findall') totalChars += (tc.matches?.length || 0) * 80;
+        }
+      }
+    }
+    totalChars += input.length;
+    return Math.min(100, Math.round((totalChars / MAX_CONTEXT_CHARS) * 100));
+  }, [messages, input]);
+
   // Keep ref in sync so spawnSubAgents Promise can read latest state
   useEffect(() => { subAgentsRef.current = subAgents; }, [subAgents]);
   const [showAttachmentPopover, setShowAttachmentPopover] = useState(false);
@@ -604,6 +622,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   const resolveListDirRequests = (
     paths: string[]
   ): { toolCalls: AgentToolCall[]; resultText: string } => {
+    const toolCalls: AgentToolCall[] = [];
     const parts: string[] = [];
     for (const p of paths) {
       const prefix = p ? p.replace(/\/$/, '') + '/' : '';
@@ -616,23 +635,25 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           return f.type === 'folder' ? `${name}/` : name;
         });
       const unique = [...new Set(children)].sort((a, b) => {
-        if (a.endsWith('/') && !b.endsWith('/')) return -1;
+        if (a.endsWith('/') && !b.endsWith '/') return -1;
         if (!a.endsWith('/') && b.endsWith('/')) return 1;
         return a.localeCompare(b);
       });
+      toolCalls.push({ type: 'listdir', path: p || '/', entries: unique });
       if (unique.length === 0) {
         parts.push(`[Directory: ${p || '/'}]\n(empty or not found)`);
       } else {
         parts.push(`[Directory: ${p || '/'}]\n${unique.join('\n')}`);
       }
     }
-    return { toolCalls: [], resultText: parts.join('\n\n') };
+    return { toolCalls, resultText: parts.join('\n\n') };
   };
 
   /** Resolves @@glob: requests — finds files matching a glob pattern. */
   const resolveGlobRequests = (
     patterns: string[]
   ): { toolCalls: AgentToolCall[]; resultText: string } => {
+    const toolCalls: AgentToolCall[] = [];
     const parts: string[] = [];
     for (const pattern of patterns) {
       const re = new RegExp(
@@ -649,13 +670,14 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         .filter((f) => f.type === 'file' && re.test(f.path))
         .map((f) => f.path)
         .sort();
+      toolCalls.push({ type: 'glob', pattern, matchCount: matches.length, matches });
       if (matches.length === 0) {
         parts.push(`[Glob: ${pattern}]\nNo files matched.`);
       } else {
         parts.push(`[Glob: ${pattern}] (${matches.length} files)\n${matches.join('\n')}`);
       }
     }
-    return { toolCalls: [], resultText: parts.join('\n\n') };
+    return { toolCalls, resultText: parts.join('\n\n') };
   };
 
   /** Resolves @@fileinfo: requests — shows file metadata. */
@@ -1152,10 +1174,10 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                       // Resolve all tool types
                       const { toolCalls: readCalls, resultText: readText } = resolveFileRequests(finalParsed.fileRequests);
                       const { toolCalls: findCalls, resultText: findText } = resolveFindRequests(finalParsed.findRequests);
-                      const { resultText: listDirText } = resolveListDirRequests(finalParsed.listDirRequests);
-                      const { resultText: globText } = resolveGlobRequests(finalParsed.globRequests);
+                      const { toolCalls: listDirCalls, resultText: listDirText } = resolveListDirRequests(finalParsed.listDirRequests);
+                      const { toolCalls: globCalls, resultText: globText } = resolveGlobRequests(finalParsed.globRequests);
                       const { resultText: fileInfoText } = resolveFileInfoRequests(finalParsed.fileInfoRequests);
-                      const turnToolCalls = [...readCalls, ...findCalls];
+                      const turnToolCalls = [...readCalls, ...findCalls, ...listDirCalls, ...globCalls];
 
                       const checkResultParts: string[] = [];
                       for (const content of finalParsed.checkErrorsContent) {
@@ -1268,10 +1290,10 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           if (hasToolCalls || hasCheckErrors || hasContextOps || hasTodoOps) {
             const { toolCalls: readCalls, resultText: readText } = resolveFileRequests(parsed.fileRequests);
             const { toolCalls: findCalls, resultText: findText } = resolveFindRequests(parsed.findRequests);
-            const { resultText: listDirText } = resolveListDirRequests(parsed.listDirRequests);
-            const { resultText: globText } = resolveGlobRequests(parsed.globRequests);
+            const { toolCalls: listDirCalls, resultText: listDirText } = resolveListDirRequests(parsed.listDirRequests);
+            const { toolCalls: globCalls, resultText: globText } = resolveGlobRequests(parsed.globRequests);
             const { resultText: fileInfoText } = resolveFileInfoRequests(parsed.fileInfoRequests);
-            const turnToolCalls = [...readCalls, ...findCalls];
+            const turnToolCalls = [...readCalls, ...findCalls, ...listDirCalls, ...globCalls];
 
             const checkResultParts: string[] = [];
             for (const content of parsed.checkErrorsContent) {
@@ -1526,6 +1548,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                   <Loader2 className="w-3 h-3 animate-spin shrink-0" />
                 ) : tc.type === 'readfile' ? (
                   tc.found ? <Check className="w-3 h-3 text-amber-600 shrink-0" /> : <Search className="w-3 h-3 shrink-0" />
+                ) : tc.type === 'listdir' || tc.type === 'glob' ? (
+                  <Terminal className="w-3 h-3 shrink-0" />
                 ) : (
                   <Search className="w-3 h-3 shrink-0" />
                 )}
@@ -1535,6 +1559,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                   : tc.type === 'replace' ? `Replace: ${tc.path}`
                   : tc.type === 'search_imports' ? `Imports: ${tc.symbol}`
                   : tc.type === 'rename' ? `Rename: ${tc.oldPath} → ${tc.newPath}`
+                  : tc.type === 'listdir' ? `Dir: ${tc.path}`
+                  : tc.type === 'glob' ? `Glob: ${tc.pattern}`
                   : 'Tool call'
                 }</span>
                 {!isReading && <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${openToolCalls.has(tcId) ? 'rotate-180' : ''}`} />}
@@ -1596,6 +1622,38 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                     ) : tc.type === 'rename' ? (
                       <div className="font-mono text-[9.5px]">
                         {tc.oldPath} → {tc.newPath}
+                      </div>
+                    ) : tc.type === 'listdir' ? (
+                      <div className="space-y-1">
+                        <div className="font-medium flex items-center gap-1.5">
+                          <Terminal className="w-3 h-3 shrink-0" />
+                          <span>{tc.path} ({tc.entries.length} entries)</span>
+                        </div>
+                        {tc.entries.slice(0, 20).map((entry, j) => (
+                          <div key={j} className="pl-3 font-mono text-[9.5px]">
+                            {entry.endsWith('/') ? (
+                              <span className="text-amber-600 dark:text-amber-400">{entry}</span>
+                            ) : (
+                              <span>{entry}</span>
+                            )}
+                          </div>
+                        ))}
+                        {tc.entries.length > 20 && (
+                          <div className="pl-3 opacity-50 text-[9.5px]">…and {tc.entries.length - 20} more</div>
+                        )}
+                      </div>
+                    ) : tc.type === 'glob' ? (
+                      <div className="space-y-1">
+                        <div className="font-medium flex items-center gap-1.5">
+                          <Terminal className="w-3 h-3 shrink-0" />
+                          <span>{tc.pattern} — {tc.matchCount} file{tc.matchCount !== 1 ? 's' : ''}</span>
+                        </div>
+                        {tc.matches.slice(0, 15).map((path, j) => (
+                          <div key={j} className="pl-3 font-mono text-[9.5px] truncate">{path}</div>
+                        ))}
+                        {tc.matchCount > 15 && (
+                          <div className="pl-3 opacity-50 text-[9.5px]">…and {tc.matchCount - 15} more</div>
+                        )}
                       </div>
                     ) : null}
                   </motion.div>
@@ -1877,6 +1935,18 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
               </span>
               <span className="hidden sm:inline">{mode === 'write' ? 'Write' : 'Plan'}</span>
             </button>
+            {/* Context Usage Circle */}
+            <div className="relative group flex items-center justify-center" title={`${contextUsage}% context used (${Math.round(contextUsage * MAX_CONTEXT_CHARS / 100).toLocaleString()} / ${MAX_CONTEXT_CHARS.toLocaleString()} chars)`}>
+              <svg className="w-5 h-5 sm:w-5.5 sm:h-5.5 -rotate-90" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="2" className="text-[#e5e3db] dark:text-[#333230]" />
+                <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="2"
+                  strokeDasharray={`${contextUsage * 0.6283} 62.83`}
+                  className={contextUsage > 80 ? 'text-red-500' : contextUsage > 50 ? 'text-amber-500' : 'text-[#d96b43]'}
+                  strokeLinecap="round"
+                />
+              </svg>
+              <span className="absolute text-[7px] sm:text-[7.5px] font-bold text-[#8c887d] dark:text-[#a09c94] group-hover:text-[#1c1b1a] dark:group-hover:text-[#f0efe6] transition-colors">{contextUsage}</span>
+            </div>
             <div className="relative" ref={modelPopoverRef}>
               <button onClick={() => setShowModelPopover((v) => !v)} className="flex items-center justify-center p-1.5 sm:p-0 gap-0.5 sm:gap-1 hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth transition-colors text-[9px] sm:text-[11px] min-w-[44px] sm:min-w-auto h-[44px] sm:h-auto">
                 <span className="hidden sm:inline">{MODEL_LABELS[selectedModel] || (selectedModel.startsWith('custom_') ? 'API' : selectedModel)}</span>

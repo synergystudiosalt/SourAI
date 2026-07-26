@@ -59,7 +59,9 @@ export type AgentToolCall =
   | { type: 'findall'; query: string; matchCount: number; fileCount: number; matches: { path: string; line: number; text: string }[] }
   | { type: 'replace'; path: string; search: string; replace: string; found: boolean; applied: boolean }
   | { type: 'search_imports'; symbol: string; matchCount: number; matches: { path: string; line: number; text: string }[] }
-  | { type: 'rename'; oldPath: string; newPath: string };
+  | { type: 'rename'; oldPath: string; newPath: string }
+  | { type: 'listdir'; path: string; entries: string[] }
+  | { type: 'glob'; pattern: string; matchCount: number; matches: string[] };
 
 // ---------------------------------------------------------------------------
 // Workspace / IDE types
