@@ -59,6 +59,7 @@ interface AgentPanelProps {
   isDarkMode: boolean;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
+  projectId: string;
   projectName: string;
   files: WorkspaceFileNode[];
   activeFile: { path: string; content: string } | null;
@@ -325,6 +326,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   isDarkMode,
   isCollapsed,
   onToggleCollapse,
+  projectId,
   projectName,
   files,
   activeFile,
@@ -448,20 +450,20 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
 
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(`sourbot_agent_thread::${projectName}`);
+      const raw = localStorage.getItem(`sourbot_agent_thread::${projectId}`);
       setMessages(raw ? JSON.parse(raw) : []);
     } catch {
       setMessages([]);
     }
-  }, [projectName]);
+  }, [projectId]);
 
   useEffect(() => {
     try {
-      localStorage.setItem(`sourbot_agent_thread::${projectName}`, JSON.stringify(messages));
+      localStorage.setItem(`sourbot_agent_thread::${projectId}`, JSON.stringify(messages));
     } catch {
       /* storage full/unavailable - not critical */
     }
-  }, [messages, projectName]);
+  }, [messages, projectId]);
 
   useEffect(() => {
     localStorage.setItem('sourbot_agent_mode', mode);

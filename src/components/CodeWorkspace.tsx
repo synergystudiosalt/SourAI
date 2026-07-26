@@ -60,6 +60,7 @@ const SaveStatusIndicator: React.FC<{ status: SaveStatus }> = ({ status }) => {
 };
 
 export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
+  const projectIdCounter = useRef(0);
   const [activeProject, setActiveProject] = useState<{ id: string; name: string; isReal: boolean } | null>(null);
   const [tree, setTree] = useState<WorkspaceFileNode[]>([]);
   const [openTabs, setOpenTabs] = useState<WorkspaceTab[]>([]);
@@ -142,7 +143,7 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
 
   const handleNewEmptyWorkspace = () => {
     rootDirHandleRef.current = null;
-    setActiveProject({ id: `vp-${Date.now()}`, name: 'Untitled Project', isReal: false });
+    setActiveProject({ id: `vp-${++projectIdCounter.current}`, name: 'Untitled Project', isReal: false });
     setTree(upsertFile([], 'untitled.txt', ''));
     setOpenTabs([{ path: 'untitled.txt', isDirty: false }]);
     setActiveTabPath('untitled.txt');
@@ -159,7 +160,7 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
         return;
       }
       rootDirHandleRef.current = dirHandle;
-      setActiveProject({ id: `rp-${Date.now()}`, name: dirHandle.name, isReal: true });
+      setActiveProject({ id: `rp-${++projectIdCounter.current}`, name: dirHandle.name, isReal: true });
       setTree(nodes);
       setOpenTabs([]);
       setActiveTabPath('');
@@ -194,7 +195,7 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
       if (!raw) return;
       const saved = JSON.parse(raw);
       rootDirHandleRef.current = null;
-      setActiveProject({ id: `vr-${Date.now()}`, name: saved.name || 'Untitled Project', isReal: false });
+      setActiveProject({ id: `vr-${++projectIdCounter.current}`, name: saved.name || 'Untitled Project', isReal: false });
       setTree(saved.tree || []);
       setOpenTabs(saved.openTabs || []);
       setActiveTabPath(saved.activeTabPath || '');
@@ -590,6 +591,7 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
               isDarkMode={isDarkMode}
               isCollapsed={isAgentCollapsed}
               onToggleCollapse={() => setIsAgentCollapsed((v) => !v)}
+              projectId={activeProject.id}
               projectName={activeProject.name}
               files={allFiles}
               activeFile={activeNode && activeNode.type === 'file' ? { path: activeNode.path, content: activeNode.content ?? '' } : null}
