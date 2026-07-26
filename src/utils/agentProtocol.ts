@@ -11,9 +11,27 @@ const DELETE_RE = /^@@delete:\s*(.+?)\s*$/gm;
 const SUBAGENT_RE = /^@@subagent:\s*(.+?)\s*$/gm;
 const READFILE_RE = /^@@readfile:\s*(.+?)\s*$/gm;
 const FINDALL_RE = /^@@findall:\s*(.+?)\s*$/gm;
+const CHECK_ERRORS_RE = /<check_for_errors>([\s\S]*?)<\/check_for_errors>/gi;
 
 function normalizePath(raw: string): string {
   return raw.trim().replace(/^\.\/+/, '').replace(/^\/+/, '');
+}
+
+/** Extract file paths mentioned in check_for_errors content. */
+export function extractPathsFromCheckContent(content: string): string[] {
+  const paths: string[] = [];
+  const pathPatterns = [
+    /(?:file|path|src|read|check|validate|fix)\s*[:=]?\s*["']?([\/\\]?[\w./-]+\.\w+)["']?/gi,
+    /[\w./-]+\.\w+/g,
+  ];
+  for (const re of pathPatterns) {
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(content))) {
+      const p = normalizePath(m[1] || m[0]);
+      if (p && !paths.includes(p)) paths.push(p);
+    }
+  }
+  return paths;
 }
 
 export interface ParsedAgentResponse {
@@ -22,6 +40,7 @@ export interface ParsedAgentResponse {
   subAgentTasks: string[];
   fileRequests: string[];
   findRequests: string[];
+  checkErrorsContent: string[];
 }
 
 export function parseAgentResponse(raw: string): ParsedAgentResponse {
@@ -66,9 +85,16 @@ export function parseAgentResponse(raw: string): ParsedAgentResponse {
     return '';
   });
 
+  const checkErrorsContent: string[] = [];
+  text = text.replace(CHECK_ERRORS_RE, (_match, content: string) => {
+    const c = content.trim();
+    if (c) checkErrorsContent.push(c);
+    return '';
+  });
+
   text = text.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
 
-  return { displayText: text, ops, subAgentTasks, fileRequests, findRequests };
+  return { displayText: text, ops, subAgentTasks, fileRequests, findRequests, checkErrorsContent };
 }
 
 /** Strips large file blocks from a previously-sent assistant message before resending it as history, to keep payloads small. */

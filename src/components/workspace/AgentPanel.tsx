@@ -10,7 +10,7 @@ import { AttachmentPopover } from '../AttachmentPopover';
 import { AttachmentItem } from '../../types';
 import { parseUploadedFile } from '../../utils/fileParser';
 import { AgentChatMessage, AgentFileOp, AgentMode, AgentToolCall, AIModel, SubAgentTask, WorkspaceFileNode } from '../../types';
-import { parseAgentResponse, summarizeForHistory, extractMentionedPaths } from '../../utils/agentProtocol';
+import { parseAgentResponse, summarizeForHistory, extractMentionedPaths, extractPathsFromCheckContent } from '../../utils/agentProtocol';
 import { shouldUseSubagents, planSubagent, formatSubagentPrompt } from '../../utils/subagentDetection';
 import { MAX_CONCURRENT_SUBAGENTS } from '../../utils/constants';
 import { customApiManager, type CustomApiConfig } from '../../utils/customApiManager';
@@ -680,7 +680,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     kickSubAgentQueue();
   };
 
-  const MAX_AGENT_TURNS = 8;
+  const MAX_AGENT_TURNS = 50;
 
   const handleSend = async (overrideText?: string) => {
     const text = (overrideText ?? input).trim();
@@ -724,8 +724,9 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       };
 
       // ── Agent loop: send prompt, resolve tools, repeat until no more tool calls ──
+      // Expanded context: keep up to40 messages so AI remembers code + chat
       let conversationHistory: { role: 'user' | 'assistant'; content: string }[] =
-        historyBase.slice(-16).map((m) => ({
+        historyBase.slice(-40).map((m) => ({
           role: m.role,
           content: m.role === 'assistant' ? summarizeForHistory(m.content, m.ops) : m.content,
         }));
@@ -783,13 +784,41 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         if (data.thinking) accumulatedThinking = data.thinking;
         if (data.thinkingLabel) accumulatedThinkingLabel = data.thinkingLabel;
 
-        // Check for more tool calls
-        if (parsed.fileRequests.length > 0 || parsed.findRequests.length > 0) {
+        // Spawn subagents as soon as they appear
+        if (parsed.subAgentTasks.length > 0) {
+          spawnSubAgents(parsed.subAgentTasks.slice(0, 8));
+        }
+
+        // Check for tool calls: readfile, findall, or check_for_errors
+        const hasReadFind = parsed.fileRequests.length > 0 || parsed.findRequests.length > 0;
+        const hasCheckErrors = parsed.checkErrorsContent.length > 0;
+
+        if (hasReadFind || hasCheckErrors) {
+          // Resolve readfile + findall
           const { toolCalls: readCalls, resultText: readText } = resolveFileRequests(parsed.fileRequests);
           const { toolCalls: findCalls, resultText: findText } = resolveFindRequests(parsed.findRequests);
           const turnToolCalls = [...readCalls, ...findCalls];
+
+          // Resolve check_for_errors: read files mentioned in the check content, then
+          // also re-read any files that were just modified (by ops in this or prior turns)
+          const checkResultParts: string[] = [];
+          for (const content of parsed.checkErrorsContent) {
+            const paths = extractPathsFromCheckContent(content);
+            // If no specific paths mentioned, re-read files from accumulated ops
+            if (paths.length === 0) {
+              const recentPaths = allOps.filter(o => o.type === 'write').map(o => o.path);
+              for (const p of recentPaths) {
+                if (!paths.includes(p)) paths.push(p);
+              }
+            }
+            const { toolCalls: checkCalls, resultText: checkText } = resolveFileRequests(paths);
+            turnToolCalls.push(...checkCalls);
+            checkResultParts.push(`[Error check requested: ${content}]\n${checkText}`);
+          }
+
           allToolCalls = [...allToolCalls, ...turnToolCalls];
-          const resultText = [readText, findText].filter(Boolean).join('\n\n');
+
+          const resultText = [readText, findText, ...checkResultParts].filter(Boolean).join('\n\n');
 
           // Update the message with tool calls in real time
           setMessages((prev) =>
@@ -836,9 +865,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       );
 
       if (willAutoApply) applyOpsStaggered(msgId, allOps);
-      // Check for subagent tasks in the final response
-      const finalParsed = parseAgentResponse(finalDisplayText);
-      if (finalParsed.subAgentTasks.length > 0) spawnSubAgents(finalParsed.subAgentTasks.slice(0, 8));
 
     } catch (err: any) {
       if (err?.name === 'AbortError') {

@@ -341,8 +341,8 @@ export default function App() {
     abortControllerRef.current = new AbortController();
 
     try {
-      // Send only the last 16 messages for AI context, keep full history in state
-      const contextMessages = updatedMessages.slice(-16);
+      // Send the last 40 messages for AI context, keep full history in state
+      const contextMessages = updatedMessages.slice(-40);
       const sanitizedMessages = contextMessages.map((m, idx) => {
         const isRecent = idx >= contextMessages.length - 2;
         return {
