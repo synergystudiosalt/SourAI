@@ -1936,16 +1936,15 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
               <span className="hidden sm:inline">{mode === 'write' ? 'Write' : 'Plan'}</span>
             </button>
             {/* Context Usage Circle */}
-            <div className="relative group flex items-center justify-center" title={`${contextUsage}% context used (${Math.round(contextUsage * MAX_CONTEXT_CHARS / 100).toLocaleString()} / ${MAX_CONTEXT_CHARS.toLocaleString()} chars)`}>
-              <svg className="w-5 h-5 sm:w-5.5 sm:h-5.5 -rotate-90" viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="2" className="text-[#e5e3db] dark:text-[#333230]" />
-                <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="2"
+            <div className="relative group flex items-center justify-center" title={`${contextUsage}% context used`}>
+              <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 -rotate-90" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="3" className="text-[#c7c3b6] dark:text-[#444]" />
+                <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="3"
                   strokeDasharray={`${contextUsage * 0.6283} 62.83`}
-                  className={contextUsage > 80 ? 'text-red-500' : contextUsage > 50 ? 'text-amber-500' : 'text-[#d96b43]'}
+                  className="text-[#1c1b1a] dark:text-[#f0efe6]"
                   strokeLinecap="round"
                 />
               </svg>
-              <span className="absolute text-[7px] sm:text-[7.5px] font-bold text-[#8c887d] dark:text-[#a09c94] group-hover:text-[#1c1b1a] dark:group-hover:text-[#f0efe6] transition-colors">{contextUsage}</span>
             </div>
             <div className="relative" ref={modelPopoverRef}>
               <button onClick={() => setShowModelPopover((v) => !v)} className="flex items-center justify-center p-1.5 sm:p-0 gap-0.5 sm:gap-1 hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth transition-colors text-[9px] sm:text-[11px] min-w-[44px] sm:min-w-auto h-[44px] sm:h-auto">
