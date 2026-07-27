@@ -7,6 +7,11 @@ import { afterEach, beforeEach, vi } from 'vitest';
 
 import { resetFlagCacheForTests } from '../features/flags';
 import { clearRegisteredSecrets } from '../security/redaction';
+import {
+  ClientPersistence,
+  setClientPersistenceForTests,
+} from '../storage/clientPersistence';
+import { InMemoryStorageDatabase } from '../storage/testing/inMemoryDatabase';
 
 /**
  * Global test environment.
@@ -89,6 +94,7 @@ function networkGuard(input: RequestInfo | URL): never {
 beforeEach(() => {
   blockedRequests.length = 0;
   vi.stubGlobal('fetch', vi.fn(networkGuard));
+  setClientPersistenceForTests(new ClientPersistence(new InMemoryStorageDatabase()));
 });
 
 // ── Isolation ───────────────────────────────────────────────────────────────
@@ -103,4 +109,5 @@ afterEach(() => {
   }
   resetFlagCacheForTests();
   clearRegisteredSecrets();
+  setClientPersistenceForTests(null);
 });

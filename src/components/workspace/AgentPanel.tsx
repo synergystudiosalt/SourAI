@@ -1,10 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
-import { motion, AnimatePresence } from 'motion/react';
 import {
-  Plus, ChevronRight, ChevronDown, AtSign, Check, Square, Loader2,
-  FilePlus, Trash2, ArrowLeft, Bot, Search, Settings, Mic, MicOff, X, Image as ImageIcon,
-  Lightbulb, CheckCircle, BarChart3, Package, Tag, Terminal,
+  Plus, ChevronRight, AtSign, Check, Square, Loader2,
+  ArrowLeft, Settings, Mic, MicOff, X, Image as ImageIcon,
 } from 'lucide-react';
 import { AttachmentPopover } from '../AttachmentPopover';
 import { AttachmentItem } from '../../types';
@@ -14,44 +11,44 @@ import { parseAgentResponse, summarizeForHistory, extractMentionedPaths, extract
 import { customApiManager, type CustomApiConfig } from '../../utils/customApiManager';
 import { VoiceRecognizer } from '../../utils/voiceRecognition';
 import { apiUrl } from '../../lib/api';
+import { isAbortError, normalizeError, type SourError } from '../../contracts/errors';
 import Logo from '../Logo';
 import PixelBowlIcon from '../PixelBowlIcon';
 import { CustomApiModal } from '../CustomApiModal';
+import { AgentMessage } from '../agent/AgentMessage';
+import { getClientPersistence, type ClientPersistence } from '../../storage/clientPersistence';
 
+export { AgentMarkdownImage, MiniMarkdown } from '../agent/MarkdownContent';
 
-/** Persistent context memory store keyed by project name. */
-class ContextStore {
-  private key(projectName: string) { return `sourbot_context::${projectName}`; }
-
-  getAll(projectName: string): Record<string, string> {
-    try {
-      const raw = localStorage.getItem(this.key(projectName));
-      return raw ? JSON.parse(raw) : {};
-    } catch { return {}; }
-  }
-
-  set(projectName: string, k: string, v: string) {
-    const all = this.getAll(projectName);
-    all[k] = v;
-    localStorage.setItem(this.key(projectName), JSON.stringify(all));
-  }
-
-  get(projectName: string, k: string): string | undefined {
-    return this.getAll(projectName)[k];
-  }
-
-  remove(projectName: string, k: string) {
-    const all = this.getAll(projectName);
-    delete all[k];
-    localStorage.setItem(this.key(projectName), JSON.stringify(all));
-  }
-
-  clear(projectName: string) {
-    localStorage.removeItem(this.key(projectName));
-  }
+export function normalizeAgentProviderError(
+  value: unknown,
+  fallbackMessage = 'Something went wrong reaching the sour.ai Agent.'
+): SourError {
+  const candidate =
+    value instanceof Error || (typeof value === 'string' && value.trim())
+      ? value
+      : fallbackMessage;
+  return normalizeError(candidate, {
+    code: 'agent_provider_failed',
+    causeCategory: 'provider',
+    message: fallbackMessage,
+    retryable: true,
+  });
 }
 
-const contextStore = new ContextStore();
+/** Parses one SSE payload while ensuring a provider error never escapes raw. */
+export function parseAgentStreamEvent(payload: string): Record<string, any> | null {
+  let event: unknown;
+  try {
+    event = JSON.parse(payload);
+  } catch {
+    return null;
+  }
+  if (!event || typeof event !== 'object' || Array.isArray(event)) return null;
+  const record = event as Record<string, any>;
+  if (record.error) throw normalizeAgentProviderError(record.error);
+  return record;
+}
 
 interface AgentPanelProps {
   isDarkMode: boolean;
@@ -86,231 +83,6 @@ const MODEL_LABELS: Record<AIModel, string> = {
 
 const MODEL_OPTIONS: AIModel[] = ['sour-omni-flash', 'sour-intelligence', 'sour-ultra', 'sour-overclock', 'sour-overcode'];
 
-// ─── XML Tag Parsing & Expandable Rendering ────────────────────────────────────
-
-interface ContentSegment {
-  type: string;
-  content: string;
-}
-
-const XML_TAG_RE = /<([a-zA-Z][\w-]*)>([\s\S]*?)<\/\1>/g;
-
-function parseAgentContent(text: string): ContentSegment[] {
-  const segments: ContentSegment[] = [];
-  let lastIndex = 0;
-
-  for (const match of text.matchAll(XML_TAG_RE)) {
-    if (match.index! > lastIndex) {
-      const t = text.slice(lastIndex, match.index).trim();
-      if (t) segments.push({ type: 'text', content: t });
-    }
-    segments.push({ type: match[1], content: match[2].trim() });
-    lastIndex = match.index! + match[0].length;
-  }
-
-  if (lastIndex < text.length) {
-    const t = text.slice(lastIndex).trim();
-    if (t) segments.push({ type: 'text', content: t });
-  }
-
-  return segments.length > 0 ? segments : [{ type: 'text', content: text }];
-}
-
-type TagIcon = React.FC<{ className?: string }>;
-
-const THINK_TAGS = ['think', 'thinking', 'reasoning', 'analysis', 'reflection', 'planning', 'step'];
-
-const KNOWN_TAGS: Record<string, { label: string; Icon: TagIcon; color: string; bg: string; border: string }> = {
-  ...Object.fromEntries(
-    THINK_TAGS.map(t => [t, { label: 'Thinking', Icon: Lightbulb, color: 'text-[#97948A] dark:text-[#97948A]', bg: '', border: '' }])
-  ),
-  check_for_errors:  { label: 'Error Check',     Icon: CheckCircle,   color: 'text-[#97948A] dark:text-[#97948A]', bg: 'bg-[#f5f3eb] dark:bg-[#1f1f1e]', border: 'border-[#97948A] dark:border-[#97948A]' },
-  function_request:  { label: 'Function Request', Icon: Settings,     color: 'text-[#8c887d] dark:text-[#a09c94]', bg: 'bg-[#f5f3eb] dark:bg-[#1f1f1e]', border: 'border-[#8c887d] dark:border-[#a09c94]' },
-  function_result:   { label: 'Function Result',  Icon: BarChart3,    color: 'text-[#8c887d] dark:text-[#a09c94]', bg: 'bg-[#f5f3eb] dark:bg-[#1f1f1e]', border: 'border-[#8c887d] dark:border-[#a09c94]' },
-  context_compact:   { label: 'Context Compacted', Icon: Package,      color: 'text-purple-500 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-950/30', border: 'border-purple-500 dark:border-purple-400' },
-};
-
-const TAG_COLOR_CYCLE = [
-  { color: 'text-[#8c887d] dark:text-[#a09c94]', bg: 'bg-[#f5f3eb] dark:bg-[#1f1f1e]', border: 'border-[#8c887d] dark:border-[#a09c94]' },
-  { color: 'text-[#97948A] dark:text-[#97948A]', bg: 'bg-[#f5f3eb] dark:bg-[#1f1f1e]', border: 'border-[#97948A] dark:border-[#97948A]' },
-  { color: 'text-blue-500 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-950/30', border: 'border-blue-500 dark:border-blue-400' },
-  { color: 'text-purple-500 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-950/30', border: 'border-purple-500 dark:border-purple-400' },
-  { color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-950/30', border: 'border-amber-500 dark:border-amber-400' },
-  { color: 'text-rose-500 dark:text-rose-400', bg: 'bg-rose-50 dark:bg-rose-950/30', border: 'border-rose-500 dark:border-rose-400' },
-  { color: 'text-cyan-600 dark:text-cyan-400', bg: 'bg-cyan-50 dark:bg-cyan-950/30', border: 'border-cyan-500 dark:border-cyan-400' },
-  { color: 'text-slate-500 dark:text-slate-400', bg: 'bg-slate-50 dark:bg-slate-950/30', border: 'border-slate-500 dark:border-slate-400' },
-];
-
-function getTagMeta(tagName: string): { label: string; Icon: TagIcon; color: string; bg: string; border: string } {
-  if (KNOWN_TAGS[tagName]) return KNOWN_TAGS[tagName];
-  let hash = 0;
-  for (let i = 0; i < tagName.length; i++) hash = ((hash << 5) - hash + tagName.charCodeAt(i)) | 0;
-  const palette = TAG_COLOR_CYCLE[Math.abs(hash) % TAG_COLOR_CYCLE.length];
-  const label = tagName.replace(/[_-]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-  return { label, Icon: Tag, ...palette };
-}
-
-const MiniMarkdown: React.FC<{ text: string }> = ({ text }) => (
-  <ReactMarkdown
-    components={{
-      p: ({ children }) => <p className="mb-2 last:mb-0 leading-[1.7]">{children}</p>,
-      ul: ({ children }) => <ul className="list-disc pl-5 mb-2 space-y-1 leading-[1.7]">{children}</ul>,
-      ol: ({ children }) => <ol className="list-decimal pl-5 mb-2 space-y-1 leading-[1.7]">{children}</ol>,
-      li: ({ children }) => <li>{children}</li>,
-      strong: ({ children }) => <strong className="font-semibold text-[#1c1b1a] dark:text-[#f0efe6]">{children}</strong>,
-      a: ({ children, href }) => (
-        <a href={href} target="_blank" rel="noreferrer" className="text-[#d96b43] underline">
-          {children}
-        </a>
-      ),
-      code: ({ children, className }) => {
-        if (className) {
-          return (
-            <pre className="my-2 p-3 rounded-lg bg-[#efece3] dark:bg-[#141413] overflow-x-auto text-[11px] font-mono leading-relaxed">
-              <code>{children}</code>
-            </pre>
-          );
-        }
-        return <code className="px-1 py-0.5 rounded bg-[#efece3] dark:bg-[#141413] text-[11px] font-mono">{children}</code>;
-      },
-    }}
-  >
-    {text}
-  </ReactMarkdown>
-);
-
-/** Expandable section with collapsible content and colored border-l. */
-const ExpandableTag: React.FC<{
-  tagType: string;
-  content: string;
-  id: string;
-  openSet: Set<string>;
-  onToggle: (id: string) => void;
-}> = ({ tagType, content, id, openSet, onToggle }) => {
-  const { label, Icon, color, bg, border } = getTagMeta(tagType);
-  const isOpen = openSet.has(id);
-  const isThinkTag = THINK_TAGS.includes(tagType);
-  const steps = content.split(/(?<=[.!?])\s+|\n+/).map(s => s.trim()).filter(Boolean).slice(0, 12);
-
-  if (isThinkTag) {
-    return (
-      <div className="select-none">
-        <button
-          type="button"
-          onClick={() => onToggle(id)}
-          className={`flex items-center gap-1.5 text-[10.5px] font-medium ${color} hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth`}
-        >
-          <Icon className="w-3 h-3 shrink-0" />
-          <span>{label}</span>
-          <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
-        </button>
-        <AnimatePresence>
-          {isOpen && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.15 }}
-              className="mt-1.5 pl-2 border-l border-[#e2dec0] dark:border-[#383836] text-[10.5px] text-[#706c62] dark:text-[#a09d98] leading-relaxed overflow-hidden"
-            >
-              {content}
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-    );
-  }
-
-  return (
-    <div className="select-none">
-      <button
-        type="button"
-        onClick={() => onToggle(id)}
-        className={`flex items-center gap-1.5 text-[10.5px] font-medium ${color} hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth`}
-      >
-        <Icon className="w-3 h-3 shrink-0" />
-        <span>{label}</span>
-        <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
-      </button>
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.15 }}
-            className={`mt-1.5 pl-2 border-l ${border} text-[10.5px] ${color} space-y-1 leading-relaxed overflow-hidden`}
-          >
-            {steps.map((step, i) => (
-              <div key={i}>{step}</div>
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-};
-
-/** Renders agent content with expandable XML tag sections. */
-const AgentContent: React.FC<{ text: string; isTyping: boolean; msgId: string; openTags: Set<string>; onToggleTag: (id: string) => void }> = ({
-  text, isTyping, msgId, openTags, onToggleTag,
-}) => {
-  const segments = parseAgentContent(text);
-  return (
-    <div className="space-y-1">
-      {segments.map((seg, i) => {
-        const segId = `${msgId}-xml-${i}`;
-        if (seg.type === 'text') {
-          return <MiniMarkdown key={i} text={seg.content} />;
-        }
-        return (
-          <ExpandableTag
-            key={i}
-            tagType={seg.type}
-            content={seg.content}
-            id={segId}
-            openSet={openTags}
-            onToggle={onToggleTag}
-          />
-        );
-      })}
-    </div>
-  );
-};
-
-/**
- * Reveals `text` a few characters at a time (a staggered, simulated typing
- * effect) instead of dumping the whole response in at once. Only animates
- * when `enabled` is true (freshly-generated messages); once it finishes a
- * single pass it locks in the full text so later re-renders never replay it.
- */
-const TypedMarkdown: React.FC<{ text: string; enabled: boolean }> = ({ text, enabled }) => {
-  const [shown, setShown] = useState(enabled ? '' : text);
-  const doneRef = useRef(!enabled);
-
-  useEffect(() => {
-    if (doneRef.current || !enabled) {
-      setShown(text);
-      return;
-    }
-    let i = 0;
-    const id = setInterval(() => {
-      i += 4;
-      if (i >= text.length) {
-        setShown(text);
-        doneRef.current = true;
-        clearInterval(id);
-      } else {
-        setShown(text.slice(0, i));
-      }
-    }, 14);
-    return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [text]);
-
-  return <MiniMarkdown text={shown} />;
-};
-
 export const AgentPanel: React.FC<AgentPanelProps> = ({
   isDarkMode,
   isCollapsed,
@@ -325,10 +97,11 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   const [messages, setMessages] = useState<AgentChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isSending, setIsSending] = useState(false);
-  const [mode, setMode] = useState<AgentMode>(() => (localStorage.getItem('sourbot_agent_mode') as AgentMode) || 'write');
-  const [selectedModel, setSelectedModel] = useState<AIModel>(
-    () => (localStorage.getItem('sourbot_agent_model') as AIModel) || 'sour-omni-flash'
-  );
+  const [mode, setMode] = useState<AgentMode>('write');
+  const [selectedModel, setSelectedModel] = useState<AIModel>('sour-omni-flash');
+  const [hydratedProjectId, setHydratedProjectId] = useState<string | null>(null);
+  const persistenceRef = useRef<ClientPersistence | null>(null);
+  const contextRef = useRef<Record<string, string>>({});
   const [showModelPopover, setShowModelPopover] = useState(false);
   const [showCustomApiModal, setShowCustomApiModal] = useState(false);
   const [customApiConfigs, setCustomApiConfigs] = useState<CustomApiConfig[]>(customApiManager.getConfigs());
@@ -433,42 +206,57 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     return { promptToSend: modifiedText, autoCalledFunctions };
   };
 
-  // Ref to suppress Save during a project transition — without this the Save
-  // effect fires with stale messages and writes the old conversation to the
-  // new projectId's localStorage key before the Load effect's setState lands.
-  const projectSwitchingRef = useRef(false);
+  useEffect(() => {
+    let cancelled = false;
+    setHydratedProjectId(null);
+    setMessages([]);
+    contextRef.current = {};
+    void getClientPersistence()
+      .then(async (persistence) => {
+        persistenceRef.current = persistence;
+        const [storedMessages, storedMode, storedModel, storedContext] = await Promise.all([
+          persistence.loadAgentMessages(projectId),
+          persistence.settings.getValue<string>('agent.mode'),
+          persistence.settings.getValue<string>('agent.model'),
+          persistence.loadContext(projectId, projectName),
+        ]);
+        if (cancelled) return;
+        // Do not erase a prompt submitted while durable state was still loading.
+        setMessages((current) => (current.length > 0 ? current : storedMessages));
+        if (storedMode === 'write' || storedMode === 'plan') setMode(storedMode);
+        if (storedModel && MODEL_OPTIONS.includes(storedModel as AIModel)) {
+          setSelectedModel(storedModel as AIModel);
+        }
+        contextRef.current = storedContext;
+        setHydratedProjectId(projectId);
+      })
+      .catch((error) => {
+        if (!cancelled) console.error('[sour.ai] Could not hydrate agent storage', error);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, projectName]);
 
   useEffect(() => {
-    projectSwitchingRef.current = true;
-    try {
-      const raw = localStorage.getItem(`sourbot_agent_thread::${projectId}`);
-      setMessages(raw ? JSON.parse(raw) : []);
-    } catch {
-      setMessages([]);
-    }
-  }, [projectId]);
+    if (hydratedProjectId !== projectId || !persistenceRef.current) return;
+    const timer = window.setTimeout(() => {
+      void persistenceRef.current
+        ?.saveAgentMessages(projectId, projectName, messages)
+        .catch((error) => console.error('[sour.ai] Could not persist agent thread', error));
+    }, 100);
+    return () => window.clearTimeout(timer);
+  }, [hydratedProjectId, messages, projectId, projectName]);
 
   useEffect(() => {
-    // During a project switch, skip the first Persist so the Load effect's
-    // setState can land first.
-    if (projectSwitchingRef.current) {
-      projectSwitchingRef.current = false;
-      return;
-    }
-    try {
-      localStorage.setItem(`sourbot_agent_thread::${projectId}`, JSON.stringify(messages));
-    } catch {
-      /* storage full/unavailable - not critical */
-    }
-  }, [messages, projectId]);
+    if (!hydratedProjectId) return;
+    void persistenceRef.current?.settings.set('agent.mode', 'agent', mode);
+  }, [hydratedProjectId, mode]);
 
   useEffect(() => {
-    localStorage.setItem('sourbot_agent_mode', mode);
-  }, [mode]);
-
-  useEffect(() => {
-    localStorage.setItem('sourbot_agent_model', selectedModel);
-  }, [selectedModel]);
+    if (!hydratedProjectId) return;
+    void persistenceRef.current?.settings.set('agent.model', 'agent', selectedModel);
+  }, [hydratedProjectId, selectedModel]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -688,7 +476,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   /** Resolves @@context_store: key = value — stores context in persistent memory. */
   const resolveContextStore = (entries: { key: string; value: string }[]): string => {
     for (const { key, value } of entries) {
-      contextStore.set(projectName, key, value);
+      contextRef.current[key] = value;
+      void persistenceRef.current?.setContext(projectId, key, value);
     }
     return entries.map(({ key }) => `[Context stored: "${key}"]`).join('\n');
   };
@@ -697,7 +486,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   const resolveContextGet = (keys: string[]): string => {
     const parts: string[] = [];
     for (const k of keys) {
-      const val = contextStore.get(projectName, k);
+      const val = contextRef.current[k];
       parts.push(val !== undefined
         ? `[Context: "${k}"]\n${val}`
         : `[Context: "${k}"]\nNot found.`);
@@ -707,7 +496,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
 
   /** Resolves @@context_list — shows all stored context keys. */
   const resolveContextList = (): string => {
-    const all = contextStore.getAll(projectName);
+    const all = contextRef.current;
     const keys = Object.keys(all);
     if (keys.length === 0) return '[Context store is empty]';
     return `[Stored context keys (${keys.length})]:\n${keys.map(k => `- ${k}`).join('\n')}`;
@@ -716,7 +505,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   /** Resolves @@context_clear: key — removes a context entry. */
   const resolveContextClear = (keys: string[]): string => {
     for (const k of keys) {
-      contextStore.remove(projectName, k);
+      delete contextRef.current[k];
+      void persistenceRef.current?.removeContext(projectId, k);
     }
     return keys.map(k => `[Context cleared: "${k}"]`).join('\n');
   };
@@ -936,7 +726,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
 
           if (!res.ok) {
             const errData = await res.json().catch(() => ({}));
-            throw new Error(errData?.error || 'The agent failed to respond.');
+            throw normalizeAgentProviderError(errData?.error, 'The agent failed to respond.');
           }
 
           // Read SSE stream
@@ -955,9 +745,9 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
               for (const line of lines) {
                 const trimmed = line.trim();
                 if (!trimmed || !trimmed.startsWith('data: ')) continue;
+                const event = parseAgentStreamEvent(trimmed.slice(6));
+                if (!event) continue;
                 try {
-                  const event = JSON.parse(trimmed.slice(6));
-                  if (event.error) throw new Error(event.error);
                   if (event.token) {
                     streamText += event.token;
                     // Update message with live text (truncate think tags for display)
@@ -1066,7 +856,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           });
 
           const data = await res.json().catch(() => ({}));
-          if (!res.ok) throw new Error(data?.error || 'The agent failed to respond.');
+          if (!res.ok) throw normalizeAgentProviderError(data?.error, 'The agent failed to respond.');
 
           const parsed = parseAgentResponse(data.text || '');
 
@@ -1186,16 +976,17 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
 
       if (willAutoApply) applyOpsStaggered(msgId, allOps);
 
-    } catch (err: any) {
-      if (err?.name === 'AbortError') {
+    } catch (err: unknown) {
+      if (isAbortError(err)) {
         setMessages((prev) => [...prev, { id: genId(), role: 'assistant', content: '_Stopped._', createdAt: Date.now() }]);
       } else {
+        const normalized = normalizeAgentProviderError(err);
         setMessages((prev) => [
           ...prev,
           {
             id: genId(),
             role: 'assistant',
-            content: err?.message || 'Something went wrong reaching the sour.ai Agent.',
+            content: normalized.message,
             isError: true,
             createdAt: Date.now(),
           },
@@ -1298,233 +1089,17 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   }
 
   const renderMessage = (msg: AgentChatMessage, idx: number) => {
-    if (msg.role === 'user') {
-      return (
-        <div key={msg.id} className="flex justify-end mb-4">
-          <div className="max-w-[88%] bg-[#f0ede4] dark:bg-[#252524] text-[#1c1b1a] dark:text-[#f0efe6] px-2.5 py-1.5 text-[12px] leading-relaxed whitespace-pre-wrap wrap-break-word rounded-lg">
-            {msg.content}
-          </div>
-        </div>
-      );
-    }
-
-    const isLatest = idx === messages.length - 1;
-    const isTyping = freshMessageIdsRef.current.has(msg.id) && isLatest;
-
     return (
-      <div key={msg.id} className="space-y-1.5 mb-5">
-        <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-[#a39d8f] dark:text-[#767671]">
-          <Logo size={12} /> sour.ai Agent
-        </div>
-
-        {msg.content && (
-          <div className={`text-[12px] leading-[1.7] wrap-break-word ${msg.isError ? 'text-red-600 dark:text-red-400' : 'text-[#3d3a33] dark:text-[#dedcd6]'}`}>
-            {msg.role === 'assistant' && !msg.content.startsWith('**Sub-agent') ? (
-              <AgentContent text={msg.content} isTyping={isTyping} msgId={msg.id} openTags={openXmlTags} onToggleTag={toggleXmlTag} />
-            ) : (
-              <TypedMarkdown text={msg.content} enabled={isTyping} />
-            )}
-          </div>
-        )}
-
-        {msg.toolCalls && msg.toolCalls.length > 0 && msg.toolCalls.map((tc, ti) => {
-          const tcId = `${msg.id}-tc-${ti}`;
-          const isReading = msg.isReadingFiles;
-          return (
-            <div key={tcId} className="select-none">
-              <button
-                type="button"
-                onClick={() => !isReading && toggleToolCalls(tcId)}
-                className="flex items-center gap-1.5 text-[10.5px] font-medium text-[#8c887d] dark:text-[#a09c94] hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth"
-              >
-                {isReading ? (
-                  <Loader2 className="w-3 h-3 animate-spin shrink-0" />
-                ) : tc.type === 'readfile' ? (
-                  tc.found ? <Check className="w-3 h-3 text-amber-600 shrink-0" /> : <Search className="w-3 h-3 shrink-0" />
-                ) : tc.type === 'listdir' || tc.type === 'glob' ? (
-                  <Terminal className="w-3 h-3 shrink-0" />
-                ) : (
-                  <Search className="w-3 h-3 shrink-0" />
-                )}
-                <span>{
-                  tc.type === 'readfile' ? `Read: ${tc.path}`
-                  : tc.type === 'findall' ? `Search: ${tc.query}`
-                  : tc.type === 'replace' ? `Replace: ${tc.path}`
-                  : tc.type === 'search_imports' ? `Imports: ${tc.symbol}`
-                  : tc.type === 'rename' ? `Rename: ${tc.oldPath} → ${tc.newPath}`
-                  : tc.type === 'listdir' ? `Dir: ${tc.path}`
-                  : tc.type === 'glob' ? `Glob: ${tc.pattern}`
-                  : 'Tool call'
-                }</span>
-                {!isReading && <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${openToolCalls.has(tcId) ? 'rotate-180' : ''}`} />}
-              </button>
-              <AnimatePresence>
-                {openToolCalls.has(tcId) && !isReading && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    transition={{ duration: 0.15 }}
-                    className="mt-1.5 pl-2 border-l border-[#e2dec0] dark:border-[#383836] text-[10.5px] text-[#706c62] dark:text-[#a09d98] space-y-1 leading-relaxed overflow-hidden"
-                  >
-                    {tc.type === 'readfile' ? (
-                      <div className="flex items-center gap-1.5">
-                        {tc.found ? <Check className="w-3 h-3 text-amber-600 shrink-0" /> : <span className="w-3 h-3 text-red-400 shrink-0 font-bold leading-3 text-center">!</span>}
-                        <span className="font-mono truncate">{tc.path}</span>
-                        {!tc.found && <span className="text-red-400 shrink-0">not found</span>}
-                      </div>
-                    ) : tc.type === 'findall' ? (
-    <div className="space-y-2.5">
-                        <div className="flex items-center gap-1.5 font-medium">
-                          <span>"{tc.query}" &mdash; {tc.matchCount} match{tc.matchCount !== 1 ? 'es' : ''} in {tc.fileCount} file{tc.fileCount !== 1 ? 's' : ''}</span>
-                        </div>
-                        {tc.matches.slice(0, 5).map((m, j) => (
-                          <div key={j} className="pl-3 font-mono text-[9.5px] truncate">
-                            <span className="opacity-60">{m.path}:{m.line}</span>{' '}{m.text}
-                          </div>
-                        ))}
-                        {tc.matchCount > 5 && (
-                          <div className="pl-3 opacity-50 text-[9.5px]">…and {tc.matchCount - 5} more</div>
-                        )}
-                      </div>
-                    ) : tc.type === 'replace' ? (
-                      <div className="space-y-1">
-                        <div className="font-mono truncate">{tc.path}</div>
-                        {tc.applied ? (
-                          <div className="text-amber-600">Applied ({tc.search.length} → {tc.replace.length} chars)</div>
-                        ) : tc.found ? (
-                          <div className="text-red-400">Search string not found</div>
-                        ) : (
-                          <div className="text-red-400">File not found</div>
-                        )}
-                      </div>
-                    ) : tc.type === 'search_imports' ? (
-                      <div className="space-y-2.5">
-                        <div className="font-medium">
-                          "{tc.symbol}" &mdash; {tc.matchCount} usage{tc.matchCount !== 1 ? 's' : ''}
-                        </div>
-                        {tc.matches.slice(0, 5).map((m, j) => (
-                          <div key={j} className="pl-3 font-mono text-[9.5px] truncate">
-                            <span className="opacity-60">{m.path}:{m.line}</span>{' '}{m.text}
-                          </div>
-                        ))}
-                        {tc.matchCount > 5 && (
-                          <div className="pl-3 opacity-50 text-[9.5px]">…and {tc.matchCount - 5} more</div>
-                        )}
-                      </div>
-                    ) : tc.type === 'rename' ? (
-                      <div className="font-mono text-[9.5px]">
-                        {tc.oldPath} → {tc.newPath}
-                      </div>
-                    ) : tc.type === 'listdir' ? (
-                      <div className="space-y-1">
-                        <div className="font-medium flex items-center gap-1.5">
-                          <Terminal className="w-3 h-3 shrink-0" />
-                          <span>{tc.path} ({tc.entries.length} entries)</span>
-                        </div>
-                        {tc.entries.slice(0, 20).map((entry, j) => (
-                          <div key={j} className="pl-3 font-mono text-[9.5px]">
-                            {entry.endsWith('/') ? (
-                              <span className="text-amber-600 dark:text-amber-400">{entry}</span>
-                            ) : (
-                              <span>{entry}</span>
-                            )}
-                          </div>
-                        ))}
-                        {tc.entries.length > 20 && (
-                          <div className="pl-3 opacity-50 text-[9.5px]">…and {tc.entries.length - 20} more</div>
-                        )}
-                      </div>
-                    ) : tc.type === 'glob' ? (
-                      <div className="space-y-1">
-                        <div className="font-medium flex items-center gap-1.5">
-                          <Terminal className="w-3 h-3 shrink-0" />
-                          <span>{tc.pattern} — {tc.matchCount} file{tc.matchCount !== 1 ? 's' : ''}</span>
-                        </div>
-                        {tc.matches.slice(0, 15).map((path, j) => (
-                          <div key={j} className="pl-3 font-mono text-[9.5px] truncate">{path}</div>
-                        ))}
-                        {tc.matchCount > 15 && (
-                          <div className="pl-3 opacity-50 text-[9.5px]">…and {tc.matchCount - 15} more</div>
-                        )}
-                      </div>
-                    ) : null}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          );
-        })}
-
-        {msg.ops && msg.ops.length > 0 && msg.ops.map((op) => {
-          const applied = msg.appliedPaths?.includes(op.path);
-          const isCoding = msg.codingPaths?.includes(op.path);
-          const opId = `${msg.id}-op-${op.path}`;
-          const isOpen = openToolCalls.has(opId);
-          const lines = op.content ? op.content.split('\n') : [];
-          const addedSet = new Set(op.addedLines || []);
-          const removedLines = op.removedLines || [];
-          const pathParts = op.path.split('/');
-          const fileName = pathParts.pop() || op.path;
-          const dirPath = pathParts.join('/');
-          return (
-            <div key={opId} className="select-none border border-[#e5e3db] dark:border-[#2d2d2c] rounded-md overflow-hidden mb-2">
-              {/* Breadcrumb bar */}
-              <button
-                type="button"
-                onClick={() => !isCoding && toggleToolCalls(opId)}
-                className="w-full flex items-center gap-1.5 px-2.5 py-1.5 bg-[#f5f3eb] dark:bg-[#252524] border-b border-[#e5e3db] dark:border-[#2d2d2c] text-[10.5px] text-[#706c62] dark:text-[#a09c94] hover:bg-[#efece3] dark:hover:bg-[#2a2a29] cursor-pointer ws-button-smooth"
-              >
-                {isCoding ? (
-                  <Loader2 className="w-3 h-3 animate-spin shrink-0 text-[#97948A]" />
-                ) : op.type === 'delete' ? (
-                  <Trash2 className="w-3 h-3 shrink-0 text-[#97948A]" />
-                ) : (
-                  <FilePlus className="w-3 h-3 shrink-0 text-[#97948A]" />
-                )}
-                <span className="truncate flex-1 text-left">
-                  {dirPath && <span className="opacity-50">{dirPath}/</span>}
-                  <span className="font-medium text-[#1c1b1a] dark:text-[#f0efe6]">{fileName}</span>
-                </span>
-                {!isCoding && <ChevronDown className={`w-3 h-3 transition-transform duration-200 shrink-0 text-[#97948A] ${isOpen ? 'rotate-180' : ''}`} />}
-              </button>
-              {/* Expanded content */}
-              <AnimatePresence>
-                {isOpen && !isCoding && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    transition={{ duration: 0.15 }}
-                    className="overflow-hidden"
-                  >
-                    {op.type === 'delete' ? (
-                      <div className="px-2.5 py-1.5 text-[10.5px] text-red-600 dark:text-red-400 bg-red-50/50 dark:bg-red-950/10">
-                        Will delete this file
-                      </div>
-                    ) : lines.length > 0 || removedLines.length > 0 ? (
-                      <div className="h-48 overflow-y-auto thin-scrollbar">
-                        {lines.map((line, li) => (
-                          <div key={`add-${li}`} className="flex items-stretch">
-                            <div className={`w-0.5 shrink-0 ${addedSet.has(li) ? 'bg-emerald-500/50 dark:bg-emerald-400/40' : 'bg-transparent'}`} />
-                            <pre className={`flex-1 px-2.5 py-[1px] font-mono text-[10px] leading-[1.7] whitespace-pre ${addedSet.has(li) ? 'bg-emerald-100/60 dark:bg-emerald-900/20 text-emerald-900 dark:text-emerald-200' : 'text-[#1c1b1a] dark:text-[#e0dcd4]'}`}>{line || ' '}</pre>
-                          </div>
-                        ))}
-                        {removedLines.map((rm, ri) => (
-                          <div key={`del-${ri}`} className="flex items-stretch">
-                            <div className="w-0.5 shrink-0 bg-red-400/50 dark:bg-red-500/40" />
-                            <pre className="flex-1 px-2.5 py-[1px] font-mono text-[10px] leading-[1.7] whitespace-pre bg-red-100/50 dark:bg-red-900/15 text-red-700 dark:text-red-300 line-through opacity-70">{rm.text || ' '}</pre>
-                          </div>
-                        ))}
-                      </div>
-                    ) : null}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          );
-        })}
-      </div>
+      <AgentMessage
+        key={msg.id}
+        message={msg}
+        isLatest={idx === messages.length - 1}
+        animateTyping={freshMessageIdsRef.current.has(msg.id)}
+        openTags={openXmlTags}
+        openItems={openToolCalls}
+        onToggleTag={toggleXmlTag}
+        onToggleItem={toggleToolCalls}
+      />
     );
   };
 

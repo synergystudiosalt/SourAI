@@ -5,7 +5,7 @@ Date: 2026-07-27
 
 ## Context
 
-Measured baseline, before any migration work:
+Measured pre-optimization baseline:
 
 ```
 dist/assets/index-*.js   2,342.79 kB raw   694.54 kB gzip   (single chunk)
@@ -18,9 +18,11 @@ application are in it — including PDF and DOCX parsers that only matter once a
 user attaches a document.
 
 The engineering target is under 500 kB gzip of initial JavaScript, excluding
-lazily loaded editor language chunks. The baseline exceeds it by about 195 kB
-before WebContainer, Pyodide, WebLLM, tree-sitter, or a Git implementation are
-added — each of which is larger than the entire current bundle.
+lazily loaded editor language chunks. That pre-optimization build exceeded the
+target by about 195 kB. Phase 0 moved PDF and DOCX parsing behind dynamic
+imports; the post-change baseline is recorded in `docs/baseline-metrics.json`
+and is below the target. WebContainer, Pyodide, WebLLM, tree-sitter, and Git
+implementations remain prohibited from the initial graph.
 
 ## Decision
 
@@ -46,6 +48,12 @@ the initial budget. Keeping them out of that number is the entire point.
 `npm run analyze` produces a treemap at `docs/bundle-report.html` so the cost of
 a dependency is visible before it ships.
 
+`npm run check:bundle` is read-only. An intentional
+`node scripts/check-bundle-budget.mjs --record-metrics` updates the recorded
+measurements without changing the ceiling, while `--update-baseline` updates
+both. `npm run metrics:baseline` records three cold-context browser interaction
+samples and the bundle measurement using the same production preview.
+
 ## Consequences
 
 - A regression is caught at build time by a specific number, not noticed months
@@ -55,10 +63,9 @@ a dependency is visible before it ships.
 - Cost: lazy loading adds real complexity — loading states, error states for a
   chunk that fails to fetch, and offline behaviour when a chunk was never
   cached. Each lazy boundary needs those handled.
-- The ratchet starts above target. That is a deliberate, recorded debt, not an
-  oversight: closing it means splitting the document parsers and the markdown
-  and math stack out of the entry chunk, which is migration work rather than a
-  Phase 0 change.
+- The Phase 0 ratchet starts below target after splitting document parsers.
+  Markdown, math, and the remaining application shell still dominate the entry
+  chunk and remain the next candidates if later features approach the ceiling.
 
 ## Alternatives considered
 

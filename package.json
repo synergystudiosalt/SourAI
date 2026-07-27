@@ -12,7 +12,9 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "e2e": "playwright test",
+    "e2e:chromium": "playwright test --project=chromium",
     "e2e:install": "playwright install --with-deps",
+    "metrics:baseline": "playwright test e2e/baseline-metrics.spec.ts --project=chromium && node scripts/check-bundle-budget.mjs --record-metrics",
     "analyze": "vite build --mode analyze",
     "check:bundle": "node scripts/check-bundle-budget.mjs",
     "verify": "npm run lint && npm run test && npm run build && npm run check:bundle"

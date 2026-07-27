@@ -7,6 +7,7 @@ import {
   SILENTLY_ACCEPTED_UNSAFE_PATHS,
 } from '../test/fixtures/virtualProject';
 import {
+  canonicalProjectPath,
   createRealFolder,
   deleteRealEntry,
   isDirectoryPickerSupported,
@@ -120,26 +121,28 @@ describe('path safety', () => {
     expect(Object.keys(fs.snapshot())).toEqual(Object.keys(before));
   });
 
-  it('KNOWN WEAKNESS: accepts malformed paths that the browser does not reject', async () => {
-    // Phase 2 adds canonical path validation ahead of every handle call. Until
-    // then these are accepted silently. This test asserts the CURRENT, WRONG
-    // behaviour so the fix is detectable: when Phase 2 lands, it fails and gets
-    // rewritten as a rejection assertion.
-    for (const { path, writtenAs, why } of SILENTLY_ACCEPTED_UNSAFE_PATHS) {
+  it('rejects malformed paths before opening or creating a handle', async () => {
+    for (const { path, why } of SILENTLY_ACCEPTED_UNSAFE_PATHS) {
       const { root, fs } = createFakeDirectory();
-      await expect(writeRealFile(root, path, 'payload'), why).resolves.toBeUndefined();
-      expect(fs.snapshot(), why).toHaveProperty([writtenAs], 'payload');
+      await expect(writeRealFile(root, path, 'payload'), why).rejects.toThrow(/Invalid project-relative path/);
+      expect(fs.calls, why).toEqual([]);
+      expect(fs.snapshot(), why).toEqual({});
     }
   });
 
-  it('KNOWN WEAKNESS: a rejected write still creates the directories it walked through', async () => {
-    // `resolveDirHandle` creates each segment as it descends, so a path that is
-    // rejected at its final segment leaves partial directories behind. A
-    // transactional change layer (Phase 2) removes this class of side effect.
+  it('rejects traversal before creating any partial parent directories', async () => {
     const { root, fs } = createFakeDirectory();
     await expect(writeRealFile(root, 'src/deep/../../escape.txt', 'payload')).rejects.toThrow();
-    expect(fs.paths()).toContain('src');
-    expect(fs.paths()).toContain('src/deep');
+    expect(fs.paths()).toEqual([]);
+    expect(fs.calls).toEqual([]);
+  });
+
+  it('normalizes Unicode and rejects non-canonical separators and empty segments', () => {
+    expect(canonicalProjectPath('caf\u0065\u0301/menu.ts')).toBe('café/menu.ts');
+    for (const path of ['', '/a', 'a/', 'a//b', 'a\\b', 'C:/a', 'a/./b', 'a/../b']) {
+      expect(() => canonicalProjectPath(path), path).toThrow(/Invalid project-relative path/);
+    }
+    expect(canonicalProjectPath('', true)).toBe('');
   });
 });
 
@@ -164,19 +167,26 @@ describe('delete, folder creation, and rename', () => {
     expect(fs.paths()).not.toContain('src/nested');
   });
 
-  it('moves a file by copying then removing the original', async () => {
-    const { root, fs } = createFakeDirectory({ 'src/a.ts': 'body' });
-    await renameRealEntry(root, { id: 'src/a.ts', name: 'a.ts', path: 'src/a.ts', type: 'file' }, 'src/a.ts', 'src/b.ts');
+  it('keeps real-folder rename disabled without mutating either path', async () => {
+    const { root, fs } = createFakeDirectory({
+      'src/a.ts': 'source',
+      'src/b.ts': 'destination',
+    });
 
-    expect(fs.snapshot()).toEqual({ 'src/b.ts': 'body' });
-  });
+    await expect(
+      renameRealEntry(
+        root,
+        { id: 'src/a.ts', name: 'a.ts', path: 'src/a.ts', type: 'file' },
+        'src/a.ts',
+        'src/new.ts'
+      )
+    ).rejects.toMatchObject({ name: 'NotSupportedError' });
 
-  it('moves a folder together with its subtree', async () => {
-    const { root, fs } = createFakeDirectory({ 'old/a.ts': 'a', 'old/deep/b.ts': 'b' });
-    await renameRealEntry(root, { id: 'old', name: 'old', path: 'old', type: 'folder' }, 'old', 'new');
-
-    expect(fs.snapshot()).toEqual({ 'new/a.ts': 'a', 'new/deep/b.ts': 'b' });
-    expect(fs.paths()).not.toContain('old');
+    expect(fs.snapshot()).toEqual({
+      'src/a.ts': 'source',
+      'src/b.ts': 'destination',
+    });
+    expect(fs.paths()).not.toContain('src/new.ts');
   });
 
   it('uploads files under a base path and returns what it wrote', async () => {
@@ -185,6 +195,90 @@ describe('delete, folder creation, and rename', () => {
 
     expect(result).toEqual([{ path: 'src/greet.txt', content: 'hello' }]);
     expect(fs.snapshot()['src/greet.txt']).toBe('hello');
+  });
+
+  it('reserves unique paths for duplicate text names in one upload batch', async () => {
+    const { root, fs } = createFakeDirectory();
+    const result = await uploadFilesToReal(root, 'src', [
+      new File(['first'], 'greet.txt', { type: 'text/plain' }),
+      new File(['second'], 'greet.txt', { type: 'text/plain' }),
+    ]);
+
+    expect(result).toEqual([
+      { path: 'src/greet.txt', content: 'first' },
+      { path: 'src/greet 2.txt', content: 'second' },
+    ]);
+    expect(fs.snapshot()['src/greet.txt']).toBe('first');
+    expect(fs.snapshot()['src/greet 2.txt']).toBe('second');
+  });
+
+  it('canonicalizes and reserves Unicode-equivalent names in one upload batch', async () => {
+    const { root, fs } = createFakeDirectory();
+    const result = await uploadFilesToReal(root, 'src', [
+      new File(['composed'], 'café.txt', { type: 'text/plain' }),
+      new File(['decomposed'], 'cafe\u0301.txt', { type: 'text/plain' }),
+    ]);
+
+    expect(result).toEqual([
+      { path: 'src/café.txt', content: 'composed' },
+      { path: 'src/café 2.txt', content: 'decomposed' },
+    ]);
+    expect(fs.snapshot()['src/café.txt']).toBe('composed');
+    expect(fs.snapshot()['src/café 2.txt']).toBe('decomposed');
+  });
+
+  it('uploads binary files without UTF-8 corruption', async () => {
+    const { root } = createFakeDirectory();
+    const bytes = new Uint8Array([0, 255, 1, 254, 2]);
+    const result = await uploadFilesToReal(root, 'assets', [
+      new File([bytes], 'sample.bin', { type: 'application/octet-stream' }),
+    ]);
+
+    expect(result).toEqual([{ path: 'assets/sample.bin' }]);
+    const stored = await (
+      await (await root.getDirectoryHandle('assets')).getFileHandle('sample.bin')
+    ).getFile();
+    expect(new Uint8Array(await stored.arrayBuffer())).toEqual(bytes);
+  });
+
+  it('preserves duplicate binary files under unique batch-local paths', async () => {
+    const { root } = createFakeDirectory();
+    const firstBytes = new Uint8Array([0, 255, 1]);
+    const secondBytes = new Uint8Array([2, 254, 3]);
+    const result = await uploadFilesToReal(root, 'assets', [
+      new File([firstBytes], 'sample.bin', { type: 'application/octet-stream' }),
+      new File([secondBytes], 'sample.bin', { type: 'application/octet-stream' }),
+    ]);
+
+    expect(result).toEqual([
+      { path: 'assets/sample.bin' },
+      { path: 'assets/sample 2.bin' },
+    ]);
+    const assets = await root.getDirectoryHandle('assets');
+    const storedFirst = await (await assets.getFileHandle('sample.bin')).getFile();
+    const storedSecond = await (await assets.getFileHandle('sample 2.bin')).getFile();
+    expect(new Uint8Array(await storedFirst.arrayBuffer())).toEqual(firstBytes);
+    expect(new Uint8Array(await storedSecond.arrayBuffer())).toEqual(secondBytes);
+  });
+
+  it('reserves case-variant binary names for case-insensitive filesystems', async () => {
+    const { root } = createFakeDirectory();
+    const firstBytes = new Uint8Array([10, 11]);
+    const secondBytes = new Uint8Array([20, 21]);
+    const result = await uploadFilesToReal(root, 'assets', [
+      new File([firstBytes], 'asset.bin', { type: 'application/octet-stream' }),
+      new File([secondBytes], 'ASSET.BIN', { type: 'application/octet-stream' }),
+    ]);
+
+    expect(result).toEqual([
+      { path: 'assets/asset.bin' },
+      { path: 'assets/ASSET 2.BIN' },
+    ]);
+    const assets = await root.getDirectoryHandle('assets');
+    const storedFirst = await (await assets.getFileHandle('asset.bin')).getFile();
+    const storedSecond = await (await assets.getFileHandle('ASSET 2.BIN')).getFile();
+    expect(new Uint8Array(await storedFirst.arrayBuffer())).toEqual(firstBytes);
+    expect(new Uint8Array(await storedSecond.arrayBuffer())).toEqual(secondBytes);
   });
 });
 

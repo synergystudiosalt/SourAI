@@ -1,14 +1,43 @@
 {
-  "measuredAt": "2026-07-27T15:59:34.343Z",
-  "initialJsGzipBytes": 449666,
-  "initialJsRawBytes": 1462141,
+  "measuredAt": "2026-07-27T17:28:17.684Z",
+  "initialJsGzipBytes": 455923,
+  "initialJsRawBytes": 1478343,
   "initialChunkCount": 1,
-  "lazyJsGzipBytes": 716988,
-  "lazyChunkCount": 120,
+  "lazyJsGzipBytes": 1088714,
+  "lazyChunkCount": 121,
   "largestInitialChunk": {
-    "file": "assets/index--0rv9vYJ.js",
-    "gzipBytes": 449666
+    "file": "assets/index-p1dJi79I.js",
+    "gzipBytes": 455923
   },
   "ceilingBytes": 458660,
-  "targetBytes": 512000
+  "targetBytes": 512000,
+  "interaction": {
+    "measuredAt": "2026-07-27T17:28:17.006Z",
+    "methodology": "Median of 3 isolated Playwright browser contexts against a Vite production preview; each context starts with a fresh HTTP cache and local state.",
+    "project": "chromium",
+    "browserVersion": "150.0.7871.182",
+    "platform": "win32",
+    "nodeVersion": "v24.18.0",
+    "sampleCount": 3,
+    "homeUsableMedianMs": 184,
+    "navigationLoadMedianMs": 131,
+    "workspaceOpenMedianMs": 369,
+    "samples": [
+      {
+        "homeUsableMs": 209,
+        "navigationLoadMs": 143,
+        "workspaceOpenMs": 553
+      },
+      {
+        "homeUsableMs": 184,
+        "navigationLoadMs": 131,
+        "workspaceOpenMs": 359
+      },
+      {
+        "homeUsableMs": 164,
+        "navigationLoadMs": 119,
+        "workspaceOpenMs": 369
+      }
+    ]
+  }
 }

@@ -5,11 +5,12 @@
  * policy) throws or reports a `SourError` so the UI can render one consistent
  * failure surface and so persisted events never contain raw provider strings.
  *
- * Messages are redacted at construction time. There is no code path that
- * produces a `SourError` carrying an unredacted credential.
+ * Messages and serializable fields are redacted at construction time. The
+ * original cause, when present, is retained in a module-private WeakMap so a
+ * structured clone or postMessage of the Error cannot carry raw provider data.
  */
 
-import { redactString, redactValue } from '../security/redaction';
+import { redactString, redactValue, type RedactedValue } from '../security/redaction';
 
 /** Coarse origin of a failure. Drives grouping, retry policy, and telemetry. */
 export type SourErrorCategory =
@@ -25,12 +26,14 @@ export type SourErrorCategory =
   | 'cancelled';
 
 /** Serializable shape — safe to persist in the event log and to postMessage. */
+export type SourErrorDetails = Readonly<Record<string, RedactedValue>>;
+
 export interface SourErrorData {
   readonly code: string;
   readonly message: string;
   readonly retryable: boolean;
   readonly userAction?: string;
-  readonly details?: Record<string, unknown>;
+  readonly details?: SourErrorDetails;
   readonly causeCategory: SourErrorCategory;
 }
 
@@ -52,11 +55,22 @@ const DEFAULT_RETRYABLE: ReadonlySet<SourErrorCategory> = new Set<SourErrorCateg
   'storage',
 ]);
 
+/**
+ * Raw causes are intentionally not installed on `Error.cause`.
+ *
+ * `structuredClone()` has special handling for Error objects and copies
+ * non-enumerable `cause` and `stack` properties. Making `cause`
+ * non-enumerable therefore does not keep a provider error out of a worker
+ * message. A WeakMap preserves local debugging access without making the raw
+ * value cloneable or serializable with the normalized error.
+ */
+const ORIGINAL_CAUSES = new WeakMap<SourError, unknown>();
+
 export class SourError extends Error implements SourErrorData {
   readonly code: string;
   readonly retryable: boolean;
   readonly userAction?: string;
-  readonly details?: Record<string, unknown>;
+  readonly details?: SourErrorDetails;
   readonly causeCategory: SourErrorCategory;
 
   constructor(init: SourErrorInit) {
@@ -66,24 +80,26 @@ export class SourError extends Error implements SourErrorData {
     this.causeCategory = init.causeCategory;
     this.retryable = init.retryable ?? DEFAULT_RETRYABLE.has(init.causeCategory);
     this.userAction = init.userAction ? redactString(init.userAction) : undefined;
-    this.details = init.details ? (redactValue(init.details) as Record<string, unknown>) : undefined;
+    this.details = init.details ? sanitizeDetails(init.details) : undefined;
     if (init.cause !== undefined) {
-      // Non-enumerable so structuredClone/JSON.stringify cannot pull an
-      // unredacted provider error into a persisted event.
-      Object.defineProperty(this, 'cause', { value: init.cause, enumerable: false, writable: false });
+      ORIGINAL_CAUSES.set(this, init.cause);
     }
+    // Error.message is writable by default and readonly TypeScript properties
+    // are not a runtime boundary. Freeze the complete instance after its raw
+    // cause has been placed in the private WeakMap.
+    Object.freeze(this);
   }
 
-  /** Plain, redacted, structured-cloneable representation. */
+  /** Fresh, deeply immutable, redacted, structured-cloneable representation. */
   toData(): SourErrorData {
-    return {
+    return deepFreeze({
       code: this.code,
-      message: this.message,
+      message: redactString(this.message),
       retryable: this.retryable,
-      userAction: this.userAction,
-      details: this.details,
+      userAction: this.userAction ? redactString(this.userAction) : undefined,
+      details: this.details ? sanitizeDetails(this.details) : undefined,
       causeCategory: this.causeCategory,
-    };
+    });
   }
 
   toJSON(): SourErrorData {
@@ -91,8 +107,31 @@ export class SourError extends Error implements SourErrorData {
   }
 }
 
+function sanitizeDetails(value: unknown): SourErrorDetails {
+  const sanitized = redactValue(value);
+  const record =
+    sanitized !== null && typeof sanitized === 'object' && !Array.isArray(sanitized)
+      ? sanitized
+      : { value: sanitized };
+  return deepFreeze(record);
+}
+
+function deepFreeze<T>(value: T, seen = new WeakSet<object>()): T {
+  if (value === null || typeof value !== 'object' || seen.has(value)) return value;
+  seen.add(value);
+  for (const child of Object.values(value as Record<string, unknown>)) {
+    deepFreeze(child, seen);
+  }
+  return Object.freeze(value);
+}
+
 export function isSourError(value: unknown): value is SourError {
   return value instanceof SourError;
+}
+
+/** Returns the in-memory original cause without exposing it to serialization. */
+export function getSourErrorCause(error: SourError): unknown {
+  return ORIGINAL_CAUSES.get(error);
 }
 
 /** True for the several ways a browser signals "the caller aborted this". */

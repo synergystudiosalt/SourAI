@@ -8,6 +8,7 @@ import {
   redactString,
   redactValue,
   registerSecret,
+  unregisterSecret,
 } from './redaction';
 
 describe('redactString', () => {
@@ -39,6 +40,40 @@ describe('redactString', () => {
     expect(redactString('https://api.example.com/v1?key=AIzaSyA1bcdefghijklmnopqrstuvwxyz0123456&x=1')).toBe(
       `https://api.example.com/v1?key=${REDACTED}&x=1`
     );
+    expect(redactString('https://app.example.com/callback#access_token=abcdefghijklmnopqrstuvwxyz012345')).toBe(
+      `https://app.example.com/callback#access_token=${REDACTED}`
+    );
+  });
+
+  it('masks credentials in JSON while keeping the key readable', () => {
+    expect(redactString('{"api_key":"abc"}')).toBe(`{"api_key":"${REDACTED}"}`);
+    expect(redactString('{"refresh_token": "alphabeticonly"}')).toBe(`{"refresh_token": "${REDACTED}"}`);
+    expect(redactString('{"password":"correct horse battery staple"}')).toBe(
+      `{"password":"${REDACTED}"}`
+    );
+  });
+
+  it('masks short and alphabetic values under unambiguous sensitive assignments', () => {
+    expect(redactString('api_key=abc')).toBe(`api_key=${REDACTED}`);
+    expect(redactString('password=huntertwo')).toBe(`password=${REDACTED}`);
+    expect(redactString("passphrase='open sesame'")).toBe(`passphrase='${REDACTED}'`);
+  });
+
+  it('supports sensitive key names much longer than the old regex bound', () => {
+    const key = `integration_${'descriptor_'.repeat(100)}api_key`;
+    expect(redactString(`${key}=alphabeticonly`)).toBe(`${key}=${REDACTED}`);
+  });
+
+  it('does not corrupt TypeScript annotations or ordinary code with key-like identifiers', () => {
+    const source = [
+      'const token: string = value;',
+      'const passwordHash: bcryptCompare(candidate, stored);',
+      'const credential = process.env.PROVIDER_KEY;',
+      'const accessToken = sessionStore;',
+      'interface Config { token: CredentialType }',
+      'type ApiKey = string;',
+    ].join('\n');
+    expect(redactString(source)).toBe(source);
   });
 
   it('masks a JWT', () => {
@@ -66,13 +101,44 @@ describe('redactString', () => {
     }
   });
 
-  it('ignores registered values too short to mask safely', () => {
+  it('honours explicitly registered short values and longest overlapping values first', () => {
     try {
       registerSecret('abc');
-      expect(redactString('abc is a common substring')).toBe('abc is a common substring');
+      registerSecret('abcdef');
+      expect(redactString('abcdef / abc')).toBe(`${REDACTED} / ${REDACTED}`);
     } finally {
       clearRegisteredSecrets();
     }
+  });
+
+  it('keeps a shared literal protected until every owner unregisters it', () => {
+    const shared = 'shared-provider-canary';
+    try {
+      registerSecret(shared);
+      registerSecret(shared);
+
+      unregisterSecret(shared);
+      expect(redactString(shared)).toBe(REDACTED);
+
+      unregisterSecret(shared);
+      expect(redactString(shared)).toBe(shared);
+    } finally {
+      clearRegisteredSecrets();
+    }
+  });
+
+  it('redacts a credential at the end of a full ~1 MB input without truncating safe content', () => {
+    const safePrefix = 'x'.repeat(1024 * 1024);
+    const input = `${safePrefix}\napi_key=alphabeticonly`;
+    const startedAt = performance.now();
+    const output = redactString(input);
+    const elapsed = performance.now() - startedAt;
+
+    expect(output).toBe(`${safePrefix}\napi_key=${REDACTED}`);
+    expect(containsSecret(safePrefix)).toBe(false);
+    // Deliberately generous for loaded CI while guarding the old ~35-second
+    // quadratic path and proving the whole input, including its tail, is read.
+    expect(elapsed).toBeLessThan(5_000);
   });
 });
 
@@ -80,6 +146,12 @@ describe('redactValue', () => {
   it('masks values under sensitive keys regardless of their shape', () => {
     const result = redactValue({ apiKey: 'plain-value', nested: { password: 'p', safe: 'keep' } });
     expect(result).toEqual({ apiKey: REDACTED, nested: { password: REDACTED, safe: 'keep' } });
+  });
+
+  it('preserves sensitive Map keys while masking their values', () => {
+    expect(redactValue(new Map([['authorization', 'short-private-value']]))).toEqual({
+      '[map]': [['authorization', REDACTED]],
+    });
   });
 
   it('redacts secrets inside arrays and error objects', () => {
@@ -94,6 +166,60 @@ describe('redactValue', () => {
     const cyclic: Record<string, unknown> = { name: 'root' };
     cyclic.self = cyclic;
     expect(redactValue(cyclic)).toEqual({ name: 'root', self: '[circular]' });
+  });
+
+  it('serializes repeated references normally rather than calling them circular', () => {
+    const shared = { value: 'keep' };
+    expect(redactValue({ first: shared, second: shared })).toEqual({
+      first: { value: 'keep' },
+      second: { value: 'keep' },
+    });
+  });
+
+  it('produces JSON-safe and structured-cloneable plain data for supported special values', () => {
+    const result = redactValue({
+      bigint: 42n,
+      callback: () => 'nope',
+      symbol: Symbol('hidden'),
+      missing: undefined,
+      invalidNumber: Number.NaN,
+      date: new Date('2025-01-02T03:04:05.000Z'),
+      map: new Map([['key', SECRET_CANARIES.openai]]),
+      set: new Set([1, 2]),
+      error: new Error(`provider failed with ${SECRET_CANARIES.groq}`),
+      buffer: new Uint8Array([1, 2, 3]),
+      blob: new Blob(['private bytes'], { type: 'application/octet-stream' }),
+    });
+
+    expect(() => JSON.stringify(result)).not.toThrow();
+    expect(() => structuredClone(result)).not.toThrow();
+    expectNoSecrets(result, 'sanitized special values');
+    expect(JSON.stringify(result)).toContain('42n');
+    expect(JSON.stringify(result)).toContain('Uint8Array 3 bytes');
+  });
+
+  it('does not invoke accessors and survives hostile proxies', () => {
+    let getterCalls = 0;
+    const withAccessor: Record<string, unknown> = {};
+    Object.defineProperty(withAccessor, 'danger', {
+      enumerable: true,
+      get() {
+        getterCalls++;
+        throw new Error('must not run');
+      },
+    });
+    const hostile = new Proxy(
+      {},
+      {
+        ownKeys() {
+          throw new Error('blocked');
+        },
+      }
+    );
+
+    expect(redactValue(withAccessor)).toEqual({ danger: '[accessor]' });
+    expect(getterCalls).toBe(0);
+    expect(redactValue(hostile)).toBe('[unserializable object]');
   });
 
   it('bounds recursion depth so untrusted tool output cannot exhaust the stack', () => {

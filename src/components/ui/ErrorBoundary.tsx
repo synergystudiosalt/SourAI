@@ -49,13 +49,17 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
 
   componentDidCatch(error: unknown, info: React.ErrorInfo): void {
     const normalized = normalizeError(error, { code: 'render_failed', causeCategory: 'runtime' });
-    // Keep the raw error in the console for local debugging only. It is never
-    // persisted, exported, or sent anywhere.
-    console.error('[sour.ai] Render error', error);
+    // Console output is an export boundary too: extensions, support tooling,
+    // screenshots, and future telemetry hooks can all observe it. Never pass
+    // the raw thrown value to a console method.
+    console.error('[sour.ai] Render error', normalized.toData());
     try {
       this.props.onError?.(normalized, info.componentStack ?? '');
     } catch (handlerError) {
-      console.error('[sour.ai] ErrorBoundary onError handler threw', handlerError);
+      console.error(
+        '[sour.ai] ErrorBoundary onError handler threw',
+        normalizeError(handlerError, { code: 'error_handler_failed', causeCategory: 'runtime' }).toData()
+      );
     }
   }
 

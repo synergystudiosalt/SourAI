@@ -4,8 +4,10 @@
  * The agent orchestrator, the storage layer, and the indexer all run in
  * dedicated workers. Booting real workers in unit tests is slow and hides the
  * failure mode that actually bites: passing something across `postMessage`
- * that cannot be structured-cloned (a `FileSystemHandle`, a class instance
- * with methods, a React element, a `Proxy`).
+ * that cannot be structured-cloned (a callback, a React element, or a
+ * `Proxy`). Platform handles such as `FileSystemHandle` are intentionally not
+ * listed here: browsers define those as serializable even though a plain-JS
+ * test double containing methods is not.
  *
  * `FakeWorker` runs the worker body in the same realm but forces every message
  * through `structuredClone`, so those bugs surface here instead of in the
@@ -18,10 +20,24 @@ export interface FakeWorkerHandlers<TIn, TOut> {
 }
 
 type MessageListener<T> = (event: MessageEvent<T>) => void;
+type ErrorListener = (event: ErrorEvent) => void;
+
+interface IdleTrackable {
+  readonly isIdle: boolean;
+  whenIdle(): Promise<void>;
+}
+
+/** Workers known to the harness, so compatibility flushes can drain all of them. */
+const trackedWorkers = new Set<IdleTrackable>();
 
 export class FakeWorker<TIn = unknown, TOut = unknown> {
   private readonly mainListeners = new Set<MessageListener<TOut>>();
-  private readonly errorListeners = new Set<(event: unknown) => void>();
+  private readonly errorListeners = new Set<ErrorListener>();
+  private readonly inboundQueue: TIn[] = [];
+  private inboundScheduled = false;
+  private inFlightHandlers = 0;
+  private pendingDeliveries = 0;
+  private readonly idleWaiters = new Set<() => void>();
   private terminated = false;
   /** Every message that crossed the boundary, in order. */
   readonly sent: TIn[] = [];
@@ -33,50 +49,142 @@ export class FakeWorker<TIn = unknown, TOut = unknown> {
   postMessage(message: TIn): void {
     if (this.terminated) throw new Error('postMessage called on a terminated worker');
     const cloned = cloneAcrossBoundary(message, 'main → worker');
+    trackedWorkers.add(this);
     this.sent.push(cloned);
-    // Deliver asynchronously, like a real worker, so tests cannot accidentally
-    // depend on synchronous delivery.
-    queueMicrotask(() => {
-      if (this.terminated) return;
-      void Promise.resolve(this.handlers.onMessage(cloned, (reply) => this.emit(reply))).catch((error) => {
-        for (const listener of this.errorListeners) listener(error);
-      });
-    });
+    this.inboundQueue.push(cloned);
+    this.scheduleInboundTask();
+  }
+
+  /**
+   * A real Worker receives each message from the browser task queue, after the
+   * sender's current task and its microtasks complete. Using `queueMicrotask`
+   * here makes promise callbacks observe the wrong ordering, so one queued
+   * timer is used per message.
+   */
+  private scheduleInboundTask(): void {
+    if (this.inboundScheduled || this.terminated || this.inboundQueue.length === 0) return;
+    this.inboundScheduled = true;
+    setTimeout(() => {
+      this.inboundScheduled = false;
+      if (this.terminated) {
+        this.resolveIdleWaiters();
+        return;
+      }
+      if (this.inboundQueue.length === 0) {
+        this.resolveIdleWaiters();
+        return;
+      }
+      // `undefined` is valid structured-cloneable message data, so queue
+      // length—not the shifted value—determines whether work exists.
+      const message = this.inboundQueue.shift() as TIn;
+      this.inFlightHandlers++;
+      this.scheduleInboundTask();
+
+      // Starting from an already-resolved promise catches both a synchronous
+      // throw and an async rejection from the handler.
+      void Promise.resolve()
+        .then(() => this.handlers.onMessage(message, (reply) => this.emit(reply)))
+        .catch((error) => this.emitError(error))
+        .finally(() => {
+          this.inFlightHandlers--;
+          this.resolveIdleWaiters();
+        });
+    }, 0);
   }
 
   private emit(reply: TOut): void {
     if (this.terminated) return;
     const cloned = cloneAcrossBoundary(reply, 'worker → main');
+    trackedWorkers.add(this);
     this.received.push(cloned);
-    queueMicrotask(() => {
-      if (this.terminated) return;
-      const event = { data: cloned } as MessageEvent<TOut>;
-      for (const listener of this.mainListeners) listener(event);
-    });
+    this.pendingDeliveries++;
+    setTimeout(() => {
+      try {
+        if (this.terminated) return;
+        const event = { data: cloned } as MessageEvent<TOut>;
+        for (const listener of this.mainListeners) listener(event);
+      } finally {
+        this.pendingDeliveries--;
+        this.resolveIdleWaiters();
+      }
+    }, 0);
+  }
+
+  private emitError(error: unknown): void {
+    const event = createWorkerErrorEvent(error);
+    trackedWorkers.add(this);
+    this.pendingDeliveries++;
+    setTimeout(() => {
+      try {
+        if (this.terminated) return;
+        for (const listener of this.errorListeners) listener(event);
+      } finally {
+        this.pendingDeliveries--;
+        this.resolveIdleWaiters();
+      }
+    }, 0);
   }
 
   addEventListener(type: 'message', listener: MessageListener<TOut>): void;
-  addEventListener(type: 'error', listener: (error: unknown) => void): void;
-  addEventListener(type: 'message' | 'error', listener: MessageListener<TOut> | ((error: unknown) => void)): void {
+  addEventListener(type: 'error', listener: ErrorListener): void;
+  addEventListener(type: 'message' | 'error', listener: MessageListener<TOut> | ErrorListener): void {
     if (type === 'message') this.mainListeners.add(listener as MessageListener<TOut>);
-    else this.errorListeners.add(listener as (error: unknown) => void);
+    else this.errorListeners.add(listener as ErrorListener);
   }
 
   removeEventListener(type: 'message', listener: MessageListener<TOut>): void;
-  removeEventListener(type: 'error', listener: (error: unknown) => void): void;
-  removeEventListener(type: 'message' | 'error', listener: MessageListener<TOut> | ((error: unknown) => void)): void {
+  removeEventListener(type: 'error', listener: ErrorListener): void;
+  removeEventListener(type: 'message' | 'error', listener: MessageListener<TOut> | ErrorListener): void {
     if (type === 'message') this.mainListeners.delete(listener as MessageListener<TOut>);
-    else this.errorListeners.delete(listener as (error: unknown) => void);
+    else this.errorListeners.delete(listener as ErrorListener);
   }
 
   terminate(): void {
     this.terminated = true;
+    this.inboundQueue.length = 0;
     this.mainListeners.clear();
     this.errorListeners.clear();
+    trackedWorkers.delete(this);
+    this.resolveIdleWaiters();
   }
 
   get isTerminated(): boolean {
     return this.terminated;
+  }
+
+  /** True when no queued, scheduled, executing, or outbound work remains. */
+  get isIdle(): boolean {
+    return (
+      this.terminated ||
+      (
+        this.inboundQueue.length === 0 &&
+        !this.inboundScheduled &&
+        this.inFlightHandlers === 0 &&
+        this.pendingDeliveries === 0
+      )
+    );
+  }
+
+  /**
+   * Resolves only after the complete worker/message chain is idle.
+   *
+   * Replies posted by async handlers and new inbound messages posted by main
+   * listeners are included because both increment tracked work before the
+   * preceding task can become idle.
+   */
+  whenIdle(): Promise<void> {
+    if (this.isIdle) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      this.idleWaiters.add(resolve);
+    });
+  }
+
+  private resolveIdleWaiters(): void {
+    if (!this.isIdle) return;
+    trackedWorkers.delete(this);
+    const waiters = [...this.idleWaiters];
+    this.idleWaiters.clear();
+    for (const resolve of waiters) resolve();
   }
 
   /** Resolves with the next message matching `predicate`, or rejects on timeout. */
@@ -99,6 +207,18 @@ export class FakeWorker<TIn = unknown, TOut = unknown> {
   }
 }
 
+function createWorkerErrorEvent(error: unknown): ErrorEvent {
+  const message = error instanceof Error ? error.message : String(error);
+  return new ErrorEvent('error', {
+    message,
+    filename: 'fake-worker',
+    lineno: 0,
+    colno: 0,
+    error,
+    cancelable: true,
+  });
+}
+
 /**
  * Enforces the `postMessage` contract. A real worker boundary throws
  * `DataCloneError` for non-cloneable values; so does this.
@@ -114,10 +234,22 @@ export function cloneAcrossBoundary<T>(value: T, direction: string): T {
   }
 }
 
-/** Flushes pending microtasks and timers so queued worker messages deliver. */
-export async function flushAsync(times = 3): Promise<void> {
-  for (let i = 0; i < times; i++) {
-    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+/**
+ * Waits for complete worker/message chains rather than guessing a timer count.
+ *
+ * Passing workers limits the wait to those instances. With no arguments, every
+ * worker created by this harness is drained for backwards compatibility.
+ */
+export async function flushAsync(...workers: IdleTrackable[]): Promise<void> {
+  const explicitWorkers = workers.length > 0 ? workers : null;
+  while (true) {
+    const current = explicitWorkers ?? [...trackedWorkers];
+    await Promise.all(current.map((worker) => worker.whenIdle()));
+    // Let promise continuations from the final task enqueue follow-up work
+    // before confirming that the chain is truly quiescent.
+    await Promise.resolve();
+    const finalWorkers = explicitWorkers ?? [...trackedWorkers];
+    if (finalWorkers.every((worker) => worker.isIdle)) return;
   }
 }
 

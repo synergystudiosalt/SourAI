@@ -17,6 +17,7 @@
  *
  * Usage:
  *   node scripts/check-bundle-budget.mjs                 check against budget
+ *   node scripts/check-bundle-budget.mjs --record-metrics  update measured bundle data
  *   node scripts/check-bundle-budget.mjs --update-baseline  re-record the ceiling
  */
 
@@ -83,13 +84,17 @@ function readInitialAssets(html) {
   return [...assets];
 }
 
-function listJsFiles(dir, prefix = '') {
+function isJavaScriptAsset(path) {
+  return path.endsWith('.js') || path.endsWith('.mjs');
+}
+
+function listJavaScriptFiles(dir, prefix = '') {
   const out = [];
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
     const rel = prefix ? `${prefix}/${entry}` : entry;
-    if (statSync(full).isDirectory()) out.push(...listJsFiles(full, rel));
-    else if (entry.endsWith('.js')) out.push({ rel, full });
+    if (statSync(full).isDirectory()) out.push(...listJavaScriptFiles(full, rel));
+    else if (isJavaScriptAsset(entry)) out.push({ rel, full });
   }
   return out;
 }
@@ -106,15 +111,18 @@ if (initialAssets.length === 0) {
   fail('No module scripts found in dist/index.html — the measurement would be meaningless.');
 }
 
-const allJs = listJsFiles(DIST);
+const allJs = listJavaScriptFiles(DIST);
 const byRel = new Map(allJs.map((file) => [file.rel, file]));
 
 const initial = [];
 for (const asset of initialAssets) {
-  if (!asset.endsWith('.js')) continue;
+  if (!isJavaScriptAsset(asset)) continue;
   const file = byRel.get(asset);
   if (!file) fail(`index.html references "${asset}", which is missing from dist/.`);
   initial.push({ rel: file.rel, gzip: gzipSize(file.full), raw: statSync(file.full).size });
+}
+if (initial.length === 0) {
+  fail('No initial .js or .mjs assets were measurable; refusing to report a zero-byte pass.');
 }
 
 const initialRelSet = new Set(initial.map((f) => f.rel));
@@ -139,6 +147,7 @@ console.log(`  lazy JS      ${formatBytes(lazyGzip)} gzip  (${lazy.length} chunk
 if (largest) console.log(`  largest      ${largest.rel} — ${formatBytes(largest.gzip)} gzip`);
 
 const shouldUpdate = process.argv.includes('--update-baseline');
+const shouldRecordMetrics = shouldUpdate || process.argv.includes('--record-metrics');
 const ceiling =
   budget.initialJsGzipCeiling === null || shouldUpdate
     ? Math.ceil(initialGzip * (1 + budget.tolerancePercent / 100))
@@ -153,10 +162,20 @@ if (budget.initialJsGzipCeiling === null || shouldUpdate) {
   console.log(`\n  Recorded a new ceiling of ${formatBytes(ceiling)} gzip in bundle-budget.json.`);
 }
 
-writeFileSync(
-  METRICS_FILE,
-  `${JSON.stringify(
-    {
+if (shouldRecordMetrics) {
+  let previousMetrics = {};
+  if (existsSync(METRICS_FILE)) {
+    try {
+      previousMetrics = JSON.parse(readFileSync(METRICS_FILE, 'utf8'));
+    } catch (error) {
+      fail(`docs/baseline-metrics.json is not valid JSON: ${error.message}`);
+    }
+  }
+  writeFileSync(
+    METRICS_FILE,
+    `${JSON.stringify(
+      {
+        ...previousMetrics,
       measuredAt: new Date().toISOString(),
       initialJsGzipBytes: initialGzip,
       initialJsRawBytes: initialRaw,
@@ -166,12 +185,14 @@ writeFileSync(
       largestInitialChunk: largest ? { file: largest.rel, gzipBytes: largest.gzip } : null,
       ceilingBytes: ceiling,
       targetBytes: target,
-    },
-    null,
-    2
-  )}\n`,
-  'utf8'
-);
+      },
+      null,
+      2
+    )}\n`,
+    'utf8'
+  );
+  console.log('  Recorded current bundle metrics in docs/baseline-metrics.json.');
+}
 
 const overTarget = initialGzip - target;
 if (overTarget > 0) {

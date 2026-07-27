@@ -25,6 +25,15 @@ command queue. Requires cross-origin isolation (`COOP: same-origin` plus
 commercial licensing decision before general availability. Native Node addons do
 not work unless a WASM build exists.
 
+Deployment sequencing: Phase 0 sends `COOP: same-origin` but intentionally does
+not send COEP yet. Enabling `require-corp` now would break the existing
+user-approved remote-image flow, while `credentialless` has a different browser
+compatibility profile. Phase 5 must choose and test one policy together with
+the licensed WebContainer configuration, then add COEP and an automated
+`crossOriginIsolated` deployment check. Until that decision lands, every
+SharedArrayBuffer-dependent runtime flag remains off. This is a documented
+dependency, not a claim that the Phase 0 page is cross-origin isolated.
+
 **Pyodide** — Python in a module worker. Pure-Python wheels and packages ported
 to Pyodide only. Terminating the worker is the hard cancel path.
 

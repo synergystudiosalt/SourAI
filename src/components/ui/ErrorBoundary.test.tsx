@@ -80,6 +80,18 @@ describe('ErrorBoundary', () => {
     expectNoSecrets(alert.textContent, 'ErrorBoundary panel');
   });
 
+  it('never writes a raw credential from a caught error to sour.ai console output', () => {
+    render(
+      <ErrorBoundary>
+        <Boom error={new Error(`provider rejected ${SECRET_CANARIES.openai}`)} />
+      </ErrorBoundary>
+    );
+
+    const sourLogs = consoleError.mock.calls.filter(([label]) => String(label).startsWith('[sour.ai]'));
+    expect(sourLogs).not.toHaveLength(0);
+    expectNoSecrets(sourLogs, 'ErrorBoundary console output');
+  });
+
   it('copies redacted details rather than the raw error', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
@@ -98,7 +110,7 @@ describe('ErrorBoundary', () => {
 
   it('reports the error to onError without letting a throwing handler escape', () => {
     const onError = vi.fn(() => {
-      throw new Error('handler is broken');
+      throw new Error(`handler is broken ${SECRET_CANARIES.groq}`);
     });
 
     expect(() =>
@@ -111,6 +123,11 @@ describe('ErrorBoundary', () => {
 
     expect(onError).toHaveBeenCalledTimes(1);
     expect(screen.getByRole('alert')).toBeInTheDocument();
+    const handlerLogs = consoleError.mock.calls.filter(([label]) =>
+      String(label).includes('ErrorBoundary onError handler threw')
+    );
+    expect(handlerLogs).toHaveLength(1);
+    expectNoSecrets(handlerLogs, 'ErrorBoundary handler console output');
   });
 
   it('clears the error when a reset key changes', () => {

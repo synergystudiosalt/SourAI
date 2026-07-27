@@ -13,12 +13,14 @@
  *    way a real implementation rejects it
  */
 
+import { canonicalProjectPath } from '../../utils/realFs';
+
 export type PermissionState = 'granted' | 'denied' | 'prompt';
 
 interface FakeFileEntry {
   kind: 'file';
   name: string;
-  contents: string;
+  contents: Uint8Array;
   lastModified: number;
 }
 
@@ -29,6 +31,14 @@ interface FakeDirEntry {
 }
 
 type FakeEntry = FakeFileEntry | FakeDirEntry;
+
+const HANDLE_FS = Symbol('fake-file-system');
+const HANDLE_ENTRY = Symbol('fake-file-entry');
+
+interface FakeHandleIdentity {
+  readonly [HANDLE_FS]: FakeFileSystem;
+  readonly [HANDLE_ENTRY]: FakeEntry;
+}
 
 export interface FakeFsOptions {
   /** Initial permission state reported by `queryPermission`. */
@@ -78,11 +88,12 @@ export class FakeFileSystem {
 
   /** Adds a file, creating parent directories. Bypasses the handle API. */
   seed(path: string, contents: string): void {
-    const parts = path.split('/').filter(Boolean);
+    const parts = canonicalProjectPath(path).split('/');
     const fileName = parts.pop();
     if (!fileName) throw new Error(`Cannot seed a directory as a file: ${path}`);
     let dir = this.root;
     for (const part of parts) {
+      assertValidName(part);
       let next = dir.children.get(part);
       if (!next) {
         next = { kind: 'directory', name: part, children: new Map() };
@@ -91,7 +102,13 @@ export class FakeFileSystem {
       if (next.kind !== 'directory') throw typeMismatch(part);
       dir = next;
     }
-    dir.children.set(fileName, { kind: 'file', name: fileName, contents, lastModified: 1_700_000_000_000 });
+    assertValidName(fileName);
+    dir.children.set(fileName, {
+      kind: 'file',
+      name: fileName,
+      contents: new TextEncoder().encode(contents),
+      lastModified: 1_700_000_000_000,
+    });
   }
 
   /** Flat snapshot of every file, for assertions. */
@@ -100,7 +117,7 @@ export class FakeFileSystem {
     const walk = (dir: FakeDirEntry, prefix: string) => {
       for (const [name, entry] of dir.children) {
         const path = prefix ? `${prefix}/${name}` : name;
-        if (entry.kind === 'file') out[path] = entry.contents;
+        if (entry.kind === 'file') out[path] = new TextDecoder().decode(entry.contents);
         else walk(entry, path);
       }
     };
@@ -145,13 +162,39 @@ export class FakeFileSystem {
     }
   }
 
+  private identityOf(value: unknown): FakeHandleIdentity | null {
+    if (!value || (typeof value !== 'object' && typeof value !== 'function')) return null;
+    const candidate = value as Partial<FakeHandleIdentity>;
+    return candidate[HANDLE_FS] === this && candidate[HANDLE_ENTRY]
+      ? (candidate as FakeHandleIdentity)
+      : null;
+  }
+
+  private pathForEntry(target: FakeEntry): string | null {
+    if (target === this.root) return '';
+    const visit = (dir: FakeDirEntry, prefix: string): string | null => {
+      for (const [name, entry] of dir.children) {
+        const path = prefix ? `${prefix}/${name}` : name;
+        if (entry === target) return path;
+        if (entry.kind === 'directory') {
+          const nested = visit(entry, path);
+          if (nested !== null) return nested;
+        }
+      }
+      return null;
+    };
+    return visit(this.root, '');
+  }
+
   private makeFileHandle(entry: FakeFileEntry, path: string) {
     const fs = this;
     return {
+      [HANDLE_FS]: fs,
+      [HANDLE_ENTRY]: entry,
       kind: 'file' as const,
       name: entry.name,
       isSameEntry(other: unknown) {
-        return Promise.resolve(other === this);
+        return Promise.resolve(fs.identityOf(other)?.[HANDLE_ENTRY] === entry);
       },
       queryPermission() {
         return Promise.resolve(fs.permission);
@@ -163,48 +206,99 @@ export class FakeFileSystem {
       async getFile() {
         fs.ensurePermitted();
         fs.record({ op: 'read', path });
-        return new File([entry.contents], entry.name, { lastModified: entry.lastModified });
+        return new File([entry.contents.slice()], entry.name, { lastModified: entry.lastModified });
       },
       async createWritable(options?: { keepExistingData?: boolean }) {
         fs.ensurePermitted();
-        let buffer = options?.keepExistingData ? entry.contents : '';
+        let buffer = options?.keepExistingData ? entry.contents.slice() : new Uint8Array();
+        let cursor = 0;
         let closed = false;
+        const assertOpen = () => {
+          if (closed) throw new TypeError('The stream is closed.');
+        };
+        const assertPosition = (value: unknown, label: string): number => {
+          if (!Number.isSafeInteger(value) || (value as number) < 0) {
+            throw new TypeError(`${label} must be a non-negative safe integer.`);
+          }
+          return value as number;
+        };
+        const toBytes = async (data: unknown): Promise<Uint8Array> => {
+          if (typeof data === 'string') return new TextEncoder().encode(data);
+          if (data instanceof Blob) return new Uint8Array(await data.arrayBuffer());
+          if (data instanceof Uint8Array) return data.slice();
+          if (ArrayBuffer.isView(data)) {
+            return new Uint8Array(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength));
+          }
+          if (data instanceof ArrayBuffer) return new Uint8Array(data.slice(0));
+          throw new TypeError('Unsupported data passed to write()');
+        };
+        const writeAtCursor = async (data: unknown) => {
+          const bytes = await toBytes(data);
+          const requiredLength = cursor + bytes.byteLength;
+          if (requiredLength > buffer.byteLength) {
+            const expanded = new Uint8Array(requiredLength);
+            expanded.set(buffer);
+            buffer = expanded;
+          }
+          buffer.set(bytes, cursor);
+          cursor = requiredLength;
+        };
         return {
           async write(data: unknown) {
-            if (closed) throw new TypeError('The stream is closed.');
-            if (typeof data === 'string') {
-              buffer += data;
-            } else if (data instanceof Blob) {
-              buffer += await data.text();
-            } else if (data instanceof Uint8Array) {
-              buffer += new TextDecoder().decode(data);
-            } else if (data instanceof ArrayBuffer) {
-              buffer += new TextDecoder().decode(new Uint8Array(data));
-            } else if (data && typeof data === 'object' && 'type' in data) {
+            assertOpen();
+            if (
+              data &&
+              typeof data === 'object' &&
+              'type' in data &&
+              ['write', 'seek', 'truncate'].includes(String((data as { type: unknown }).type))
+            ) {
               // WriteParams — only the shapes the app actually uses.
-              const params = data as { type: string; data?: unknown };
+              const params = data as {
+                type: string;
+                data?: unknown;
+                position?: number;
+                size?: number;
+              };
               if (params.type === 'write' && params.data !== undefined) {
-                await this.write(params.data);
+                if (params.position !== undefined) cursor = assertPosition(params.position, 'position');
+                await writeAtCursor(params.data);
                 return;
               }
-              throw new Error(`FakeFileSystem does not implement WriteParams type "${params.type}"`);
-            } else {
-              throw new TypeError('Unsupported data passed to write()');
+              if (params.type === 'seek' && params.position !== undefined) {
+                cursor = assertPosition(params.position, 'position');
+                return;
+              }
+              if (params.type === 'truncate' && params.size !== undefined) {
+                await this.truncate(params.size);
+                return;
+              }
+              throw new TypeError(`Unsupported WriteParams shape for "${params.type}"`);
             }
+            await writeAtCursor(data);
           },
           async truncate(size: number) {
-            buffer = buffer.slice(0, size);
+            assertOpen();
+            const nextSize = assertPosition(size, 'size');
+            const resized = new Uint8Array(nextSize);
+            resized.set(buffer.subarray(0, nextSize));
+            buffer = resized;
+            // FileSystemWritableFileStream clamps the current cursor when a
+            // truncate shrinks past it. Keeping the old cursor here would make
+            // a later write create a zero-filled gap that real browsers do not.
+            cursor = Math.min(cursor, nextSize);
           },
-          async seek() {
-            throw new Error('FakeFileSystem does not implement seek()');
+          async seek(position: number) {
+            assertOpen();
+            cursor = assertPosition(position, 'position');
           },
           async abort() {
+            assertOpen();
             closed = true;
           },
           async close() {
-            if (closed) throw new TypeError('The stream is closed.');
+            assertOpen();
             closed = true;
-            entry.contents = buffer;
+            entry.contents = buffer.slice();
             entry.lastModified += 1000;
             fs.record({ op: 'write', path });
           },
@@ -218,10 +312,12 @@ export class FakeFileSystem {
     const childPath = (name: string) => (path ? `${path}/${name}` : name);
 
     return {
+      [HANDLE_FS]: fs,
+      [HANDLE_ENTRY]: dir,
       kind: 'directory' as const,
       name: dir.name,
       isSameEntry(other: unknown) {
-        return Promise.resolve(other === this);
+        return Promise.resolve(fs.identityOf(other)?.[HANDLE_ENTRY] === dir);
       },
       queryPermission() {
         return Promise.resolve(fs.permission);
@@ -240,7 +336,12 @@ export class FakeFileSystem {
           return fs.makeFileHandle(existing, childPath(name));
         }
         if (!options?.create) throw notFound(name);
-        const created: FakeFileEntry = { kind: 'file', name, contents: '', lastModified: 1_700_000_000_000 };
+        const created: FakeFileEntry = {
+          kind: 'file',
+          name,
+          contents: new Uint8Array(),
+          lastModified: 1_700_000_000_000,
+        };
         dir.children.set(name, created);
         return fs.makeFileHandle(created, childPath(name));
       },
@@ -269,8 +370,16 @@ export class FakeFileSystem {
         }
         dir.children.delete(name);
       },
-      async resolve() {
-        return null;
+      async resolve(possibleDescendant: unknown) {
+        const descendantIdentity = fs.identityOf(possibleDescendant);
+        if (!descendantIdentity) return null;
+        const basePath = fs.pathForEntry(dir);
+        const descendantPath = fs.pathForEntry(descendantIdentity[HANDLE_ENTRY]);
+        if (basePath === null || descendantPath === null) return null;
+        if (basePath === descendantPath) return [];
+        const prefix = basePath ? `${basePath}/` : '';
+        if (!descendantPath.startsWith(prefix)) return null;
+        return descendantPath.slice(prefix.length).split('/');
       },
       async *values() {
         fs.ensurePermitted();

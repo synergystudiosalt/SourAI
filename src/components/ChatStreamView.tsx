@@ -36,6 +36,50 @@ import { parseUploadedFile } from '../utils/fileParser';
 import { ImagePreviewCard } from './ImagePreviewCard';
 import { QuestionBox, extractQuestionBlocks } from './QuestionBox';
 
+type MarkdownImageProps = React.ImgHTMLAttributes<HTMLImageElement> & { node?: unknown };
+
+function isRemoteImageSource(src: string | undefined): boolean {
+  if (!src) return false;
+  try {
+    const base = typeof window === 'undefined' ? 'https://sour.invalid/' : window.location.href;
+    const url = new URL(src, base);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
+    return typeof window === 'undefined' || url.origin !== window.location.origin;
+  } catch {
+    return false;
+  }
+}
+
+/** Prevents model-authored Markdown from silently contacting a third party. */
+export const ChatMarkdownImage: React.FC<MarkdownImageProps> = ({
+  node: _node,
+  src,
+  alt,
+  ...props
+}) => {
+  const [allowed, setAllowed] = useState(false);
+  if (!src) return null;
+  if (!isRemoteImageSource(src) || allowed) {
+    return <img {...props} src={src} alt={alt ?? ''} referrerPolicy="no-referrer" />;
+  }
+
+  let host = 'remote host';
+  try {
+    host = new URL(src, window.location.href).host || host;
+  } catch {
+    // Keep the generic label for malformed URLs.
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => setAllowed(true)}
+      className="my-2 rounded border border-[#d8d5c9] px-3 py-2 text-xs text-[#706c62] dark:border-[#383836] dark:text-[#a09d98]"
+    >
+      Load remote image from {host}
+      {alt ? ` (${alt})` : ''}
+    </button>
+  );
+};
 
 interface ChatStreamViewProps {
   messages: ChatMessage[];
@@ -187,6 +231,7 @@ const TypewriterMessage: React.FC<TypewriterMessageProps> = ({
                   {children}
                 </blockquote>
               ),
+              img: ChatMarkdownImage,
               code: ({ node, inline, className, children, ...props }: any) => {
                 const [copied, setCopied] = useState(false);
                 const codeString = String(children).replace(/\n$/, '');

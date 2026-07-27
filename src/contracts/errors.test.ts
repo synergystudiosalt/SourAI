@@ -4,6 +4,7 @@ import { SECRET_CANARIES, expectNoSecrets } from '../test/assertions';
 import {
   SourError,
   cancelled,
+  getSourErrorCause,
   isAbortError,
   isSourError,
   normalizeError,
@@ -35,9 +36,20 @@ describe('SourError', () => {
       cause: raw,
     });
 
-    expect(error.cause).toBe(raw);
+    expect(getSourErrorCause(error)).toBe(raw);
+    expect((error as Error & { cause?: unknown }).cause).toBeUndefined();
     expectNoSecrets(JSON.stringify(error), 'serialized SourError with a cause');
     expect(Object.keys(error.toData())).not.toContain('cause');
+  });
+
+  it('does not leak a raw cause through the platform Error structured-clone path', () => {
+    const raw = new Error(`upstream said ${SECRET_CANARIES.google}`);
+    const error = normalizeError(raw, { causeCategory: 'provider' });
+    const cloned = structuredClone(error) as Error & { cause?: unknown };
+
+    expect(cloned.cause).toBeUndefined();
+    expectNoSecrets(cloned.message, 'structured-cloned SourError message');
+    expectNoSecrets(cloned.stack ?? '', 'structured-cloned SourError stack');
   });
 
   it('derives retryability from the category unless told otherwise', () => {
@@ -49,6 +61,63 @@ describe('SourError', () => {
   it('is structured-cloneable once converted to data', () => {
     const error = validationFailed('tool arguments', { tool: 'file_write' });
     expect(() => structuredClone(error.toData())).not.toThrow();
+  });
+
+  it('defensively sanitizes unsupported detail values without invoking accessors', () => {
+    let getterCalls = 0;
+    const details: Record<string, unknown> = {
+      count: 42n,
+      callback: () => 'not serializable',
+      marker: Symbol('not serializable'),
+      missing: undefined,
+      date: new Date('2025-01-02T03:04:05.000Z'),
+      map: new Map([['provider', SECRET_CANARIES.openai]]),
+      bytes: new Uint8Array([1, 2, 3]),
+    };
+    Object.defineProperty(details, 'danger', {
+      enumerable: true,
+      get() {
+        getterCalls++;
+        throw new Error('must not run');
+      },
+    });
+
+    const error = new SourError({
+      code: 'unsafe_details',
+      message: 'The provider failed.',
+      causeCategory: 'provider',
+      details,
+    });
+    const data = error.toData();
+
+    expect(getterCalls).toBe(0);
+    expect(() => JSON.stringify(error)).not.toThrow();
+    expect(() => structuredClone(data)).not.toThrow();
+    expectNoSecrets(data, 'defensively sanitized error details');
+  });
+
+  it('is deeply immutable and returns a fresh immutable data snapshot each time', () => {
+    const error = new SourError({
+      code: 'immutable',
+      message: 'Safe message',
+      causeCategory: 'runtime',
+      details: { nested: { safe: 'value' } },
+    });
+    const first = error.toData();
+    const second = error.toData();
+    const nested = error.details?.nested as Record<string, unknown>;
+
+    expect(Object.isFrozen(error)).toBe(true);
+    expect(Object.isFrozen(error.details)).toBe(true);
+    expect(Object.isFrozen(nested)).toBe(true);
+    expect(first).not.toBe(second);
+    expect(first.details).not.toBe(second.details);
+    expect(Object.isFrozen(first)).toBe(true);
+    expect(Object.isFrozen(first.details)).toBe(true);
+    expect(Reflect.set(error, 'message', SECRET_CANARIES.openai)).toBe(false);
+    expect(Reflect.set(nested, 'apiKey', SECRET_CANARIES.openai)).toBe(false);
+    expect(error.message).toBe('Safe message');
+    expectNoSecrets(error.toData(), 'immutable SourError');
   });
 });
 

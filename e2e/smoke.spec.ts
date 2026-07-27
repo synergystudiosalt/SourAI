@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+const APP_ORIGIN = 'http://localhost:4173';
+
 /**
  * Critical-flow browser smoke tests against a production build.
  *
@@ -10,7 +12,13 @@ import { expect, test } from '@playwright/test';
 test('home screen loads and is usable', async ({ page }) => {
   const consoleErrors: string[] = [];
   page.on('console', (message) => {
-    if (message.type() === 'error') consoleErrors.push(message.text());
+    if (message.type() === 'error') {
+      const source = message.location().url;
+      // The legacy shell has no favicon yet. Keep that known cosmetic 404 from
+      // masking runtime errors while still failing on every other console error.
+      if (source === `${APP_ORIGIN}/favicon.ico` && message.text().includes('404')) return;
+      consoleErrors.push(source ? `${message.text()} (${source})` : message.text());
+    }
   });
   page.on('pageerror', (error) => consoleErrors.push(error.message));
 
@@ -55,19 +63,21 @@ test('local folder access reflects what the browser can actually do', async ({ p
   }
 });
 
-test('the application shell renders without a service worker or cross-origin script', async ({ page }) => {
-  const thirdPartyRequests: string[] = [];
+test('the application shell loads no unexpected third-party resource or executable code', async ({ page }) => {
+  const unexpectedRequests: string[] = [];
   page.on('request', (request) => {
     const url = new URL(request.url());
-    if (url.origin !== new URL(page.url() || 'http://localhost:4173').origin && url.protocol !== 'data:') {
-      thirdPartyRequests.push(request.url());
-    }
+    if (url.origin === APP_ORIGIN || url.protocol === 'data:' || url.protocol === 'blob:') return;
+    unexpectedRequests.push(`${request.resourceType()} ${request.url()}`);
   });
 
   await page.goto('/');
   await page.waitForLoadState('networkidle');
 
-  // Nothing may be fetched from a third-party origin at load time: no CDN
-  // scripts, no fonts, no analytics. Supply-chain surface stays at zero.
-  expect(thirdPartyRequests, `unexpected third-party requests:\n${thirdPartyRequests.join('\n')}`).toEqual([]);
+  // The cold shell is self-contained: fonts, analytics, scripts, and every
+  // other external resource must wait for an explicit user action.
+  expect(
+    unexpectedRequests,
+    `unexpected third-party requests:\n${unexpectedRequests.join('\n')}`
+  ).toEqual([]);
 });

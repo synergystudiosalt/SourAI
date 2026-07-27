@@ -12,6 +12,24 @@ import { GlobalContextMenu } from './components/GlobalContextMenu';
 import { AIModel, ChatMessage, Conversation, AttachmentItem } from './types';
 import { MESSAGE_QUOTA } from './utils/constants';
 import { apiUrl } from './lib/api';
+import { isAbortError, normalizeError, type SourError } from './contracts/errors';
+import { getClientPersistence, type ClientPersistence } from './storage/clientPersistence';
+
+export function normalizeChatProviderError(
+  value: unknown,
+  fallbackMessage = 'The chat provider failed to respond.'
+): SourError {
+  const candidate =
+    value instanceof Error || (typeof value === 'string' && value.trim())
+      ? value
+      : fallbackMessage;
+  return normalizeError(candidate, {
+    code: 'chat_provider_failed',
+    causeCategory: 'provider',
+    message: fallbackMessage,
+    retryable: true,
+  });
+}
 
 export default function App() {
   const [promptInput, setPromptInput] = useState('');
@@ -20,6 +38,8 @@ export default function App() {
   const [isUpgradeOpen, setIsUpgradeOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const abortControllerRef = React.useRef<AbortController | null>(null);
+  const persistenceRef = React.useRef<ClientPersistence | null>(null);
+  const [storageReady, setStorageReady] = useState(false);
 
   const handleStopGeneration = () => {
     if (abortControllerRef.current) {
@@ -29,23 +49,16 @@ export default function App() {
     setIsGenerating(false);
   };
 
-  const [messageUnitsUsed, setMessageUnitsUsed] = useState<number>(() => {
-    const saved = localStorage.getItem('sour_msg_units');
-    return saved ? parseInt(saved, 10) || 0 : 0;
-  });
-
-  const [limitResetTime, setLimitResetTime] = useState<number | null>(() => {
-    const saved = localStorage.getItem('sour_limit_reset_time');
-    return saved ? parseInt(saved, 10) || null : null;
-  });
+  const [messageUnitsUsed, setMessageUnitsUsed] = useState(0);
+  const [limitResetTime, setLimitResetTime] = useState<number | null>(null);
 
   const [devToast, setDevToast] = useState<string | null>(null);
 
   const handleResetLimit = () => {
     setMessageUnitsUsed(0);
     setLimitResetTime(null);
-    localStorage.setItem('sour_msg_units', '0');
-    localStorage.removeItem('sour_limit_reset_time');
+    void persistenceRef.current?.settings.set('usage.messageUnits', 'usage', 0);
+    void persistenceRef.current?.settings.delete('usage.limitResetTime');
   };
 
   // Manage 6-hour reset timestamp when limit is reached
@@ -54,11 +67,9 @@ export default function App() {
       if (!limitResetTime) {
         const target = Date.now() + 6 * 3600 * 1000; // 6 hours timer
         setLimitResetTime(target);
-        localStorage.setItem('sour_limit_reset_time', target.toString());
       }
     } else if (limitResetTime) {
       setLimitResetTime(null);
-      localStorage.removeItem('sour_limit_reset_time');
     }
   }, [messageUnitsUsed, limitResetTime]);
 
@@ -84,18 +95,23 @@ export default function App() {
 
   // ---------------------------------------------------------------------
   // Special console command: `sourai.reset()`.
-  // Purges all sour.ai local data (conversations, agent threads, settings,
-  // dark-mode preference, etc.) but deliberately keeps `sour_msg_units` so
-  // the user's remaining message quota survives the reset.
+  // Purges sour.ai data only; unrelated origin storage is never touched.
   // ---------------------------------------------------------------------
   useEffect(() => {
     const KEEP_KEYS = new Set(['sour_msg_units']);
     (window as any).sourai = {
-      reset: () => {
+      reset: async () => {
+        await persistenceRef.current?.resetPreservingUsage();
         const keysToRemove: string[] = [];
         for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i);
-          if (key && !KEEP_KEYS.has(key)) keysToRemove.push(key);
+          if (
+            key &&
+            !KEEP_KEYS.has(key) &&
+            (key.startsWith('sour_') || key.startsWith('sourbot_'))
+          ) {
+            keysToRemove.push(key);
+          }
         }
         keysToRemove.forEach((key) => localStorage.removeItem(key));
         const remaining = Math.max(0, MESSAGE_QUOTA - messageUnitsUsed);
@@ -120,10 +136,6 @@ export default function App() {
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
     return localStorage.getItem('sour_dark_mode') === 'true';
   });
-
-  useEffect(() => {
-    localStorage.setItem('sour_msg_units', messageUnitsUsed.toString());
-  }, [messageUnitsUsed]);
 
   useEffect(() => {
     localStorage.setItem('sour_dark_mode', isDarkMode.toString());
@@ -160,6 +172,58 @@ export default function App() {
       createdAt: new Date(Date.now() - 3600000),
     },
   ]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getClientPersistence()
+      .then(async (persistence) => {
+        persistenceRef.current = persistence;
+        const [storedConversations, storedUnits, storedReset] = await Promise.all([
+          persistence.loadConversations(),
+          persistence.settings.getValue<number>('usage.messageUnits'),
+          persistence.settings.getValue<number>('usage.limitResetTime'),
+        ]);
+        if (cancelled) return;
+        if (storedConversations.length > 0) setConversations(storedConversations);
+        if (typeof storedUnits === 'number') setMessageUnitsUsed(storedUnits);
+        if (typeof storedReset === 'number') setLimitResetTime(storedReset);
+        setStorageReady(true);
+      })
+      .catch((error) => console.error('[sour.ai] Could not hydrate local storage', error));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!storageReady) return;
+    void persistenceRef.current?.settings.set(
+      'usage.messageUnits',
+      'usage',
+      messageUnitsUsed
+    );
+    if (limitResetTime === null) {
+      void persistenceRef.current?.settings.delete('usage.limitResetTime');
+    } else {
+      void persistenceRef.current?.settings.set(
+        'usage.limitResetTime',
+        'usage',
+        limitResetTime
+      );
+    }
+  }, [limitResetTime, messageUnitsUsed, storageReady]);
+
+  useEffect(() => {
+    if (!storageReady || !persistenceRef.current) return;
+    const timer = window.setTimeout(() => {
+      void Promise.all(
+        conversations.map((conversation) =>
+          persistenceRef.current!.saveConversation(conversation)
+        )
+      ).catch((error) => console.error('[sour.ai] Could not persist conversations', error));
+    }, 100);
+    return () => window.clearTimeout(timer);
+  }, [conversations, storageReady]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<'chat' | 'code'>('chat');
 
@@ -244,12 +308,15 @@ export default function App() {
         }
       }
 
+      const providerError = data.error
+        ? normalizeChatProviderError(data.error)
+        : null;
       const responseText =
         data.text ||
         (Array.isArray(data.images) && data.images.length > 0
           ? `Generated ${data.images.length} image${data.images.length === 1 ? '' : 's'}.`
-          : data.error
-            ? `Error: ${data.error}`
+          : providerError
+            ? `Error: ${providerError.message}`
             : 'sour.ai received an empty response from the Cloudflare Pages Function. Please try again.');
       const assistantMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
@@ -269,8 +336,8 @@ export default function App() {
             : c
         )
       );
-    } catch (err: any) {
-      if (err.name === 'AbortError') {
+    } catch (err: unknown) {
+      if (isAbortError(err)) {
         const stoppedMsg: ChatMessage = {
           id: (Date.now() + 1).toString(),
           role: 'assistant',
@@ -286,11 +353,12 @@ export default function App() {
         );
         return;
       }
-      console.error(err);
+      const normalized = normalizeChatProviderError(err, 'Unable to reach the chat provider.');
+      console.error('[sour.ai] Chat request failed', normalized.toData());
       const errorMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: `Failed to retrieve response from server (${err.message || 'Error'}). Please check your connectivity or API key configuration.`,
+        content: `Failed to retrieve response from server (${normalized.message}). Please check your connectivity or API key configuration.`,
         timestamp: new Date(),
       };
       setConversations((prev) =>
@@ -381,12 +449,15 @@ export default function App() {
         }
       }
 
+      const providerError = data.error
+        ? normalizeChatProviderError(data.error)
+        : null;
       const responseText =
         data.text ||
         (Array.isArray(data.images) && data.images.length > 0
           ? `Generated ${data.images.length} image${data.images.length === 1 ? '' : 's'}.`
-          : data.error
-            ? `Error: ${data.error}`
+          : providerError
+            ? `Error: ${providerError.message}`
             : 'sour.ai received an empty response from the Cloudflare Pages Function. Please try again.');
       const assistantMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
@@ -406,8 +477,8 @@ export default function App() {
             : c
         )
       );
-    } catch (err: any) {
-      if (err.name === 'AbortError') {
+    } catch (err: unknown) {
+      if (isAbortError(err)) {
         const stoppedMsg: ChatMessage = {
           id: (Date.now() + 1).toString(),
           role: 'assistant',
@@ -423,11 +494,12 @@ export default function App() {
         );
         return;
       }
-      console.error(err);
+      const normalized = normalizeChatProviderError(err, 'Unable to reach the chat provider.');
+      console.error('[sour.ai] Chat follow-up request failed', normalized.toData());
       const errorMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: `Failed to retrieve response from server (${err.message || 'Error'}). Please check your connectivity or API key configuration.`,
+        content: `Failed to retrieve response from server (${normalized.message}). Please check your connectivity or API key configuration.`,
         timestamp: new Date(),
       };
       setConversations((prev) =>
@@ -454,6 +526,9 @@ export default function App() {
   // Delete Conversation handler
   const handleDeleteConversation = (id: string) => {
     setConversations((prev) => prev.filter((c) => c.id !== id));
+    void persistenceRef.current
+      ?.deleteConversation(id)
+      .catch((error) => console.error('[sour.ai] Could not delete conversation', error));
     if (activeConversationId === id) {
       setActiveConversationId(null);
     }

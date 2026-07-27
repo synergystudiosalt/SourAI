@@ -14,6 +14,83 @@ const IGNORED_DIRS = new Set([
 ]);
 
 const MAX_ENTRIES = 4000;
+const MAX_PROJECT_PATH_LENGTH = 1024;
+const MAX_PATH_SEGMENT_LENGTH = 255;
+const CONTROL_CHARACTER = /[\u0000-\u001f\u007f]/;
+
+/**
+ * Returns the one canonical relative path accepted by every real-folder
+ * operation. Validation happens before a handle is opened or a parent is
+ * created, so a rejected request has no filesystem side effects.
+ */
+export function canonicalProjectPath(path: string, allowRoot = false): string {
+  const normalized = path.normalize('NFC');
+  if (normalized === '' && allowRoot) return '';
+  if (
+    normalized === '' ||
+    normalized.length > MAX_PROJECT_PATH_LENGTH ||
+    normalized.startsWith('/') ||
+    normalized.endsWith('/') ||
+    normalized.includes('//') ||
+    normalized.includes('\\') ||
+    CONTROL_CHARACTER.test(normalized) ||
+    /^[A-Za-z]:/.test(normalized)
+  ) {
+    throw new TypeError(`Invalid project-relative path: ${JSON.stringify(path)}`);
+  }
+
+  const parts = normalized.split('/');
+  if (
+    parts.some(
+      (part) =>
+        part === '' ||
+        part === '.' ||
+        part === '..' ||
+        part.length > MAX_PATH_SEGMENT_LENGTH
+    )
+  ) {
+    throw new TypeError(`Invalid project-relative path: ${JSON.stringify(path)}`);
+  }
+  return normalized;
+}
+
+/** Comparison key shared by in-memory and real-folder path allocation. */
+export function projectPathReservationKey(path: string): string {
+  return canonicalProjectPath(path).toLowerCase();
+}
+
+/**
+ * Reserves one canonical, case-insensitively unique project path.
+ *
+ * File System Access handles may target case-insensitive filesystems, so a
+ * browser tree must not represent case or Unicode-normalization variants as
+ * distinct files when the disk cannot.
+ */
+export function reserveUniqueProjectPath(
+  desiredPath: string,
+  reservedKeys: Set<string>
+): string {
+  const canonicalDesired = canonicalProjectPath(desiredPath);
+  const slash = canonicalDesired.lastIndexOf('/');
+  const parentPath = slash >= 0 ? canonicalDesired.slice(0, slash + 1) : '';
+  const baseName = slash >= 0 ? canonicalDesired.slice(slash + 1) : canonicalDesired;
+  const dotIndex = baseName.lastIndexOf('.');
+  const stem = dotIndex > 0 ? baseName.slice(0, dotIndex) : baseName;
+  const extension = dotIndex > 0 ? baseName.slice(dotIndex) : '';
+  let path = canonicalDesired;
+  let counter = 2;
+  while (reservedKeys.has(projectPathReservationKey(path))) {
+    path = canonicalProjectPath(`${parentPath}${stem} ${counter}${extension}`);
+    counter++;
+  }
+  reservedKeys.add(projectPathReservationKey(path));
+  return path;
+}
+
+function pathParts(path: string, allowRoot = false): string[] {
+  const canonical = canonicalProjectPath(path, allowRoot);
+  return canonical ? canonical.split('/') : [];
+}
 
 export function isDirectoryPickerSupported(): boolean {
   return typeof window !== 'undefined' && typeof window.showDirectoryPicker === 'function';
@@ -75,15 +152,19 @@ async function resolveDirHandle(
 }
 
 export async function readRealFile(root: FileSystemDirectoryHandle, path: string): Promise<string> {
-  const parts = path.split('/').filter(Boolean);
+  const parts = pathParts(path);
   const dir = await resolveDirHandle(root, parts.slice(0, -1));
   const fileHandle = await dir.getFileHandle(parts[parts.length - 1]);
   const file = await fileHandle.getFile();
   return await file.text();
 }
 
-export async function writeRealFile(root: FileSystemDirectoryHandle, path: string, content: string): Promise<void> {
-  const parts = path.split('/').filter(Boolean);
+async function writeRealData(
+  root: FileSystemDirectoryHandle,
+  path: string,
+  content: string | Blob | Uint8Array
+): Promise<void> {
+  const parts = pathParts(path);
   const dir = await resolveDirHandle(root, parts.slice(0, -1), true);
   const fileHandle = await dir.getFileHandle(parts[parts.length - 1], { create: true });
   const writable = await fileHandle.createWritable();
@@ -91,59 +172,77 @@ export async function writeRealFile(root: FileSystemDirectoryHandle, path: strin
   await writable.close();
 }
 
+export async function writeRealFile(root: FileSystemDirectoryHandle, path: string, content: string): Promise<void> {
+  await writeRealData(root, path, content);
+}
+
+/** Writes bytes without decoding/re-encoding them as text. */
+export async function writeRealBlob(
+  root: FileSystemDirectoryHandle,
+  path: string,
+  content: Blob | Uint8Array
+): Promise<void> {
+  await writeRealData(root, path, content);
+}
+
 export async function createRealFolder(root: FileSystemDirectoryHandle, path: string): Promise<void> {
-  await resolveDirHandle(root, path.split('/').filter(Boolean), true);
+  await resolveDirHandle(root, pathParts(path, true), true);
 }
 
 export async function deleteRealEntry(root: FileSystemDirectoryHandle, path: string, isFolder: boolean): Promise<void> {
-  const parts = path.split('/').filter(Boolean);
+  const parts = pathParts(path);
   const dir = await resolveDirHandle(root, parts.slice(0, -1));
   await dir.removeEntry(parts[parts.length - 1], { recursive: isFolder });
 }
 
-async function copyRealTree(root: FileSystemDirectoryHandle, srcPath: string, destPath: string): Promise<void> {
-  const srcParts = srcPath.split('/').filter(Boolean);
-  const srcDir = await resolveDirHandle(root, srcParts);
-  for await (const entry of srcDir.values()) {
-    const childSrc = `${srcPath}/${entry.name}`;
-    const childDest = `${destPath}/${entry.name}`;
-    if (entry.kind === 'file') {
-      const file = await (entry as FileSystemFileHandle).getFile();
-      await writeRealFile(root, childDest, await file.text());
-    } else {
-      await copyRealTree(root, childSrc, childDest);
-    }
-  }
+/**
+ * The File System Access API exposes no atomic rename primitive. Copy/delete
+ * can overwrite a destination created after a check or delete source bytes
+ * changed by another tab/process. Keep this operation disabled until Phase 2
+ * supplies serialization, revisions, checkpoints, and conflict handling.
+ */
+export async function renameRealEntry(
+  _root: FileSystemDirectoryHandle,
+  _node: WorkspaceFileNode,
+  _oldPath: string,
+  _newPath: string
+): Promise<void> {
+  throw new DOMException(
+    'Safe rename for real folders requires revision-checked transactions and is not available yet.',
+    'NotSupportedError'
+  );
 }
 
-/** Renames/moves a file or folder on disk (no native rename in the FS Access API, so files are copied then the original is removed). */
-export async function renameRealEntry(
-  root: FileSystemDirectoryHandle,
-  node: WorkspaceFileNode,
-  oldPath: string,
-  newPath: string
-): Promise<void> {
-  if (node.type === 'file') {
-    const content = node.isLoaded ? node.content ?? '' : await readRealFile(root, oldPath);
-    await writeRealFile(root, newPath, content);
-    await deleteRealEntry(root, oldPath, false);
-    return;
+export function isTextLikeFile(file: Pick<File, 'name' | 'type'>): boolean {
+  if (file.type.startsWith('text/')) return true;
+  if (
+    /^(?:application\/(?:json|ld\+json|xml|javascript|x-javascript|typescript|yaml|x-yaml|toml|sql|graphql))$/i.test(
+      file.type
+    )
+  ) {
+    return true;
   }
-  await copyRealTree(root, oldPath, newPath);
-  await deleteRealEntry(root, oldPath, true);
+  return /\.(?:txt|md|mdx|csv|tsv|json|jsonl|ya?ml|toml|ini|conf|log|xml|html?|css|scss|less|js|jsx|mjs|cjs|ts|tsx|mts|cts|py|rb|php|java|c|cc|cpp|h|hpp|cs|go|rs|swift|kt|kts|sh|bash|zsh|fish|ps1|sql|graphql|gql|vue|svelte|env)$/i.test(
+    file.name
+  );
 }
 
 export async function uploadFilesToReal(
   root: FileSystemDirectoryHandle,
   basePath: string,
   files: File[]
-): Promise<{ path: string; content: string }[]> {
-  const results: { path: string; content: string }[] = [];
+): Promise<{ path: string; content?: string }[]> {
+  const canonicalBase = canonicalProjectPath(basePath, true);
+  const results: { path: string; content?: string }[] = [];
+  const reservedKeys = new Set<string>();
   for (const file of files) {
-    const content = await file.text();
-    const path = basePath ? `${basePath}/${file.name}` : file.name;
-    await writeRealFile(root, path, content);
-    results.push({ path, content });
+    const path = reserveUniqueProjectPath(
+      canonicalBase ? `${canonicalBase}/${file.name}` : file.name,
+      reservedKeys
+    );
+    await writeRealBlob(root, path, file);
+    const content = isTextLikeFile(file) ? await file.text() : undefined;
+    results.push(content === undefined ? { path } : { path, content });
   }
   return results;
 }

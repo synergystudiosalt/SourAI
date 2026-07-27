@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import {
   Plus, Folder, ArrowLeft, Save, AlertCircle, CheckCircle2, X, Loader2,
-  Download, WrapText, RefreshCw, Eye, EyeOff, ExternalLink, RotateCw,
+  Download, WrapText, RefreshCw, Eye, EyeOff, RotateCw,
 } from 'lucide-react';
 import JSZip from 'jszip';
 import ReactMarkdown from 'react-markdown';
@@ -17,10 +17,14 @@ import {
 } from '../utils/workspaceFs';
 import {
   isDirectoryPickerSupported, pickDirectory, scanDirectoryTree, readRealFile,
-  writeRealFile, createRealFolder, deleteRealEntry, renameRealEntry,
+  writeRealFile, writeRealBlob, createRealFolder, deleteRealEntry, isTextLikeFile,
+  projectPathReservationKey, reserveUniqueProjectPath,
 } from '../utils/realFs';
 import { getLanguageName, isLikelyBinary, getFileIconMeta } from '../utils/languageMeta';
 import { buildPreviewDocument, getPreviewKind, buildReactPreview, isReactProject } from '../utils/webPreview';
+import { buildSandboxedPreviewDocument } from '../security/previewIsolation';
+
+export { buildSandboxedPreviewDocument } from '../security/previewIsolation';
 
 interface CodeWorkspaceProps {
   isDarkMode: boolean;
@@ -29,6 +33,104 @@ interface CodeWorkspaceProps {
 const VIRTUAL_STORAGE_KEY = 'sourbot_workspace_virtual_v1';
 
 type SaveStatus = 'saved' | 'saving' | 'unsaved' | 'error';
+
+const createProjectId = () =>
+  typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+
+type MarkdownImageProps = React.ImgHTMLAttributes<HTMLImageElement> & { node?: unknown };
+
+function isRemoteImageSource(src: string | undefined): boolean {
+  if (!src) return false;
+  try {
+    const base = typeof window === 'undefined' ? 'https://sour.invalid/' : window.location.href;
+    const url = new URL(src, base);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
+    return typeof window === 'undefined' || url.origin !== window.location.origin;
+  } catch {
+    return false;
+  }
+}
+
+/** Remote Markdown images stay inert until the user explicitly loads them. */
+export const WorkspaceMarkdownImage: React.FC<MarkdownImageProps> = ({
+  node: _node,
+  src,
+  alt,
+  ...props
+}) => {
+  const [allowed, setAllowed] = useState(false);
+  if (!src) return null;
+  if (!isRemoteImageSource(src) || allowed) {
+    return <img {...props} src={src} alt={alt ?? ''} referrerPolicy="no-referrer" />;
+  }
+
+  let host = 'remote host';
+  try {
+    host = new URL(src, window.location.href).host || host;
+  } catch {
+    // Keep the generic label for malformed URLs.
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => setAllowed(true)}
+      className="my-2 rounded border border-[#d8d5c9] px-3 py-2 text-xs text-[#706c62] dark:border-[#383836] dark:text-[#a09d98]"
+    >
+      Load remote image from {host}
+      {alt ? ` (${alt})` : ''}
+    </button>
+  );
+};
+
+/**
+ * Active project content is never inserted into the app DOM. An empty sandbox
+ * creates an opaque origin and disables scripts, forms, popups, and navigation.
+ * The document-level CSP also blocks passive requests such as CSS backgrounds,
+ * SVG images, fonts, and media, which a sandbox alone does not prevent.
+ */
+export const SandboxedPreviewFrame: React.FC<{
+  source: string;
+  title: string;
+  className?: string;
+}> = ({ source, title, className }) => (
+  <iframe
+    srcDoc={buildSandboxedPreviewDocument(source)}
+    sandbox=""
+    referrerPolicy="no-referrer"
+    className={className}
+    title={title}
+  />
+);
+
+export function getRenameBlockReason(
+  tree: WorkspaceFileNode[],
+  path: string,
+  newName: string
+): string | null {
+  const node = findNode(tree, path);
+  const trimmed = newName.trim();
+  if (!node) return 'The item no longer exists.';
+  if (!trimmed || trimmed === '.' || trimmed === '..' || /[\/\\\0]/.test(trimmed)) {
+    return 'Names cannot be empty, dot segments, or contain path separators.';
+  }
+
+  const slash = path.lastIndexOf('/');
+  const parentPath = slash >= 0 ? path.slice(0, slash) : '';
+  const newPath = joinPath(parentPath, trimmed);
+  if (newPath.toLocaleLowerCase() === path.toLocaleLowerCase()) return 'Choose a different name.';
+  if (node.type === 'folder' && isDescendantOrSelf(newPath, path)) {
+    return 'A folder cannot be moved inside itself.';
+  }
+  const siblings = parentPath
+    ? findNode(tree, parentPath)?.children ?? []
+    : tree;
+  if (siblings.some((sibling) => sibling.path.toLocaleLowerCase() === newPath.toLocaleLowerCase())) {
+    return `An item already exists at "${newPath}".`;
+  }
+  return null;
+}
 
 const SaveStatusIndicator: React.FC<{ status: SaveStatus }> = ({ status }) => {
   if (status === 'saving') {
@@ -60,7 +162,6 @@ const SaveStatusIndicator: React.FC<{ status: SaveStatus }> = ({ status }) => {
 };
 
 export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
-  const projectIdCounter = useRef(0);
   const [activeProject, setActiveProject] = useState<{ id: string; name: string; isReal: boolean } | null>(null);
   const [tree, setTree] = useState<WorkspaceFileNode[]>([]);
   const [openTabs, setOpenTabs] = useState<WorkspaceTab[]>([]);
@@ -96,7 +197,7 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
     try {
       localStorage.setItem(
         VIRTUAL_STORAGE_KEY,
-        JSON.stringify({ name: activeProject.name, tree, openTabs, activeTabPath })
+        JSON.stringify({ id: activeProject.id, name: activeProject.name, tree, openTabs, activeTabPath })
       );
     } catch {
       /* storage full/unavailable - not critical */
@@ -149,7 +250,7 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
 
   const handleNewEmptyWorkspace = () => {
     rootDirHandleRef.current = null;
-    setActiveProject({ id: `vp-${++projectIdCounter.current}`, name: 'Untitled Project', isReal: false });
+    setActiveProject({ id: createProjectId(), name: 'Untitled Project', isReal: false });
     setTree(upsertFile([], 'untitled.txt', ''));
     setOpenTabs([{ path: 'untitled.txt', isDirty: false }]);
     setActiveTabPath('untitled.txt');
@@ -166,7 +267,7 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
         return;
       }
       rootDirHandleRef.current = dirHandle;
-      setActiveProject({ id: `rp-${++projectIdCounter.current}`, name: dirHandle.name, isReal: true });
+      setActiveProject({ id: createProjectId(), name: dirHandle.name, isReal: true });
       setTree(nodes);
       setOpenTabs([]);
       setActiveTabPath('');
@@ -201,7 +302,11 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
       if (!raw) return;
       const saved = JSON.parse(raw);
       rootDirHandleRef.current = null;
-      setActiveProject({ id: `vr-${++projectIdCounter.current}`, name: saved.name || 'Untitled Project', isReal: false });
+      setActiveProject({
+        id: typeof saved.id === 'string' && saved.id ? saved.id : createProjectId(),
+        name: saved.name || 'Untitled Project',
+        isReal: false,
+      });
       setTree(saved.tree || []);
       setOpenTabs(saved.openTabs || []);
       setActiveTabPath(saved.activeTabPath || '');
@@ -315,18 +420,19 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
   const handleRename = async (path: string, newName: string) => {
     const node = findNode(tree, path);
     if (!node) return;
-    const { tree: nextTree, newPath } = renameNode(tree, path, newName);
-
+    const blocked = getRenameBlockReason(tree, path, newName);
+    if (blocked) {
+      alert(blocked);
+      return;
+    }
     if (activeProject?.isReal && rootDirHandleRef.current) {
-      try {
-        await renameRealEntry(rootDirHandleRef.current, node, path, newPath);
-      } catch (err) {
-        console.error('Failed to rename on disk', err);
-        alert(`Couldn't rename "${node.name}" on disk: ${(err as Error).message}`);
-        return;
-      }
+      alert(
+        'Renaming items in a real folder is temporarily disabled until safe, conflict-checked filesystem transactions are available.'
+      );
+      return;
     }
 
+    const { tree: nextTree, newPath } = renameNode(tree, path, newName.trim());
     setTree(nextTree);
     setOpenTabs((prev) =>
       prev.map((t) => (isDescendantOrSelf(t.path, path) ? { ...t, path: newPath + t.path.slice(path.length) } : t))
@@ -413,17 +519,44 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
   };
 
   const handleUploadFiles = async (parentPath: string, files: File[]) => {
+    const reservedUploadKeys = new Set<string>();
+    const reserveExistingNodes = (nodes: WorkspaceFileNode[]) => {
+      for (const node of nodes) {
+        reservedUploadKeys.add(projectPathReservationKey(node.path));
+        if (node.children) reserveExistingNodes(node.children);
+      }
+    };
+    reserveExistingNodes(tree);
     for (const file of files) {
-      const content = await file.text();
-      const path = generateUniquePath(tree, joinPath(parentPath, file.name));
-      setTree((prev) => upsertFile(prev, path, content));
+      const path = reserveUniqueProjectPath(
+        joinPath(parentPath, file.name),
+        reservedUploadKeys
+      );
       if (activeProject?.isReal && rootDirHandleRef.current) {
         try {
-          await writeRealFile(rootDirHandleRef.current, path, content);
+          await writeRealBlob(rootDirHandleRef.current, path, file);
+          if (isTextLikeFile(file)) {
+            const content = await file.text();
+            setTree((prev) => upsertFile(prev, path, content));
+          } else {
+            setTree((prev) =>
+              upsertFile(prev, path, '', { content: undefined, isLoaded: false })
+            );
+          }
         } catch (err) {
           console.error('Failed to upload file to disk', err);
         }
+        continue;
       }
+
+      if (!isTextLikeFile(file)) {
+        alert(
+          `"${file.name}" is binary. Browser-native binary project storage arrives with the OPFS migration; the file was not imported.`
+        );
+        continue;
+      }
+      const content = await file.text();
+      setTree((prev) => upsertFile(prev, path, content));
     }
   };
 
@@ -704,38 +837,46 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
                       {previewKind === 'html' && (
                         <button
                           onClick={() => {
-                            const blob = new Blob([previewDoc], { type: 'text/html' });
+                            const blob = new Blob([previewDoc], { type: 'text/plain;charset=utf-8' });
                             const url = URL.createObjectURL(blob);
-                            window.open(url, '_blank');
-                            setTimeout(() => URL.revokeObjectURL(url), 30000);
+                            const link = document.createElement('a');
+                            link.href = url;
+                            link.download = `${getBaseName(htmlEntry.path)}.source.txt`;
+                            link.rel = 'noopener noreferrer';
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                            URL.revokeObjectURL(url);
                           }}
-                          title="Open in new tab"
+                          title="Download preview source as text"
                           className="cursor-pointer hover:text-[#1c1b1a] dark:hover:text-[#f0efe6]"
                         >
-                          <ExternalLink className="w-3 h-3" />
+                          <Download className="w-3 h-3" />
                         </button>
                       )}
                     </div>
                   </div>
                   {previewKind === 'html' && (
-                    <iframe
+                    <SandboxedPreviewFrame
                       key={previewNonce}
-                      srcDoc={previewDoc}
-                      sandbox="allow-scripts allow-forms allow-modals allow-popups"
+                      source={previewDoc}
                       className="flex-1 w-full bg-white border-0"
-                      title="Live preview"
+                      title="Safe HTML preview (scripts disabled)"
                     />
                   )}
                   {previewKind === 'markdown' && (
                     <div key={previewNonce} className="flex-1 w-full overflow-y-auto bg-white dark:bg-[#141413] px-5 py-4 text-sm leading-relaxed text-[#1c1b1a] dark:text-[#f0efe6] space-y-2">
-                      <ReactMarkdown>{htmlEntry.content || ''}</ReactMarkdown>
+                      <ReactMarkdown components={{ img: WorkspaceMarkdownImage }}>
+                        {htmlEntry.content || ''}
+                      </ReactMarkdown>
                     </div>
                   )}
                   {previewKind === 'svg' && (
-                    <div
+                    <SandboxedPreviewFrame
                       key={previewNonce}
-                      className="flex-1 w-full overflow-auto bg-white dark:bg-[#141413] flex items-center justify-center p-4"
-                      dangerouslySetInnerHTML={{ __html: htmlEntry.content || '' }}
+                      source={htmlEntry.content || ''}
+                      className="flex-1 w-full bg-white border-0"
+                      title="Safe SVG preview (scripts disabled)"
                     />
                   )}
                 </div>
