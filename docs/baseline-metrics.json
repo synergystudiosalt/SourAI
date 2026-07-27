@@ -1,0 +1,14 @@
+{
+  "measuredAt": "2026-07-27T15:59:34.343Z",
+  "initialJsGzipBytes": 449666,
+  "initialJsRawBytes": 1462141,
+  "initialChunkCount": 1,
+  "lazyJsGzipBytes": 716988,
+  "lazyChunkCount": 120,
+  "largestInitialChunk": {
+    "file": "assets/index--0rv9vYJ.js",
+    "gzipBytes": 449666
+  },
+  "ceilingBytes": 458660,
+  "targetBytes": 512000
+}

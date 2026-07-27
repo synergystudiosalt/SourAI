@@ -1,0 +1,5 @@
+{
+  "initialJsGzipCeiling": 458660,
+  "initialJsGzipTarget": 512000,
+  "tolerancePercent": 2
+}

@@ -1,10 +1,58 @@
-import * as pdfjsLib from 'pdfjs-dist';
-import mammoth from 'mammoth';
 import { AttachmentItem } from '../types';
 
-// Configure pdfjs worker
-if (typeof window !== 'undefined' && pdfjsLib.GlobalWorkerOptions) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+/**
+ * Document parsers are loaded on first use, not at startup.
+ *
+ * `pdfjs-dist` and `mammoth` together are a large share of the entry chunk, and
+ * most sessions never attach a document. Deferring the import keeps them out of
+ * the initial payload measured by `scripts/check-bundle-budget.mjs`.
+ *
+ * The pdf.js worker is served from our own origin. It used to be fetched from
+ * a public CDN, which meant a third party could execute script inside the
+ * application origin — the one thing that defeats every other credential
+ * protection (see docs/adr/0005-credential-handling.md). Vite emits the worker
+ * as a same-origin asset, so no external host is contacted and a strict
+ * `script-src 'self'` CSP holds.
+ */
+
+type PdfjsModule = typeof import('pdfjs-dist');
+type MammothModule = typeof import('mammoth');
+
+let pdfjsPromise: Promise<PdfjsModule> | null = null;
+let mammothPromise: Promise<MammothModule> | null = null;
+
+async function loadPdfjs(): Promise<PdfjsModule> {
+  if (!pdfjsPromise) {
+    pdfjsPromise = (async () => {
+      const [pdfjsLib, workerUrl] = await Promise.all([
+        import('pdfjs-dist'),
+        import('pdfjs-dist/build/pdf.worker.min.mjs?url').then((module) => module.default),
+      ]);
+      if (pdfjsLib.GlobalWorkerOptions) pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
+      return pdfjsLib;
+    })().catch((err) => {
+      // Allow a later attachment to retry rather than caching the failure.
+      pdfjsPromise = null;
+      throw err;
+    });
+  }
+  return pdfjsPromise;
+}
+
+async function loadMammoth(): Promise<MammothModule> {
+  if (!mammothPromise) {
+    mammothPromise = (async () => {
+      const module = await import('mammoth');
+      // `mammoth` is CommonJS, so interop may hand back either the namespace
+      // itself or a `default` wrapper depending on the bundler.
+      const interop = module as unknown as { default?: MammothModule };
+      return interop.default ?? (module as MammothModule);
+    })().catch((err) => {
+      mammothPromise = null;
+      throw err;
+    });
+  }
+  return mammothPromise;
 }
 
 /**
@@ -88,6 +136,7 @@ export async function parseUploadedFile(file: File): Promise<AttachmentItem> {
   // 2. PDF Files
   if (file.type === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf')) {
     try {
+      const pdfjsLib = await loadPdfjs();
       const arrayBuffer = await file.arrayBuffer();
       const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
       const pdf = await loadingTask.promise;
@@ -169,6 +218,7 @@ export async function parseUploadedFile(file: File): Promise<AttachmentItem> {
     fileName.toLowerCase().endsWith('.doc')
   ) {
     try {
+      const mammoth = await loadMammoth();
       const arrayBuffer = await file.arrayBuffer();
       const result = await mammoth.extractRawText({ arrayBuffer });
       const extractedText = result.value || '';

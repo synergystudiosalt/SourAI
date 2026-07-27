@@ -6,3 +6,8 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Test and analysis output
+playwright-report/
+test-results/
+docs/bundle-report.html
