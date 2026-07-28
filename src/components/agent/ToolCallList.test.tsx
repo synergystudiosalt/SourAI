@@ -75,4 +75,19 @@ describe('ToolCallList trust labels', () => {
     expect(label).toHaveClass('agent-active-gradient', 'truncate');
     expect(label).toHaveAttribute('title', expect.stringContaining('file.tsx'));
   });
+
+  it('stops animating tool labels once reading finishes', () => {
+    const { container } = render(
+      <ToolCallList
+        messageId="message-settled"
+        toolCalls={[{ type: 'readfile', path: 'src/App.tsx', found: true }]}
+        isReading={false}
+        openItems={new Set()}
+        onToggle={() => undefined}
+      />
+    );
+
+    expect(container.querySelectorAll('.agent-active-gradient')).toHaveLength(0);
+    expect(screen.getByText('Read: src/App.tsx')).toHaveClass('truncate');
+  });
 });

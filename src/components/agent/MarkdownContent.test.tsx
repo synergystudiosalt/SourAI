@@ -103,18 +103,39 @@ describe('agent structured content', () => {
     expect(container.querySelectorAll('[data-testid="read-tag-icon"]')).toHaveLength(1);
   });
 
-  it('animates and truncates every structured section label', () => {
+  const SECTIONS =
+    '<thinking>Inspecting.</thinking><read>game.js</read><check_for_errors>Verify the complete workspace without overflowing the agent panel.</check_for_errors>';
+
+  it('animates and truncates every structured section label while active', () => {
     const { container } = render(
       <AgentContent
-        text="<thinking>Inspecting.</thinking><read>game.js</read><check_for_errors>Verify the complete workspace without overflowing the agent panel.</check_for_errors>"
+        text={SECTIONS}
         messageId="message-gradients"
         openTags={new Set()}
         onToggleTag={() => undefined}
+        isActive
       />
     );
 
     const labels = container.querySelectorAll('.agent-active-gradient');
     expect(labels).toHaveLength(3);
     labels.forEach((label) => expect(label).toHaveClass('truncate'));
+  });
+
+  // The sweep is an activity indicator. It used to be applied unconditionally,
+  // so finished messages kept animating forever.
+  it('stops animating once the run is no longer active', () => {
+    const { container } = render(
+      <AgentContent
+        text={SECTIONS}
+        messageId="message-idle"
+        openTags={new Set()}
+        onToggleTag={() => undefined}
+      />
+    );
+
+    expect(container.querySelectorAll('.agent-active-gradient')).toHaveLength(0);
+    // The labels are still rendered and still truncate — only the sweep stops.
+    expect(container.querySelectorAll('.truncate')).toHaveLength(3);
   });
 });

@@ -1183,6 +1183,15 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       setIsSending(false);
       setAgentAttachments([]);
       abortControllerRef.current = null;
+      // Abort and error both append a new message and leave the in-flight one
+      // untouched, so its "working" shimmer would never stop. Only one run is
+      // in flight at a time, so clearing the flag everywhere also repairs any
+      // message stranded by an earlier failure.
+      setMessages((prev) =>
+        prev.some((m) => m.isReadingFiles)
+          ? prev.map((m) => (m.isReadingFiles ? { ...m, isReadingFiles: false } : m))
+          : prev
+      );
     }
   };
 

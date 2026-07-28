@@ -214,7 +214,7 @@ export const ToolCallList: React.FC<ToolCallListProps> = ({
             <Check className="h-3 w-3 shrink-0 text-amber-600" />
           )}
           <span
-            className="agent-active-gradient min-w-0 truncate"
+            className={`min-w-0 truncate ${isReading ? 'agent-active-gradient' : ''}`}
             title={isReading ? `Working · ${summary}` : summary}
           >
             {isReading ? `Working · ${summary}` : summary}
@@ -271,7 +271,7 @@ export const ToolCallList: React.FC<ToolCallListProps> = ({
               <Search className="w-3 h-3 shrink-0" />
             )}
             <span
-              className="agent-active-gradient min-w-0 truncate"
+              className={`min-w-0 truncate ${isReading ? 'agent-active-gradient' : ''}`}
               title={toolCallLabel(toolCall)}
             >
               {toolCallLabel(toolCall)}

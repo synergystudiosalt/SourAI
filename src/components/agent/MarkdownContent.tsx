@@ -277,7 +277,12 @@ const ExpandableTag: React.FC<ExpandableTagProps> = ({
         {showsReadIcon && (
           <FileText data-testid="read-tag-icon" aria-hidden="true" className="w-3 h-3 shrink-0" />
         )}
-        <span className="agent-active-gradient min-w-0 truncate" title={activeLabel}>
+        {/* The sweep is an activity indicator, so it must stop when the run
+            does. Left unconditional it animates forever on finished messages. */}
+        <span
+          className={`min-w-0 truncate ${isActive ? 'agent-active-gradient' : ''}`}
+          title={activeLabel}
+        >
           {activeLabel}
         </span>
         <ChevronDown
