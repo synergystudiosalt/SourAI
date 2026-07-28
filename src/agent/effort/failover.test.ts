@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  buildOpenAICompatibleBody,
+  continueChatMessages,
+  continueGeminiContents,
   generateWithGroq,
   isRetryableError,
+  MODEL_ROUTES,
   parseRetryAfter,
   ProviderHttpError,
   streamText,
@@ -90,6 +94,69 @@ describe('withContinuation', () => {
   });
 });
 
+describe('prefill continuation', () => {
+  const BASE = [{ role: 'user', content: 'write a poem' }];
+
+  it('continues a trailing assistant turn on OpenAI-compatible routes', () => {
+    const next = continueChatMessages(BASE, 'Roses are red,', 'openai');
+    expect(next[next.length - 1]).toEqual({ role: 'assistant', content: 'Roses are red,' });
+  });
+
+  it('flags the turn as a prefix for Mistral, which otherwise replies to it', () => {
+    const next = continueChatMessages(BASE, 'Roses are red,', 'mistral');
+    expect(next[next.length - 1]).toEqual({
+      role: 'assistant',
+      content: 'Roses are red,',
+      prefix: true,
+    });
+  });
+
+  it('carries the prefix flag into the request body', () => {
+    const body = buildOpenAICompatibleBody(
+      'mistral-small-latest',
+      continueChatMessages(BASE, 'half a thought', 'mistral'),
+      'sys',
+      undefined,
+      null
+    );
+    const last = (body.messages as any[])[(body.messages as any[]).length - 1];
+    expect(last).toEqual({ role: 'assistant', content: 'half a thought', prefix: true });
+  });
+
+  it('falls back to a written instruction where prefill is unsupported', () => {
+    const next = continueChatMessages(BASE, 'Roses are red,', null);
+    const last = next[next.length - 1];
+    expect(last.role).toBe('user');
+    expect(last.content).toMatch(/Do not repeat/i);
+    expect(last.prefix).toBeUndefined();
+  });
+
+  it('resumes Gemini by instruction, since neither route continues a model turn', () => {
+    const contents = [{ role: 'user', parts: [{ text: 'hi' }] }];
+    const next = continueGeminiContents(contents, 'Half a', null);
+    expect(next[next.length - 1].role).toBe('user');
+    expect(next[next.length - 1].parts[0].text).toMatch(/Do not repeat/i);
+  });
+});
+
+describe('route prefill capability', () => {
+  it('matches the modes each provider actually accepts', () => {
+    expect(MODEL_ROUTES['sour-omni-flash'].prefill).toBe('mistral');
+    expect(MODEL_ROUTES['sour-intelligence'].prefill).toBe('openai');
+    expect(MODEL_ROUTES['sour-overclock'].prefill).toBe('openai');
+    // Gemini dropped assistant prefill; both routes resume by instruction.
+    expect(MODEL_ROUTES['sour-ultra'].prefill).toBeNull();
+    expect(MODEL_ROUTES['sour-overcode'].prefill).toBeNull();
+  });
+
+  it('only marks Mistral routes with the mistral mode', () => {
+    for (const route of Object.values(MODEL_ROUTES)) {
+      if (route.prefill === 'mistral') expect(route.provider).toBe('mistral');
+      if (route.provider === 'gemini') expect(route.prefill ?? null).toBeNull();
+    }
+  });
+});
+
 describe('key failover', () => {
   it('moves to the next key when the first is rate limited', async () => {
     const seen: string[] = [];
@@ -154,6 +221,40 @@ describe('mid-stream rate limit', () => {
     const last = retryMessages[retryMessages.length - 1];
     expect(last.content).toContain('Hello world');
     expect(last.content).toMatch(/Do not repeat/i);
+  });
+
+  it('resumes a Mistral route by prefill rather than by instruction', async () => {
+    const bodies: any[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: any) => {
+      bodies.push(JSON.parse(init.body));
+      if (bodies.length === 1) {
+        return sseStream([
+          token('Roses are '),
+          `data: ${JSON.stringify({ error: { status: 429, message: 'tpm' } })}\n\n`,
+        ]);
+      }
+      return sseStream([token('red.'), 'data: [DONE]\n\n']);
+    }));
+
+    const out = await collect(
+      streamText({
+        geminiKeys: [],
+        groqKeys: [],
+        mistralKeys: KEYS,
+        contents: [],
+        plainMessages: [{ role: 'user', content: 'poem' }],
+        systemInstruction: 'sys',
+        route: MODEL_ROUTES['sour-omni-flash'],
+      })
+    );
+
+    expect(out).toBe('Roses are red.');
+    const retry = bodies[1].messages;
+    expect(retry[retry.length - 1]).toEqual({
+      role: 'assistant',
+      content: 'Roses are ',
+      prefix: true,
+    });
   });
 
   it('retries from scratch when the limit lands before any output', async () => {

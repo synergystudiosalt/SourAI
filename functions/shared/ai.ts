@@ -145,6 +145,42 @@ export function withContinuation(
   ];
 }
 
+/**
+ * How a model resumes an interrupted answer.
+ * - `openai`  trailing assistant turn (OpenAI-compatible)
+ * - `mistral` trailing assistant turn flagged `prefix: true`
+ * - `gemini`  trailing `model` turn
+ * - `null`    no prefill; resume by written instruction instead
+ */
+export type PrefillMode = 'openai' | 'mistral' | 'gemini' | null;
+
+/**
+ * Prefer prefill: the model literally continues the text rather than being
+ * asked to, so the halves join without it restating or apologising.
+ */
+export function continueChatMessages(
+  messages: ChatMessage[],
+  partial: string,
+  mode: PrefillMode
+): ChatMessage[] {
+  if (mode === 'openai' || mode === 'mistral') {
+    const assistant: ChatMessage = { role: 'assistant', content: partial };
+    // Mistral requires the turn to be marked as a prefix, otherwise it
+    // replies to it instead of continuing it.
+    if (mode === 'mistral') assistant.prefix = true;
+    return [...messages, assistant];
+  }
+  return withContinuation(messages, partial);
+}
+
+export function continueGeminiContents(contents: any, partial: string, mode: PrefillMode): any {
+  if (mode === 'gemini') {
+    const base = Array.isArray(contents) ? contents : [];
+    return [...base, { role: 'model', parts: [{ text: partial }] }];
+  }
+  return withGeminiContinuation(contents, partial);
+}
+
 export function withGeminiContinuation(contents: any, partial: string): any {
   const base = Array.isArray(contents) ? contents : [];
   return [
@@ -223,9 +259,16 @@ export async function generateWithGemini(
   throw lastErr instanceof Error ? lastErr : new Error('All Gemini API keys failed');
 }
 
+export interface ChatMessage {
+  role: string;
+  content: string;
+  /** Mistral: marks a trailing assistant turn as text to continue, not answer. */
+  prefix?: boolean;
+}
+
 export function buildOpenAICompatibleBody(
   model: string,
-  messages: { role: string; content: string }[],
+  messages: ChatMessage[],
   systemInstruction: string,
   tuning: GenerationTuning | undefined,
   reasoning: ReasoningControl,
@@ -235,10 +278,16 @@ export function buildOpenAICompatibleBody(
     model,
     messages: [
       { role: 'system', content: systemInstruction },
-      ...messages.map((m) => ({
-        role: m.role === 'assistant' ? 'assistant' : 'user',
-        content: m.content || '',
-      })),
+      ...messages.map((m) => {
+        const mapped: Record<string, unknown> = {
+          role: m.role === 'assistant' ? 'assistant' : 'user',
+          content: m.content || '',
+        };
+        // This mapping rebuilds each message, so the prefix flag has to be
+        // carried across explicitly or Mistral silently loses it.
+        if (m.prefix) mapped.prefix = true;
+        return mapped;
+      }),
     ],
     ...extra,
   };
@@ -351,14 +400,23 @@ export interface ModelRoute {
    * knob we aren't sure exists avoids the wasted round trip.
    */
   reasoning?: ReasoningControl;
+  /**
+   * How this model resumes an interrupted answer. Prefill (continuing a
+   * trailing assistant turn) is far more reliable than asking in prose, but
+   * a model that doesn't support it would *answer* that turn instead of
+   * continuing it — worse than the instruction fallback. So it is per-route.
+   */
+  prefill?: PrefillMode;
 }
 
 export const MODEL_ROUTES: Record<string, ModelRoute> = {
-  'sour-omni-flash': { provider: 'groq', model: 'openai/gpt-oss-20b', reasoning: 'openai_effort' },
-  'sour-intelligence': { provider: 'groq', model: 'qwen/qwen3.6-27b', reasoning: null },
-  'sour-ultra': { provider: 'gemini', model: 'gemini-3.5-flash-lite', reasoning: 'gemini_thinking' },
-  'sour-overclock': { provider: 'cerebras', model: 'zai-glm-4.7', reasoning: null },
-  'sour-overcode': { provider: 'gemini', model: 'gemini-3.6-flash', reasoning: 'gemini_thinking' },
+  'sour-omni-flash': { provider: 'mistral', model: 'mistral-small-latest', reasoning: null, prefill: 'mistral' },
+  'sour-intelligence': { provider: 'groq', model: 'qwen/qwen3.6-27b', reasoning: null, prefill: 'openai' },
+  'sour-overclock': { provider: 'cerebras', model: 'zai-glm-4.7', reasoning: null, prefill: 'openai' },
+  // Neither Gemini route continues a trailing model turn, so both resume by
+  // written instruction instead.
+  'sour-ultra': { provider: 'gemini', model: 'gemini-3.5-flash-lite', reasoning: 'gemini_thinking', prefill: null },
+  'sour-overcode': { provider: 'gemini', model: 'gemini-3.6-flash', reasoning: 'gemini_thinking', prefill: null },
 };
 
 const DEFAULT_ROUTE: ModelRoute = MODEL_ROUTES['sour-omni-flash'];
@@ -420,11 +478,12 @@ async function* streamWithOpenAICompatible(
   baseUrl: string,
   keys: string[],
   takeKey: (keys: string[]) => string | null,
-  messages: { role: string; content: string }[],
+  messages: ChatMessage[],
   systemInstruction: string,
   model: string,
   tuning?: GenerationTuning,
-  reasoning: ReasoningControl = null
+  reasoning: ReasoningControl = null,
+  prefill: PrefillMode = null
 ): AsyncGenerator<string> {
   if (keys.length === 0) throw new Error(`No API keys configured for ${baseUrl}`);
   // Everything already handed to the caller. On a mid-stream rate limit we ask
@@ -438,7 +497,7 @@ async function* streamWithOpenAICompatible(
     const key = takeKey(keys)!;
     const body = buildOpenAICompatibleBody(
       model,
-      emitted ? withContinuation(messages, emitted) : messages,
+      emitted ? continueChatMessages(messages, emitted, prefill) : messages,
       systemInstruction,
       tuning,
       reasoning,
@@ -498,7 +557,8 @@ async function* streamWithGemini(
   systemInstruction: string,
   model: string,
   tuning?: GenerationTuning,
-  reasoning: ReasoningControl = null
+  reasoning: ReasoningControl = null,
+  prefill: PrefillMode = null
 ): AsyncGenerator<string> {
   if (keys.length === 0) throw new Error('No Gemini API keys configured');
   let emitted = '';
@@ -514,7 +574,7 @@ async function* streamWithGemini(
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            contents: emitted ? withGeminiContinuation(contents, emitted) : contents,
+            contents: emitted ? continueGeminiContents(contents, emitted, prefill) : contents,
             systemInstruction: { parts: [{ text: systemInstruction }] },
             generationConfig: buildGeminiGenerationConfig(tuning, reasoning),
           }),
@@ -577,27 +637,30 @@ export async function* streamText(opts: {
 }): AsyncGenerator<string> {
   const { route, contents, plainMessages, systemInstruction, geminiKeys, groqKeys, cerebrasKeys = [], mistralKeys = [], tuning } = opts;
   const reasoning = route.reasoning ?? null;
+  const prefill = route.prefill ?? null;
 
   try {
     switch (route.provider) {
       case 'groq':
-        yield* streamWithOpenAICompatible('https://api.groq.com', groqKeys, takeGroqKey, plainMessages, systemInstruction, route.model, tuning, reasoning);
+        yield* streamWithOpenAICompatible('https://api.groq.com', groqKeys, takeGroqKey, plainMessages, systemInstruction, route.model, tuning, reasoning, prefill);
         return;
       case 'cerebras':
-        yield* streamWithOpenAICompatible('https://api.cerebras.ai', cerebrasKeys, takeCerebrasKey, plainMessages, systemInstruction, route.model, tuning, reasoning);
+        yield* streamWithOpenAICompatible('https://api.cerebras.ai', cerebrasKeys, takeCerebrasKey, plainMessages, systemInstruction, route.model, tuning, reasoning, prefill);
         return;
       case 'mistral':
-        yield* streamWithOpenAICompatible('https://api.mistral.ai', mistralKeys, takeMistralKey, plainMessages, systemInstruction, route.model, tuning, reasoning);
+        yield* streamWithOpenAICompatible('https://api.mistral.ai', mistralKeys, takeMistralKey, plainMessages, systemInstruction, route.model, tuning, reasoning, prefill);
         return;
       case 'gemini':
       default:
-        yield* streamWithGemini(geminiKeys, contents, systemInstruction, route.model, tuning, reasoning);
+        yield* streamWithGemini(geminiKeys, contents, systemInstruction, route.model, tuning, reasoning, prefill);
         return;
     }
   } catch (primaryErr) {
     console.warn(`Primary ${route.provider} stream failed, trying Gemini fallback...`, primaryErr);
     try {
-      yield* streamWithGemini(geminiKeys, contents, systemInstruction, 'gemini-3.5-flash-lite', tuning, 'gemini_thinking');
+      // The fallback's own capabilities, not the original route's: it takes
+      // a thinking budget but no longer continues a trailing model turn.
+      yield* streamWithGemini(geminiKeys, contents, systemInstruction, 'gemini-3.5-flash-lite', tuning, 'gemini_thinking', null);
     } catch {
       console.warn('Gemini fallback exhausted, falling back to non-streaming Groq...');
       const text = await generateWithGroq(groqKeys, plainMessages, systemInstruction, undefined, tuning, null);
