@@ -470,7 +470,11 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     const toolCalls: AgentToolCall[] = [];
     const parts: string[] = [];
     for (const p of paths) {
-      const prefix = p ? p.replace(/\/$/, '') + '/' : '';
+      // Models write the project root as ".", "./" or "/". Treated literally
+      // these produce a prefix no stored path starts with, so the root reads
+      // back as empty and the agent concludes there is nothing to work with.
+      const normalized = p.trim().replace(/^\.$/, '').replace(/^\.\//, '').replace(/^\/+/, '');
+      const prefix = normalized ? normalized.replace(/\/$/, '') + '/' : '';
       const children = files
         .filter((f) => f.path.startsWith(prefix) && f.path !== prefix)
         .map((f) => {
