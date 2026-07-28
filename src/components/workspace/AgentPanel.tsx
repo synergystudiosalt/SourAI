@@ -1414,11 +1414,17 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                 <Brain className="h-3.5 w-3.5" />
               </button>
               {showReasoningPopover && (
-                <div className="absolute bottom-full left-0 z-20 mb-2 w-56 rounded-xl border border-[#d8d5c9] bg-[#f5f3ee] p-3 shadow-xl dark:border-[#3a3937] dark:bg-[#242423]">
+                <div className="fixed bottom-11 left-2 z-50 w-56 max-w-[calc(100vw-1rem)] rounded-xl border border-[#d8d5c9] bg-[#f5f3ee] p-3 shadow-xl dark:border-[#3a3937] dark:bg-[#242423]">
                   <div className="mb-3 flex items-center justify-between text-[11px] font-medium text-[#656158] dark:text-[#aaa69e]">
                     <span>
                       Effort{' '}
-                      <span className="font-semibold text-[#8b5cf6]">
+                      <span
+                        className={`font-semibold ${
+                          reasoningEffort === 'ultracode'
+                            ? 'text-[#a879ff]'
+                            : 'text-[#656158] dark:text-[#c1bdb5]'
+                        }`}
+                      >
                         {REASONING_OPTIONS.find((option) => option.id === reasoningEffort)?.label}
                       </span>
                     </span>
@@ -1428,18 +1434,10 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                     <span>Faster</span>
                     <span>Smarter</span>
                   </div>
-                  <input
-                    aria-label="Reasoning effort"
-                    type="range"
-                    min={0}
-                    max={REASONING_OPTIONS.length - 1}
-                    step={1}
-                    value={REASONING_OPTIONS.findIndex((option) => option.id === reasoningEffort)}
-                    onChange={(event) => {
-                      const option = REASONING_OPTIONS[Number(event.target.value)];
-                      if (option) setReasoningEffort(option.id);
-                    }}
-                    className="agent-effort-slider"
+                  <div
+                    className={`agent-effort-control ${
+                      reasoningEffort === 'ultracode' ? 'is-ultracode' : ''
+                    }`}
                     style={{
                       '--effort-percent': `${
                         (REASONING_OPTIONS.findIndex((option) => option.id === reasoningEffort) /
@@ -1447,7 +1445,24 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                         100
                       }%`,
                     } as React.CSSProperties}
-                  />
+                  >
+                    <div className="agent-effort-track" aria-hidden="true">
+                      <span className="agent-effort-thumb" />
+                    </div>
+                    <input
+                      aria-label="Reasoning effort"
+                      type="range"
+                      min={0}
+                      max={REASONING_OPTIONS.length - 1}
+                      step={1}
+                      value={REASONING_OPTIONS.findIndex((option) => option.id === reasoningEffort)}
+                      onChange={(event) => {
+                        const option = REASONING_OPTIONS[Number(event.target.value)];
+                        if (option) setReasoningEffort(option.id);
+                      }}
+                      className="agent-effort-input"
+                    />
+                  </div>
                 </div>
               )}
             </div>

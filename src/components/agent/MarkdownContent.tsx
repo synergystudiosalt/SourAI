@@ -1,15 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { AnimatePresence, motion } from 'motion/react';
-import {
-  BarChart3,
-  Brain,
-  CheckCircle,
-  ChevronDown,
-  Package,
-  Settings,
-  Tag,
-} from 'lucide-react';
+import { ChevronDown, FileText } from 'lucide-react';
 
 type MarkdownImageProps = React.ImgHTMLAttributes<HTMLImageElement> & { node?: unknown };
 
@@ -134,18 +126,15 @@ export function parseAgentContent(text: string): AgentContentSegment[] {
   }, []);
 }
 
-type TagIcon = React.FC<{ className?: string }>;
-
 const KNOWN_TAGS: Record<
   string,
-  { label: string; Icon: TagIcon; color: string; bg: string; border: string }
+  { label: string; color: string; bg: string; border: string }
 > = {
   ...Object.fromEntries(
     THINK_TAGS.map((tag) => [
       tag,
       {
         label: 'Thinking',
-        Icon: Brain,
         color: 'text-[#97948A] dark:text-[#97948A]',
         bg: '',
         border: '',
@@ -154,28 +143,24 @@ const KNOWN_TAGS: Record<
   ),
   check_for_errors: {
     label: 'Error Check',
-    Icon: CheckCircle,
     color: 'text-[#97948A] dark:text-[#97948A]',
     bg: 'bg-[#f5f3eb] dark:bg-[#1f1f1e]',
     border: 'border-[#97948A] dark:border-[#97948A]',
   },
   function_request: {
     label: 'Function Request',
-    Icon: Settings,
     color: 'text-[#8c887d] dark:text-[#a09c94]',
     bg: 'bg-[#f5f3eb] dark:bg-[#1f1f1e]',
     border: 'border-[#8c887d] dark:border-[#a09c94]',
   },
   function_result: {
     label: 'Function Result',
-    Icon: BarChart3,
     color: 'text-[#8c887d] dark:text-[#a09c94]',
     bg: 'bg-[#f5f3eb] dark:bg-[#1f1f1e]',
     border: 'border-[#8c887d] dark:border-[#a09c94]',
   },
   context_compact: {
     label: 'Context Compacted',
-    Icon: Package,
     color: 'text-purple-500 dark:text-purple-400',
     bg: 'bg-purple-50 dark:bg-purple-950/30',
     border: 'border-purple-500 dark:border-purple-400',
@@ -227,7 +212,7 @@ const TAG_COLOR_CYCLE = [
 
 function getTagMeta(
   tagName: string
-): { label: string; Icon: TagIcon; color: string; bg: string; border: string } {
+): { label: string; color: string; bg: string; border: string } {
   if (KNOWN_TAGS[tagName]) return KNOWN_TAGS[tagName];
   let hash = 0;
   for (let index = 0; index < tagName.length; index++) {
@@ -235,7 +220,7 @@ function getTagMeta(
   }
   const palette = TAG_COLOR_CYCLE[Math.abs(hash) % TAG_COLOR_CYCLE.length];
   const label = tagName.replace(/[_-]/g, ' ').replace(/\b\w/g, (character) => character.toUpperCase());
-  return { label, Icon: Tag, ...palette };
+  return { label, ...palette };
 }
 
 interface ExpandableTagProps {
@@ -255,9 +240,10 @@ const ExpandableTag: React.FC<ExpandableTagProps> = ({
   onToggle,
   isActive = false,
 }) => {
-  const { label, Icon, color, border } = getTagMeta(tagType);
+  const { label, color, border } = getTagMeta(tagType);
   const isOpen = openSet.has(id);
   const isThinkTag = THINK_TAGS.includes(tagType);
+  const showsReadIcon = tagType.toLowerCase() === 'read';
   const activeLabel =
     isActive && isThinkTag
       ? content.split(/\n/).find(Boolean)?.trim().slice(0, 80) || 'Thinking'
@@ -275,7 +261,9 @@ const ExpandableTag: React.FC<ExpandableTagProps> = ({
         onClick={() => onToggle(id)}
         className={`flex items-center gap-1.5 text-[10.5px] font-medium ${color} hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth`}
       >
-        <Icon className="w-3 h-3 shrink-0" />
+        {showsReadIcon && (
+          <FileText data-testid="read-tag-icon" aria-hidden="true" className="w-3 h-3 shrink-0" />
+        )}
         <span className={isActive && isThinkTag ? 'agent-active-gradient' : undefined}>
           {activeLabel}
         </span>

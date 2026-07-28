@@ -94,38 +94,62 @@
   }
 }
 
-.agent-effort-slider {
+@keyframes effortParticleDrift {
+  from { background-position: 0 0, 0 0, 0 0; }
+  to { background-position: 20px -10px, 0 0, 0 0; }
+}
+
+.agent-effort-control {
   --effort-percent: 33%;
+  position: relative;
   width: 100%;
   height: 20px;
-  margin: 0;
-  appearance: none;
-  -webkit-appearance: none;
   cursor: pointer;
+}
+
+.agent-effort-track {
+  position: absolute;
+  inset: 0;
   background:
     linear-gradient(90deg, rgba(139, 92, 246, 0.28) 0 var(--effort-percent), rgba(120, 116, 107, 0.18) var(--effort-percent) 100%),
     repeating-linear-gradient(90deg, rgba(255,255,255,0.08) 0 2px, transparent 2px 4px);
   border-radius: 6px;
+  overflow: hidden;
+  transition: background 320ms ease;
 }
 
-.agent-effort-slider::-webkit-slider-thumb {
+.agent-effort-control.is-ultracode .agent-effort-track {
+  background:
+    radial-gradient(circle, rgba(255,255,255,0.95) 0 1px, transparent 1.4px) 0 0 / 10px 10px,
+    linear-gradient(90deg, rgba(139, 92, 246, 0.46) 0 var(--effort-percent), rgba(120, 116, 107, 0.18) var(--effort-percent) 100%),
+    repeating-linear-gradient(90deg, rgba(255,255,255,0.10) 0 2px, transparent 2px 4px);
+  animation: effortParticleDrift 1.4s linear infinite;
+}
+
+.agent-effort-thumb {
+  position: absolute;
+  top: 0;
+  left: clamp(0px, calc(var(--effort-percent) - 8px), calc(100% - 16px));
   width: 16px;
   height: 20px;
-  appearance: none;
-  -webkit-appearance: none;
-  border: 0;
   border-radius: 6px;
   background: #f3edff;
   box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.22), 0 2px 7px rgba(0, 0, 0, 0.3);
+  transition: left 380ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 260ms ease;
 }
 
-.agent-effort-slider::-moz-range-thumb {
-  width: 16px;
-  height: 20px;
-  border: 0;
-  border-radius: 6px;
-  background: #f3edff;
-  box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.22), 0 2px 7px rgba(0, 0, 0, 0.3);
+.agent-effort-control.is-ultracode .agent-effort-thumb {
+  box-shadow: 0 0 0 1px rgba(184, 139, 255, 0.5), 0 0 12px rgba(255,255,255,0.55);
+}
+
+.agent-effort-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -134,6 +158,12 @@
     background: none;
     color: #d96b43;
     -webkit-text-fill-color: currentColor;
+  }
+  .agent-effort-thumb {
+    transition: none;
+  }
+  .agent-effort-control.is-ultracode .agent-effort-track {
+    animation: none;
   }
 }
 

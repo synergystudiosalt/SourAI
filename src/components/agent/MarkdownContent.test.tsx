@@ -81,4 +81,19 @@ describe('agent structured content', () => {
     );
     expect(screen.getByText('Inspect the file.')).toBeInTheDocument();
   });
+
+  it('shows an icon only for read sections', () => {
+    const { container } = render(
+      <AgentContent
+        text="<read>game.js</read><thinking>Inspecting.</thinking><function_request>Run tests.</function_request>"
+        messageId="message-icons"
+        openTags={new Set()}
+        onToggleTag={() => undefined}
+      />
+    );
+
+    expect(screen.getAllByTestId('read-tag-icon')).toHaveLength(1);
+    // The remaining SVGs are disclosure chevrons; non-read labels have no leading icon.
+    expect(container.querySelectorAll('[data-testid="read-tag-icon"]')).toHaveLength(1);
+  });
 });
