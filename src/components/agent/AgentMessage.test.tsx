@@ -29,6 +29,8 @@ function MessageHarness({ message }: { message: AgentChatMessage }) {
       openItems={openItems}
       onToggleTag={(id) => toggle(setOpenTags, id)}
       onToggleItem={(id) => toggle(setOpenItems, id)}
+      onApplyOperations={() => undefined}
+      onRejectOperations={() => undefined}
     />
   );
 }

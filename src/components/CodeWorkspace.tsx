@@ -639,25 +639,18 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
 
   const handleLegacyAgentOps = async (ops: AgentFileOp[]): Promise<boolean> => {
     if (activeProject?.isReal) {
-      alert('Agent changes to local folders remain disabled until safe disk transactions are available.');
       return false;
     }
     for (const op of ops) {
       const current = findNode(tree, op.path);
       if (
         op.originalContent !== undefined &&
-        (current?.type !== 'file' || (current.content ?? '') !== op.originalContent)
+        (current
+          ? current.type !== 'file' || (current.content ?? '') !== op.originalContent
+          : op.originalContent !== '')
       ) {
-        alert(`"${op.path}" changed after the agent prepared its edit. Ask it to try again.`);
         return false;
       }
-    }
-
-    const summary = ops
-      .map((op) => `${op.type === 'delete' ? 'Delete' : 'Change'} ${op.path}`)
-      .join('\n');
-    if (!window.confirm(`Review agent changes:\n\n${summary}\n\nApply these changes?`)) {
-      return false;
     }
 
     let next = tree;

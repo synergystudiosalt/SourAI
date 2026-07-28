@@ -52,8 +52,8 @@ test('a Pages-backed agent change is reviewed, applied, and survives reload', as
   await expect(page.getByText('Omni-Flash')).toBeVisible();
   await expect(page.getByLabel(/API key/i)).toHaveCount(0);
 
-  page.once('dialog', (dialog) => dialog.accept());
   await requestChange(page);
+  await page.getByRole('button', { name: 'Apply changes' }).click();
 
   await expect(page.getByText('notes.md').first()).toBeVisible();
   await expect(page.getByText('First entry.')).toBeVisible();
@@ -69,10 +69,11 @@ test('a denied agent change never touches the workspace', async ({ page }) => {
   await mockPagesAgent(page);
   await openWorkspace(page);
 
-  page.once('dialog', (dialog) => dialog.dismiss());
   await requestChange(page);
+  await page.getByRole('button', { name: 'Reject' }).click();
 
   await expect(page.getByText('Added release notes.')).toBeVisible();
+  await expect(page.getByText('Changes rejected')).toBeVisible();
   await expect(page.getByTitle(NEW_FILE_PATH)).toHaveCount(0);
 });
 
@@ -80,7 +81,6 @@ test('the browser sends model choice but never an API key', async ({ page }) => 
   const payloads = await mockPagesAgent(page);
   await openWorkspace(page);
 
-  page.once('dialog', (dialog) => dialog.dismiss());
   await requestChange(page);
   await expect(page.getByText('Added release notes.')).toBeVisible();
 

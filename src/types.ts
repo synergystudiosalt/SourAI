@@ -108,6 +108,8 @@ export interface AgentChatMessage {
   content: string;
   ops?: AgentFileOp[];
   appliedPaths?: string[];
+  /** User-visible lifecycle for a proposed workspace mutation. */
+  approvalStatus?: 'pending' | 'applying' | 'applied' | 'rejected' | 'failed';
   /** Paths from `ops` that are still being "typed out"/applied (drives the per-file spinner). */
   codingPaths?: string[];
   isError?: boolean;

@@ -300,18 +300,38 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
               ...m,
               appliedPaths: Array.from(new Set([...(m.appliedPaths || []), ...paths])),
               codingPaths: (m.codingPaths || []).filter((p) => !paths.includes(p)),
+              approvalStatus: 'applied',
             }
           : m
       )
     );
   };
 
-  const handleApplySingle = async (messageId: string, op: AgentFileOp) => {
-    if (await onApplyOps([op])) markApplied(messageId, [op.path]);
+  const handleApplyAll = async (messageId: string, ops: AgentFileOp[]) => {
+    setMessages((prev) =>
+      prev.map((message) =>
+        message.id === messageId ? { ...message, approvalStatus: 'applying' } : message
+      )
+    );
+    if (await onApplyOps(ops)) {
+      markApplied(messageId, ops.map((o) => o.path));
+    } else {
+      setMessages((prev) =>
+        prev.map((message) =>
+          message.id === messageId ? { ...message, approvalStatus: 'failed' } : message
+        )
+      );
+    }
   };
 
-  const handleApplyAll = async (messageId: string, ops: AgentFileOp[]) => {
-    if (await onApplyOps(ops)) markApplied(messageId, ops.map((o) => o.path));
+  const handleRejectAll = (messageId: string) => {
+    setMessages((prev) =>
+      prev.map((message) =>
+        message.id === messageId
+          ? { ...message, approvalStatus: 'rejected', codingPaths: [] }
+          : message
+      )
+    );
   };
 
   const toggleXmlTag = (tagId: string) => {
@@ -611,13 +631,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       parts.push(`[Rename ${oldPath} → ${newPath}]\nFile moved successfully.`);
     }
     return { toolCalls, ops, resultText: parts.join('\n\n') };
-  };
-
-  /** Sequentially "codes" each file with a short delay so the UI can show a
-   *  spinner per-file (rather than instantly marking every file as done). */
-  const applyOpsStaggered = async (messageId: string, ops: AgentFileOp[]) => {
-    await new Promise((resolve) => setTimeout(resolve, 350));
-    if (await onApplyOps(ops)) markApplied(messageId, ops.map((op) => op.path));
   };
 
   const MAX_AGENT_TURNS = 50;
@@ -932,8 +945,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         }
       }
 
-      const willAutoApply = true;
-
       // Enrich ops with original content and diff info for highlighting
       const enrichedOps = allOps.map((op) => {
         if (op.type !== 'write' || !op.content) return op;
@@ -959,7 +970,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                 ...m,
                 content: finalDisplayText,
                 ops: enrichedOps,
-                codingPaths: willAutoApply ? enrichedOps.map((o) => o.path) : [],
+                codingPaths: [],
+                approvalStatus: enrichedOps.length > 0 ? 'pending' : undefined,
                 thinking: accumulatedThinking,
                 thinkingLabel: accumulatedThinkingLabel,
                 toolCalls: allToolCalls,
@@ -968,8 +980,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
             : m
         )
       );
-
-      if (willAutoApply) applyOpsStaggered(msgId, allOps);
 
     } catch (err: unknown) {
       if (isAbortError(err)) {
@@ -1094,6 +1104,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         openItems={openToolCalls}
         onToggleTag={toggleXmlTag}
         onToggleItem={toggleToolCalls}
+        onApplyOperations={handleApplyAll}
+        onRejectOperations={handleRejectAll}
       />
     );
   };

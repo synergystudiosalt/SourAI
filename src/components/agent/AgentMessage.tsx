@@ -1,6 +1,7 @@
 import React from 'react';
+import { Check, Loader2, X } from 'lucide-react';
 
-import type { AgentChatMessage } from '../../types';
+import type { AgentChatMessage, AgentFileOp } from '../../types';
 import Logo from '../Logo';
 import { AgentContent, TypedMarkdown } from './MarkdownContent';
 import { OperationList } from './OperationList';
@@ -14,6 +15,8 @@ export interface AgentMessageProps {
   openItems: Set<string>;
   onToggleTag: (id: string) => void;
   onToggleItem: (id: string) => void;
+  onApplyOperations: (messageId: string, operations: AgentFileOp[]) => void;
+  onRejectOperations: (messageId: string) => void;
 }
 
 export const AgentMessage: React.FC<AgentMessageProps> = ({
@@ -24,6 +27,8 @@ export const AgentMessage: React.FC<AgentMessageProps> = ({
   openItems,
   onToggleTag,
   onToggleItem,
+  onApplyOperations,
+  onRejectOperations,
 }) => {
   if (message.role === 'user') {
     return (
@@ -75,13 +80,59 @@ export const AgentMessage: React.FC<AgentMessageProps> = ({
       )}
 
       {message.ops && message.ops.length > 0 && (
-        <OperationList
-          messageId={message.id}
-          operations={message.ops}
-          codingPaths={message.codingPaths}
-          openItems={openItems}
-          onToggle={onToggleItem}
-        />
+        <div className="overflow-hidden rounded-md border border-[#d8d5c9] bg-white dark:border-[#3a3937] dark:bg-[#20201f]">
+          <div className="px-2 pt-2">
+            <OperationList
+              messageId={message.id}
+              operations={message.ops}
+              codingPaths={message.codingPaths}
+              openItems={openItems}
+              onToggle={onToggleItem}
+            />
+          </div>
+          {message.approvalStatus === 'applied' ? (
+            <div className="flex items-center gap-1.5 border-t border-[#e5e3db] px-2.5 py-2 text-[10.5px] text-emerald-700 dark:border-[#333230] dark:text-emerald-400">
+              <Check className="h-3 w-3" /> Changes applied
+            </div>
+          ) : message.approvalStatus === 'rejected' ? (
+            <div className="flex items-center gap-1.5 border-t border-[#e5e3db] px-2.5 py-2 text-[10.5px] text-[#8c887d] dark:border-[#333230] dark:text-[#a09c94]">
+              <X className="h-3 w-3" /> Changes rejected
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-2 border-t border-[#e5e3db] px-2 py-2 dark:border-[#333230]">
+              <span
+                className={`text-[9.5px] ${
+                  message.approvalStatus === 'failed'
+                    ? 'text-red-600 dark:text-red-400'
+                    : 'text-[#8c887d] dark:text-[#a09c94]'
+                }`}
+              >
+                {message.approvalStatus === 'failed'
+                  ? 'Could not apply safely. Review and retry.'
+                  : 'Review before applying'}
+              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  disabled={message.approvalStatus === 'applying'}
+                  onClick={() => onRejectOperations(message.id)}
+                  className="rounded border border-[#d8d5c9] px-2 py-1 text-[10px] text-[#706c62] hover:bg-[#f5f3ec] disabled:opacity-50 dark:border-[#444240] dark:text-[#b8b4ac] dark:hover:bg-[#2a2928]"
+                >
+                  Reject
+                </button>
+                <button
+                  type="button"
+                  disabled={message.approvalStatus === 'applying'}
+                  onClick={() => onApplyOperations(message.id, message.ops || [])}
+                  className="flex items-center gap-1 rounded bg-[#d96b43] px-2 py-1 text-[10px] text-white hover:bg-[#c85f3a] disabled:opacity-60"
+                >
+                  {message.approvalStatus === 'applying' && <Loader2 className="h-3 w-3 animate-spin" />}
+                  Apply changes
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
