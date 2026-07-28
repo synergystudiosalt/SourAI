@@ -166,9 +166,10 @@ describe('parseAgentResponse — known weaknesses that Phase 3 must remove', () 
   it('cannot represent a partial edit safely — a truncated fence is lost entirely', () => {
     // A stream cut short mid-block yields no op at all, with nothing to signal
     // that an edit was intended. Structured tool calls fail loudly instead.
-    const { ops, displayText } = parseAgentResponse('```ts path="src/App.tsx"\nexport default 1;');
+    const { ops, displayText, incompleteFileBlock } = parseAgentResponse('```ts path="src/App.tsx"\nexport default 1;');
     expect(ops).toEqual([]);
-    expect(displayText).toContain('path="src/App.tsx"');
+    expect(incompleteFileBlock).toBe(true);
+    expect(displayText).toMatch(/no changes were applied/i);
   });
 
   it('has no revision or content precondition on a write', () => {

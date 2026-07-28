@@ -310,6 +310,9 @@ export async function generateWithGemini(
       );
       if (!response.ok) throw await httpError(response);
       const data: any = await response.json().catch(() => ({}));
+      if (data?.candidates?.[0]?.finishReason === 'MAX_TOKENS') {
+        throw new ProviderHttpError(502, 'The model reached its output limit before completing the response.');
+      }
       const text = data?.candidates?.[0]?.content?.parts
         ?.map((part: any) => part?.text || '')
         .join('')
@@ -413,6 +416,9 @@ async function generateWithOpenAICompatible(
       const res = await postChatCompletion(baseUrl, key, body);
       if (!res.ok) throw await httpError(res);
       const data: any = await res.json();
+      if (data?.choices?.[0]?.finish_reason === 'length') {
+        throw new ProviderHttpError(502, 'The model reached its output limit before completing the response.');
+      }
       return data?.choices?.[0]?.message?.content || '';
     } catch (err: any) {
       lastErr = err;
@@ -581,6 +587,7 @@ async function* streamWithOpenAICompatible(
       let buffer = '';
       let hitOutputCap = false;
       let complete = false;
+      let sawTerminalEvent = false;
       while (!complete) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -592,6 +599,7 @@ async function* streamWithOpenAICompatible(
           if (!trimmed || !trimmed.startsWith('data: ')) continue;
           const data = trimmed.slice(6);
           if (data === '[DONE]') {
+            sawTerminalEvent = true;
             complete = true;
             break;
           }
@@ -606,6 +614,7 @@ async function* streamWithOpenAICompatible(
           const choice = parsed?.choices?.[0];
           // Running out of output budget is reported as a normal finish, so it
           // has to be detected rather than waited on as an error.
+          if (choice?.finish_reason) sawTerminalEvent = true;
           if (choice?.finish_reason === 'length') hitOutputCap = true;
           const token = choice?.delta?.content;
           if (token) {
@@ -622,11 +631,11 @@ async function* streamWithOpenAICompatible(
         emitted += tail;
         yield tail;
       }
+      if (!sawTerminalEvent) {
+        throw new ProviderHttpError(502, 'The provider stream ended before signalling completion.');
+      }
       if (gate.restarted) {
-        // The model retold the answer instead of continuing it. Keep what the
-        // caller already has rather than appending a second copy of it.
-        console.warn(`${model} restarted instead of resuming; keeping the partial answer.`);
-        return;
+        throw new ProviderHttpError(502, `${model} restarted instead of completing its partial response.`);
       }
       if (hitOutputCap && continuations < MAX_OUTPUT_CONTINUATIONS) {
         continuations++;
@@ -634,6 +643,12 @@ async function* streamWithOpenAICompatible(
           `${model} hit its output cap at ${emitted.length} chars; resuming (${continuations}/${MAX_OUTPUT_CONTINUATIONS}).`
         );
         continue;
+      }
+      if (hitOutputCap) {
+        throw new ProviderHttpError(
+          422,
+          `${model} remained incomplete after ${MAX_OUTPUT_CONTINUATIONS} continuation attempts.`
+        );
       }
       return;
     } catch (err: any) {
@@ -687,6 +702,7 @@ async function* streamWithGemini(
       const gate = new ResumeGate(emitted);
       let buffer = '';
       let hitOutputCap = false;
+      let sawTerminalEvent = false;
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -705,6 +721,7 @@ async function* streamWithGemini(
           const payloadError = streamPayloadError(parsed);
           if (payloadError) throw payloadError;
           const candidate = parsed?.candidates?.[0];
+          if (candidate?.finishReason) sawTerminalEvent = true;
           if (candidate?.finishReason === 'MAX_TOKENS') hitOutputCap = true;
           const token = candidate?.content?.parts?.[0]?.text;
           if (token) {
@@ -721,9 +738,11 @@ async function* streamWithGemini(
         emitted += tail;
         yield tail;
       }
+      if (!sawTerminalEvent) {
+        throw new ProviderHttpError(502, 'The Gemini stream ended before signalling completion.');
+      }
       if (gate.restarted) {
-        console.warn(`${model} restarted instead of resuming; keeping the partial answer.`);
-        return;
+        throw new ProviderHttpError(502, `${model} restarted instead of completing its partial response.`);
       }
       if (hitOutputCap && continuations < MAX_OUTPUT_CONTINUATIONS) {
         continuations++;
@@ -731,6 +750,12 @@ async function* streamWithGemini(
           `${model} hit its output cap at ${emitted.length} chars; resuming (${continuations}/${MAX_OUTPUT_CONTINUATIONS}).`
         );
         continue;
+      }
+      if (hitOutputCap) {
+        throw new ProviderHttpError(
+          422,
+          `${model} remained incomplete after ${MAX_OUTPUT_CONTINUATIONS} continuation attempts.`
+        );
       }
       return;
     } catch (err: any) {
@@ -761,24 +786,35 @@ export async function* streamText(opts: {
   const { route, contents, plainMessages, systemInstruction, geminiKeys, groqKeys, cerebrasKeys = [], mistralKeys = [], tuning } = opts;
   const reasoning = route.reasoning ?? null;
   const prefill = route.prefill ?? null;
+  let emittedPrimaryOutput = false;
 
   try {
+    let primary: AsyncGenerator<string>;
     switch (route.provider) {
       case 'groq':
-        yield* streamWithOpenAICompatible('https://api.groq.com', groqKeys, takeGroqKey, plainMessages, systemInstruction, route.model, tuning, reasoning, prefill);
-        return;
+        primary = streamWithOpenAICompatible('https://api.groq.com', groqKeys, takeGroqKey, plainMessages, systemInstruction, route.model, tuning, reasoning, prefill);
+        break;
       case 'cerebras':
-        yield* streamWithOpenAICompatible('https://api.cerebras.ai', cerebrasKeys, takeCerebrasKey, plainMessages, systemInstruction, route.model, tuning, reasoning, prefill);
-        return;
+        primary = streamWithOpenAICompatible('https://api.cerebras.ai', cerebrasKeys, takeCerebrasKey, plainMessages, systemInstruction, route.model, tuning, reasoning, prefill);
+        break;
       case 'mistral':
-        yield* streamWithOpenAICompatible('https://api.mistral.ai', mistralKeys, takeMistralKey, plainMessages, systemInstruction, route.model, tuning, reasoning, prefill);
-        return;
+        primary = streamWithOpenAICompatible('https://api.mistral.ai', mistralKeys, takeMistralKey, plainMessages, systemInstruction, route.model, tuning, reasoning, prefill);
+        break;
       case 'gemini':
       default:
-        yield* streamWithGemini(geminiKeys, contents, systemInstruction, route.model, tuning, reasoning, prefill);
-        return;
+        primary = streamWithGemini(geminiKeys, contents, systemInstruction, route.model, tuning, reasoning, prefill);
+        break;
     }
+    for await (const token of primary) {
+      emittedPrimaryOutput = true;
+      yield token;
+    }
+    return;
   } catch (primaryErr) {
+    // Once bytes have reached the browser, restarting on a different provider
+    // would append a second answer to the first. Surface the interrupted run;
+    // the client will not parse or apply it without the final `done` event.
+    if (emittedPrimaryOutput) throw primaryErr;
     console.warn(`Primary ${route.provider} stream failed, trying Gemini fallback...`, primaryErr);
     try {
       // The fallback's own capabilities, not the original route's: it takes

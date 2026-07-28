@@ -7,6 +7,7 @@ import { AgentFileOp } from '../types';
  */
 
 const FILE_BLOCK_RE = /```[ \t]*([\w+-]*)[ \t]*path=["']([^"'\n]+)["'][^\n]*\n([\s\S]*?)\n?```/g;
+const FILE_BLOCK_OPEN_RE = /```[ \t]*[\w+-]*[ \t]+path=["'][^"'\n]+["'][^\n]*\n/i;
 const DELETE_RE = /^@@delete:\s*(.+?)\s*$/gm;
 const READFILE_RE = /^@@readfile:\s*(.+?)\s*$/gm;
 const FINDALL_RE = /^@@findall:\s*(.+?)\s*$/gm;
@@ -91,6 +92,8 @@ export function extractPathsFromCheckContent(content: string): string[] {
 export interface ParsedAgentResponse {
   displayText: string;
   ops: AgentFileOp[];
+  /** A path-qualified file fence opened but never closed. */
+  incompleteFileBlock: boolean;
   fileRequests: string[];
   findRequests: string[];
   listDirRequests: string[];
@@ -198,6 +201,7 @@ export function parseAgentResponse(raw: string): ParsedAgentResponse {
     }
     return '';
   });
+  const incompleteFileBlock = FILE_BLOCK_OPEN_RE.test(text);
 
   text = text.replace(DELETE_RE, (_match, rawPath: string) => {
     const path = normalizePath(rawPath);
@@ -314,7 +318,27 @@ export function parseAgentResponse(raw: string): ParsedAgentResponse {
 
   text = text.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
 
-  return { displayText: text, ops, fileRequests, findRequests, listDirRequests, globRequests, fileInfoRequests, checkErrorsContent, contextStore, contextGet, contextList, contextClear, replaceRequests, searchImportsRequests, renameRequests, todoItems };
+  return {
+    displayText: incompleteFileBlock
+      ? 'The model response ended before its file block was complete. No changes were applied; please retry.'
+      : text,
+    ops,
+    incompleteFileBlock,
+    fileRequests,
+    findRequests,
+    listDirRequests,
+    globRequests,
+    fileInfoRequests,
+    checkErrorsContent,
+    contextStore,
+    contextGet,
+    contextList,
+    contextClear,
+    replaceRequests,
+    searchImportsRequests,
+    renameRequests,
+    todoItems,
+  };
 }
 
 /** Strips large file blocks from a previously-sent assistant message before resending it as history, to keep payloads small. */

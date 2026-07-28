@@ -763,6 +763,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       let allOps: AgentFileOp[] = [];
       let allToolCalls: AgentToolCall[] = [];
       let finalDisplayText = '';
+      let hadIncompleteFileBlock = false;
       let turnCount = 0;
       let hasMoreTools = true;
       const runController = new ChatRunController();
@@ -853,6 +854,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                       parseAgentResponse(separatedResponse.text)
                     );
                     const finalParsed = filteredRequests.response;
+                    hadIncompleteFileBlock ||= finalParsed.incompleteFileBlock;
                     finalDisplayText = finalParsed.displayText;
                     allOps = [...allOps, ...finalParsed.ops];
 
@@ -991,6 +993,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
             parseAgentResponse(separatedResponse.text)
           );
           const parsed = filteredRequests.response;
+          hadIncompleteFileBlock ||= parsed.incompleteFileBlock;
 
           appendThinking(data.thinking);
           appendThinking(separatedResponse.thinking);
@@ -1116,7 +1119,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       );
 
       // Enrich ops with original content and diff info for highlighting
-      const enrichedOps = collapseAgentFileOps(allOps).map((op) => {
+      const enrichedOps = (hadIncompleteFileBlock ? [] : collapseAgentFileOps(allOps)).map((op) => {
         if (op.type !== 'write' || !op.content) return op;
         const existing = files.find((f) => f.path === op.path);
         const original = existing?.content || '';

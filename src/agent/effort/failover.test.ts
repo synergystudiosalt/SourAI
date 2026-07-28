@@ -294,7 +294,7 @@ describe('mid-stream rate limit', () => {
     });
   });
 
-  it('stops resuming after a bounded number of output-cap continuations', async () => {
+  it('fails closed after a bounded number of output-cap continuations', async () => {
     let calls = 0;
     vi.stubGlobal('fetch', vi.fn(async () => {
       calls++;
@@ -307,7 +307,7 @@ describe('mid-stream rate limit', () => {
       ]);
     }));
 
-    const out = await collect(
+    await expect(collect(
       streamText({
         geminiKeys: [],
         groqKeys: KEYS,
@@ -316,17 +316,16 @@ describe('mid-stream rate limit', () => {
         systemInstruction: 'sys',
         route: { provider: 'groq', model: 'm', prefill: 'openai' },
       })
-    );
+    )).rejects.toThrow(/remained incomplete/i);
 
     // First response plus a capped number of resumes — it terminates.
     expect(calls).toBe(4);
-    expect(out).toBe('part1 part2 part3 part4 ');
   });
 
   // A provider that ignores the prefill replies to it, retelling the whole
   // answer. Splicing is impossible because sampling never reproduces it token
   // for token, so the caller would receive the opening several times over.
-  it('does not append a second copy when the model restarts instead of resuming', async () => {
+  it('fails closed when the model restarts instead of resuming', async () => {
     const opening = 'A'.repeat(150) + ' the quick brown fox jumps over the lazy dog';
     let calls = 0;
     vi.stubGlobal('fetch', vi.fn(async () => {
@@ -342,7 +341,7 @@ describe('mid-stream rate limit', () => {
       return sseStream([token(opening + ' and then some more'), 'data: [DONE]\n\n']);
     }));
 
-    const out = await collect(
+    await expect(collect(
       streamText({
         geminiKeys: [],
         groqKeys: KEYS,
@@ -351,10 +350,24 @@ describe('mid-stream rate limit', () => {
         systemInstruction: 'sys',
         route: { provider: 'groq', model: 'm', prefill: 'openai' },
       })
-    );
+    )).rejects.toThrow(/restarted instead of completing/i);
 
-    expect(out).toBe(opening);
-    expect(out.match(/quick brown fox/g)).toHaveLength(1);
+    expect(calls).toBeGreaterThanOrEqual(2);
+  });
+
+  it('rejects a transport that closes without a terminal SSE event', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => sseStream([token('partial code')])));
+
+    await expect(collect(
+      streamText({
+        geminiKeys: [],
+        groqKeys: KEYS,
+        contents: [],
+        plainMessages: [{ role: 'user', content: 'write code' }],
+        systemInstruction: 'sys',
+        route: { provider: 'groq', model: 'm' },
+      })
+    )).rejects.toThrow(/ended before signalling completion/i);
   });
 
   it('de-duplicates an overlapping seam when the model repeats its last words', async () => {
