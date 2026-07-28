@@ -160,7 +160,9 @@ describe('route prefill capability', () => {
 describe('key failover', () => {
   it('moves to the next key when the first is rate limited', async () => {
     const seen: string[] = [];
-    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: any) => {
+    const urls: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init: any) => {
+      urls.push(url);
       seen.push(init.headers.Authorization);
       if (seen.length === 1) return rateLimited();
       return new Response(JSON.stringify({ choices: [{ message: { content: 'done' } }] }), { status: 200 });
@@ -169,6 +171,10 @@ describe('key failover', () => {
     await expect(generateWithGroq(KEYS, [{ role: 'user', content: 'hi' }], 'sys', 'm')).resolves.toBe('done');
     expect(seen).toHaveLength(2);
     expect(seen[0]).not.toBe(seen[1]);
+    expect(urls).toEqual([
+      'https://api.groq.com/openai/v1/chat/completions',
+      'https://api.groq.com/openai/v1/chat/completions',
+    ]);
   });
 
   it('gives up immediately on a malformed request instead of burning every key', async () => {

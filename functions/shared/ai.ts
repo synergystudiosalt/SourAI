@@ -438,7 +438,7 @@ export async function generateWithGroq(
   tuning?: GenerationTuning,
   reasoning: ReasoningControl = null
 ): Promise<string> {
-  return generateWithOpenAICompatible('https://api.groq.com', keys, takeGroqKey, messages, systemInstruction, model, tuning, reasoning);
+  return generateWithOpenAICompatible('https://api.groq.com/openai', keys, takeGroqKey, messages, systemInstruction, model, tuning, reasoning);
 }
 
 export async function generateWithCerebras(
@@ -792,7 +792,7 @@ export async function* streamText(opts: {
     let primary: AsyncGenerator<string>;
     switch (route.provider) {
       case 'groq':
-        primary = streamWithOpenAICompatible('https://api.groq.com', groqKeys, takeGroqKey, plainMessages, systemInstruction, route.model, tuning, reasoning, prefill);
+        primary = streamWithOpenAICompatible('https://api.groq.com/openai', groqKeys, takeGroqKey, plainMessages, systemInstruction, route.model, tuning, reasoning, prefill);
         break;
       case 'cerebras':
         primary = streamWithOpenAICompatible('https://api.cerebras.ai', cerebrasKeys, takeCerebrasKey, plainMessages, systemInstruction, route.model, tuning, reasoning, prefill);
