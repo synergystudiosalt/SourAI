@@ -202,33 +202,21 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     }
   };
 
-  /** Smart function auto-detection: when user mentions action words,
-   *  automatically inject the corresponding @@ function call. */
-  const autoDetectAndCallFunctions = (userText: string): { promptToSend: string; autoCalledFunctions: string[] } => {
-    const autoCalledFunctions: string[] = [];
-    let modifiedText = userText;
-
-    // Pattern 1: Read/view operations
-    if (/\b(read|view|show|open|check|display|cat|view.*file)\b/i.test(userText) && !/@@readfile/i.test(userText)) {
-      // Check if path-like tokens suggest a file request
-      const pathMatch = userText.match(/['\"]([\w.\/-]+[\.\w]+)['\"]|(?:the\s+)?file\s+([\w.\/-]+)|(src|app|lib|components)\/[\w.\/-]+/i);
-      if (pathMatch) {
-        modifiedText = `${userText}\n\n@@readfile: ${pathMatch[1] || pathMatch[2] || pathMatch[0]}`;
-        autoCalledFunctions.push('@@readfile');
-      }
-    }
-
-    // Pattern 2: Search/find operations
-    if (/\b(search|find|locate|grep|look for|where|detect)\b/i.test(userText) && !/@@findall/i.test(userText)) {
-      const searchTerm = userText.match(/(?:for|"([^"]+)"|\s+([\w\s]+?)(?:\s+in|\?|$))/i);
-      if (searchTerm && searchTerm[1]?.length < 50) {
-        modifiedText = `${userText}\n\n@@findall: ${searchTerm[1] || searchTerm[2]}`;
-        autoCalledFunctions.push('@@findall');
-      }
-    }
-
-    return { promptToSend: modifiedText, autoCalledFunctions };
-  };
+  /*
+   * Removed: auto-detection of @@ tool calls from the prompt wording.
+   *
+   * It matched action words (read/check/show/find/…) and then took a "path"
+   * from prose with /file\s+([\w.\/-]+)/, so ordinary English became tool
+   * calls the user never wrote — "produce runnable file contents" injected
+   * `@@readfile: contents`, "the project file list" injected
+   * `@@readfile: list`. The fabricated read then failed, and the agent
+   * reported it could not find the file instead of doing the task. Asking to
+   * build something new was especially prone to it, because such prompts
+   * describe files rather than name them.
+   *
+   * The model has these tools and decides when to call them; a keyword match
+   * cannot tell "read src/App.tsx" from "produce runnable file contents".
+   */
 
   useEffect(() => {
     let cancelled = false;
@@ -719,16 +707,12 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     setMentionState(null);
     setShowAttachmentPopover(false);
 
-    // Auto-detect functions and check for complex tasks
-    const { promptToSend, autoCalledFunctions } = autoDetectAndCallFunctions(text);
+    // The prompt is sent exactly as written. Tool calls are the model's to
+    // make; guessing them from the wording here injected reads the user never
+    // asked for (see the note on the removed auto-detection helper).
+    const promptToSend = text;
 
-    // Add note about auto-called functions if any
-    let displayContent = text;
-    if (autoCalledFunctions.length > 0) {
-      displayContent = `${text}\n\n_[Auto-called: ${autoCalledFunctions.join(', ')}]_`;
-    }
-
-    const userMsg: AgentChatMessage = { id: genId(), role: 'user', content: displayContent, createdAt: Date.now() };
+    const userMsg: AgentChatMessage = { id: genId(), role: 'user', content: text, createdAt: Date.now() };
     const historyBase = [...messages, userMsg];
     setMessages(historyBase);
     setIsSending(true);
