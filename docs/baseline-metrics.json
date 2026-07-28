@@ -1,15 +1,15 @@
 {
-  "measuredAt": "2026-07-27T17:28:17.684Z",
-  "initialJsGzipBytes": 455923,
-  "initialJsRawBytes": 1478343,
+  "measuredAt": "2026-07-28T09:53:18.699Z",
+  "initialJsGzipBytes": 465753,
+  "initialJsRawBytes": 1511073,
   "initialChunkCount": 1,
-  "lazyJsGzipBytes": 1088714,
-  "lazyChunkCount": 121,
+  "lazyJsGzipBytes": 1089782,
+  "lazyChunkCount": 122,
   "largestInitialChunk": {
-    "file": "assets/index-p1dJi79I.js",
-    "gzipBytes": 455923
+    "file": "assets/index-lf4MHUP2.js",
+    "gzipBytes": 465753
   },
-  "ceilingBytes": 458660,
+  "ceilingBytes": 475069,
   "targetBytes": 512000,
   "interaction": {
     "measuredAt": "2026-07-27T17:28:17.006Z",

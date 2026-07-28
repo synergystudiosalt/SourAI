@@ -26,6 +26,12 @@ import { buildSandboxedPreviewDocument } from '../security/previewIsolation';
 
 export { buildSandboxedPreviewDocument } from '../security/previewIsolation';
 
+const ChangeReviewPanel = React.lazy(() =>
+  import('./workspace/ChangeReviewPanel').then((module) => ({
+    default: module.ChangeReviewPanel,
+  }))
+);
+
 interface CodeWorkspaceProps {
   isDarkMode: boolean;
 }
@@ -172,6 +178,8 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
   const [isAgentCollapsed, setIsAgentCollapsed] = useState(false);
   const [isFileExplorerCollapsed, setIsFileExplorerCollapsed] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
+  const [pendingAgentOps, setPendingAgentOps] = useState<AgentFileOp[] | null>(null);
+  const pendingApprovalRef = useRef<((approved: boolean) => void) | null>(null);
   const [truncatedNotice, setTruncatedNotice] = useState(false);
   // Preview is scoped per open file tab (not a single global toggle) so
   // multiple different files can each have their own preview "stacked"
@@ -564,7 +572,7 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
   // Agent integration
   // ---------------------------------------------------------------------
 
-  const handleApplyAgentOps = async (ops: AgentFileOp[]) => {
+  const commitAgentOps = async (ops: AgentFileOp[]) => {
     const deleteWasFolder = new Map<string, boolean>();
     for (const op of ops) {
       if (op.type === 'delete') {
@@ -611,6 +619,18 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
         }
       }
     }
+  };
+
+  const handleApplyAgentOps = (ops: AgentFileOp[]): Promise<boolean> => {
+    if (activeProject?.isReal) {
+      alert('Agent changes to local folders remain disabled until the revision-safe adapter is connected.');
+      return Promise.resolve(false);
+    }
+    pendingApprovalRef.current?.(false);
+    setPendingAgentOps(ops.map((op) => ({ ...op })));
+    return new Promise((resolve) => {
+      pendingApprovalRef.current = resolve;
+    });
   };
 
   // ---------------------------------------------------------------------
@@ -685,6 +705,53 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
 
   return (
     <div className={`flex-1 h-full flex flex-col overflow-hidden relative ${isDarkMode ? 'bg-[#181817] text-[#f0efe6]' : 'bg-[#faf9f6] text-[#1c1b1a]'}`}>
+      {pendingAgentOps && (
+        <div
+          className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              setPendingAgentOps(null);
+              pendingApprovalRef.current?.(false);
+              pendingApprovalRef.current = null;
+            }
+          }}
+        >
+          <div className="max-h-[85vh] w-full max-w-3xl overflow-auto rounded-xl bg-white p-3 shadow-xl dark:bg-[#1e1e1e]">
+            <React.Suspense fallback={<p className="p-4 text-sm">Preparing change review…</p>}>
+              <ChangeReviewPanel
+                changes={pendingAgentOps.map((op) => {
+                  const existing = findNode(tree, op.path);
+                  const current = existing?.type === 'file' ? existing.content ?? '' : undefined;
+                  const conflict =
+                    op.originalContent !== undefined && current !== op.originalContent
+                      ? 'File changed after this proposal was created.'
+                      : undefined;
+                  return {
+                    path: op.path,
+                    kind: op.type === 'delete' ? 'delete' : existing ? 'modify' : 'create',
+                    before: existing?.type === 'file' ? existing.content : op.originalContent,
+                    after: op.type === 'write' ? op.content : undefined,
+                    conflict,
+                  };
+                })}
+                onReject={() => {
+                  setPendingAgentOps(null);
+                  pendingApprovalRef.current?.(false);
+                  pendingApprovalRef.current = null;
+                }}
+                onApply={() => {
+                  const operations = pendingAgentOps;
+                  setPendingAgentOps(null);
+                  void commitAgentOps(operations).then(() => {
+                    pendingApprovalRef.current?.(true);
+                    pendingApprovalRef.current = null;
+                  });
+                }}
+              />
+            </React.Suspense>
+          </div>
+        </div>
+      )}
       <div className="flex-1 flex flex-col h-full overflow-hidden">
         <div className="h-9 border-b border-[#e5e3db] dark:border-[#2d2d2c] flex items-center justify-between px-3 select-none bg-[#f4f2eb] dark:bg-[#1a1a19] shrink-0">
           <div className="flex items-center gap-3">

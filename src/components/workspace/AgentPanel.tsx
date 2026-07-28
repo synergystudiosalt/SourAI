@@ -58,7 +58,7 @@ interface AgentPanelProps {
   projectName: string;
   files: WorkspaceFileNode[];
   activeFile: { path: string; content: string } | null;
-  onApplyOps: (ops: AgentFileOp[]) => void;
+  onApplyOps: (ops: AgentFileOp[]) => Promise<boolean>;
   onOpenFile: (path: string) => void;
 }
 
@@ -306,14 +306,12 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     );
   };
 
-  const handleApplySingle = (messageId: string, op: AgentFileOp) => {
-    onApplyOps([op]);
-    markApplied(messageId, [op.path]);
+  const handleApplySingle = async (messageId: string, op: AgentFileOp) => {
+    if (await onApplyOps([op])) markApplied(messageId, [op.path]);
   };
 
-  const handleApplyAll = (messageId: string, ops: AgentFileOp[]) => {
-    onApplyOps(ops);
-    markApplied(messageId, ops.map((o) => o.path));
+  const handleApplyAll = async (messageId: string, ops: AgentFileOp[]) => {
+    if (await onApplyOps(ops)) markApplied(messageId, ops.map((o) => o.path));
   };
 
   const toggleXmlTag = (tagId: string) => {
@@ -618,11 +616,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   /** Sequentially "codes" each file with a short delay so the UI can show a
    *  spinner per-file (rather than instantly marking every file as done). */
   const applyOpsStaggered = async (messageId: string, ops: AgentFileOp[]) => {
-    for (const op of ops) {
-      await new Promise((resolve) => setTimeout(resolve, 350 + Math.random() * 400));
-      onApplyOps([op]);
-      markApplied(messageId, [op.path]);
-    }
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    if (await onApplyOps(ops)) markApplied(messageId, ops.map((op) => op.path));
   };
 
   const MAX_AGENT_TURNS = 50;
