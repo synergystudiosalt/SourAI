@@ -1,6 +1,7 @@
 import { WorkspaceFsError } from '../errors';
 import { baseName, parentPath, workspacePath, workspaceRoot } from '../path';
 import type {
+  CreateDirectoryPrecondition,
   DeletePrecondition,
   DirectoryEntry,
   FileChangeOrigin,
@@ -355,10 +356,14 @@ export class LocalFolderFileSystem implements WorkspaceFileSystem {
     }
   }
 
-  async createDirectory(path: WorkspacePath): Promise<void> {
+  async createDirectory(
+    path: WorkspacePath,
+    precondition?: CreateDirectoryPrecondition
+  ): Promise<void> {
     await this.#requirePermission('readwrite');
     const safe = checkedPath(path);
     try {
+      if (precondition) await this.#assertProjectRevision(precondition.projectRevision, safe);
       if (await this.#existingKind(safe)) {
         throw new WorkspaceFsError('already_exists', 'Path already exists.', safe);
       }

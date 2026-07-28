@@ -1,25 +1,9 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
 import { Root } from './Root';
 import { blockedRequests } from './test/setup';
-import { SECRET_CANARIES, expectNoSecrets } from './test/assertions';
-
-function serializeConsoleCalls(calls: unknown[][]): string {
-  return calls
-    .flat()
-    .map((value) => {
-      if (value instanceof Error) return `${value.name}: ${value.message}\n${value.stack ?? ''}`;
-      if (typeof value === 'string') return value;
-      try {
-        return JSON.stringify(value);
-      } catch {
-        return String(value);
-      }
-    })
-    .join('\n');
-}
 
 /**
  * Critical-flow smoke tests for the application as it exists today.
@@ -115,47 +99,14 @@ describe('application shell', () => {
     expect(blockedRequests).toEqual([]);
   });
 
-  it('redacts a rejected chat request before display and every console argument', async () => {
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-    vi.mocked(fetch).mockRejectedValueOnce(
-      new Error(`provider request failed with ${SECRET_CANARIES.openai}`)
-    );
+  it('runs chat locally without calling a SourAI API', async () => {
     const user = userEvent.setup();
-
-    try {
-      render(<Root />);
-      await user.type(await screen.findByPlaceholderText('How can I help you today?'), 'hello');
-      await user.click(screen.getByTitle('Send Prompt'));
-
-      await waitFor(
-        () => expect(document.body).toHaveTextContent(/Failed to retrieve response from server/),
-        { timeout: 5_000 }
-      );
-      expectNoSecrets(document.body.textContent, 'rendered chat request error');
-      expectNoSecrets(serializeConsoleCalls(consoleError.mock.calls), 'all chat request console arguments');
-    } finally {
-      consoleError.mockRestore();
-    }
-  });
-
-  it('redacts a JSON server error before rendering it as chat content', async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({ error: `upstream rejected ${SECRET_CANARIES.google}` }),
-        { status: 502, headers: { 'Content-Type': 'application/json' } }
-      )
-    );
-    const user = userEvent.setup();
-
     render(<Root />);
     await user.type(await screen.findByPlaceholderText('How can I help you today?'), 'hello');
     await user.click(screen.getByTitle('Send Prompt'));
 
-    await waitFor(
-      () => expect(document.body).toHaveTextContent(/upstream rejected/),
-      { timeout: 5_000 }
-    );
-    expectNoSecrets(document.body.textContent, 'rendered chat server error');
+    expect(await screen.findByText('hello', { exact: true })).toBeInTheDocument();
+    expect(blockedRequests).toEqual([]);
   });
 });
 

@@ -55,6 +55,27 @@ export class EventsRepository {
     );
   }
 
+  /**
+   * Allocates the thread sequence and appends in one read/write transaction.
+   * IndexedDB serializes overlapping transactions, including across tabs.
+   */
+  async appendWithNextGlobalSequence(
+    record: Omit<EventRecord, 'globalSequence'>
+  ): Promise<boolean> {
+    return this.database.transaction(['events'], 'readwrite', async (transaction) => {
+      const records = await transaction.getAllFromIndex<EventRecord>(
+        'events',
+        'byThreadGlobalSequence',
+        queryBound([record.threadId, 0], [record.threadId, MAX_SEQUENCE])
+      );
+      const globalSequence =
+        records.reduce((maximum, item) => Math.max(maximum, item.globalSequence), -1) + 1;
+      const accepted: EventRecord = { ...record, globalSequence };
+      validateEvent(accepted);
+      return appendEvent(transaction, accepted);
+    });
+  }
+
   async appendMany(records: readonly EventRecord[]): Promise<void> {
     for (const record of records) validateEvent(record);
     await this.database.transaction(['events'], 'readwrite', async (transaction) => {

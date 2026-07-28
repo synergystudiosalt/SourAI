@@ -6,6 +6,7 @@ import {
 import { WorkspaceFsError } from '../errors';
 import { baseName, parentPath, workspacePath, workspaceRoot } from '../path';
 import type {
+  CreateDirectoryPrecondition,
   DeletePrecondition,
   DirectoryEntry,
   FileChange,
@@ -228,9 +229,13 @@ export class OpfsWorkspaceFileSystem implements WorkspaceFileSystem {
     });
   }
 
-  async createDirectory(path: WorkspacePath): Promise<void> {
+  async createDirectory(
+    path: WorkspacePath,
+    precondition?: CreateDirectoryPrecondition
+  ): Promise<void> {
     const safe = checkedPath(path);
     await this.mutate(async () => {
+      if (precondition) this.assertRevision(precondition.projectRevision);
       if (this.find(safe)) throw fail('already_exists', `Path ${safe} already exists.`, safe);
       this.assertParentDirectory(safe);
       await this.commit(

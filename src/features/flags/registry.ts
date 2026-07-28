@@ -51,8 +51,8 @@ const DEFINITIONS: readonly FlagDefinition[] = [
     key: 'clientAgentRuntime',
     title: 'Client-only agent runtime',
     description:
-      'Runs the agent loop in a browser worker and talks directly to the selected provider. While off, the legacy /api/agent Pages Function is used.',
-    defaultValue: false,
+      'Runs the structured agent loop in a browser worker. Disabling it never enables a server fallback.',
+    defaultValue: true,
     envValue: import.meta.env.VITE_ENABLE_CLIENT_AGENT,
     envVar: 'VITE_ENABLE_CLIENT_AGENT',
     stability: 'experimental',

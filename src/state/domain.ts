@@ -41,15 +41,49 @@ export interface ApprovalStateV1 {
   readonly toolCallId?: string;
   readonly summary: string;
   readonly risk: ApprovalRiskV1;
-  readonly status: 'pending' | ApprovalDecision;
+  readonly status: 'pending' | ApprovalDecision | 'expired' | 'consumed';
+  readonly proposalId?: string;
+  readonly digest?: string;
+  readonly paths?: readonly string[];
+  readonly expiresAt?: number;
+  readonly transactionId?: string;
+}
+
+/**
+ * A proposed change awaiting, or past, review.
+ *
+ * Replaying these is what lets a reload show the same pending approval the
+ * user was looking at before the page went away.
+ */
+export interface ProposalStateV1 {
+  readonly id: string;
+  readonly toolCallId: string;
+  readonly summary: string;
+  readonly digest: string;
+  readonly paths: readonly string[];
+  readonly changeCount: number;
+  readonly projectRevision: number;
+  readonly status: 'created' | 'superseded';
+  readonly supersededBy?: string;
+}
+
+export interface VerificationResultStateV1 {
+  readonly id: string;
+  readonly label: string;
+  readonly status: 'passed' | 'failed' | 'skipped' | 'unavailable';
+  readonly detail: string;
 }
 
 export interface FileTransactionStateV1 {
   readonly id: string;
-  readonly status: 'started' | 'completed';
+  readonly status: 'started' | 'completed' | 'rolled_back';
   readonly paths: readonly string[];
   readonly revision?: number;
+  readonly previousRevision?: number;
+  readonly checkpointId?: string;
   readonly changedPaths: readonly string[];
+  readonly verification: readonly VerificationResultStateV1[];
+  readonly error?: SourErrorData;
 }
 
 export interface CheckpointStateV1 {
@@ -100,6 +134,7 @@ export interface RunStateV1 {
   readonly providerRequest?: ProviderRequestStateV1;
   readonly tools: Readonly<Record<string, ToolCallStateV1>>;
   readonly approvals: Readonly<Record<string, ApprovalStateV1>>;
+  readonly proposals: Readonly<Record<string, ProposalStateV1>>;
   readonly fileTransactions: Readonly<Record<string, FileTransactionStateV1>>;
   readonly fileConflicts: readonly FileConflictStateV1[];
   readonly checkpoints: Readonly<Record<string, CheckpointStateV1>>;
@@ -139,6 +174,7 @@ type EntityKind =
   | 'assistant_message'
   | 'tool_call'
   | 'approval'
+  | 'proposal'
   | 'file_transaction'
   | 'checkpoint';
 
@@ -327,6 +363,7 @@ function createRun(event: AgentEventV1<'run.created'>): RunStateV1 {
     context: {},
     tools: emptyRecord<ToolCallStateV1>(),
     approvals: emptyRecord<ApprovalStateV1>(),
+    proposals: emptyRecord<ProposalStateV1>(),
     fileTransactions: emptyRecord<FileTransactionStateV1>(),
     fileConflicts: [],
     checkpoints: emptyRecord<CheckpointStateV1>(),
@@ -441,10 +478,53 @@ function applyRunEvent(run: RunStateV1, event: AgentEventV1): RunStateV1 {
       };
     }
 
+    case 'proposal.created': {
+      const proposal: ProposalStateV1 = {
+        id: event.payload.proposalId,
+        toolCallId: event.payload.toolCallId,
+        summary: event.payload.summary,
+        digest: event.payload.digest,
+        paths: [...event.payload.paths],
+        changeCount: event.payload.changeCount,
+        projectRevision: event.payload.projectRevision,
+        status: 'created',
+      };
+      return {
+        ...base,
+        proposals: withRecord(run.proposals, proposal.id, proposal),
+      };
+    }
+
+    case 'proposal.superseded': {
+      const proposal = run.proposals[event.payload.proposalId];
+      if (proposal === undefined) {
+        throw contractError(
+          'event_proposal_not_created',
+          'A proposal must be created before it can be superseded.',
+          {
+            eventId: event.id,
+            runId: event.runId,
+            proposalId: event.payload.proposalId,
+          },
+        );
+      }
+      return {
+        ...base,
+        proposals: withRecord(run.proposals, proposal.id, {
+          ...proposal,
+          status: 'superseded',
+          supersededBy: event.payload.replacedByProposalId,
+        }),
+      };
+    }
+
     case 'approval.requested': {
       if (event.payload.toolCallId !== undefined) {
         const tool = requireTool(run, event.payload.toolCallId, event);
-        assertToolStatus(tool, ['proposed'], event);
+        // A mutation tool runs first and produces a proposal; approval is then
+        // requested for applying it. Both orders are legal, but a tool that has
+        // already completed or failed can no longer ask for one.
+        assertToolStatus(tool, ['proposed', 'running'], event);
       }
       const approval: ApprovalStateV1 = {
         id: event.payload.approvalId,
@@ -452,10 +532,52 @@ function applyRunEvent(run: RunStateV1, event: AgentEventV1): RunStateV1 {
         summary: event.payload.summary,
         risk: event.payload.risk,
         status: 'pending',
+        proposalId: event.payload.proposalId,
+        digest: event.payload.digest,
+        paths: event.payload.paths ? [...event.payload.paths] : undefined,
+        expiresAt: event.payload.expiresAt,
       };
       return {
         ...base,
         approvals: withRecord(run.approvals, approval.id, approval),
+      };
+    }
+
+    case 'approval.expired': {
+      const approval = requireApproval(run, event.payload.approvalId, event);
+      // Expiry after a decision is not a state change: a consumed approval
+      // stays consumed, and a denial stays denied through replay.
+      if (approval.status !== 'pending') return base;
+      return {
+        ...base,
+        approvals: withRecord(run.approvals, approval.id, {
+          ...approval,
+          status: 'expired',
+        }),
+      };
+    }
+
+    case 'approval.consumed': {
+      const approval = requireApproval(run, event.payload.approvalId, event);
+      if (approval.status !== 'approved') {
+        throw contractError(
+          'event_approval_not_approved',
+          'Only an approved approval can be consumed.',
+          {
+            eventId: event.id,
+            runId: event.runId,
+            approvalId: approval.id,
+            approvalStatus: approval.status,
+          },
+        );
+      }
+      return {
+        ...base,
+        approvals: withRecord(run.approvals, approval.id, {
+          ...approval,
+          status: 'consumed',
+          transactionId: event.payload.transactionId,
+        }),
       };
     }
 
@@ -554,6 +676,8 @@ function applyRunEvent(run: RunStateV1, event: AgentEventV1): RunStateV1 {
         status: 'started',
         paths: [...event.payload.paths],
         changedPaths: [],
+        verification: [],
+        checkpointId: event.payload.checkpointId,
       };
       return {
         ...base,
@@ -588,7 +712,74 @@ function applyRunEvent(run: RunStateV1, event: AgentEventV1): RunStateV1 {
           ...transaction,
           status: 'completed',
           revision: event.payload.revision,
+          previousRevision: event.payload.previousRevision,
+          checkpointId: event.payload.checkpointId ?? transaction.checkpointId,
           changedPaths: [...event.payload.changedPaths],
+        }),
+      };
+    }
+
+    case 'file.transaction_rolled_back': {
+      const transaction = requireFileTransaction(
+        run,
+        event.payload.transactionId,
+        event,
+      );
+      if (transaction.status !== 'started') {
+        throw contractError(
+          'event_file_transaction_already_settled',
+          'A file transaction can only settle once.',
+          {
+            eventId: event.id,
+            runId: event.runId,
+            transactionId: transaction.id,
+          },
+        );
+      }
+      return {
+        ...base,
+        fileTransactions: withRecord(run.fileTransactions, transaction.id, {
+          ...transaction,
+          status: 'rolled_back',
+          checkpointId: event.payload.checkpointId ?? transaction.checkpointId,
+          error: cloneContractValue(event.payload.error, 'transaction error'),
+        }),
+      };
+    }
+
+    case 'verification.started':
+      requireFileTransaction(run, event.payload.transactionId, event);
+      return base;
+
+    case 'verification.completed': {
+      const transaction = requireFileTransaction(
+        run,
+        event.payload.transactionId,
+        event,
+      );
+      return {
+        ...base,
+        fileTransactions: withRecord(run.fileTransactions, transaction.id, {
+          ...transaction,
+          verification: event.payload.results.map((result) => ({ ...result })),
+        }),
+      };
+    }
+
+    case 'restore.started':
+      return base;
+
+    case 'restore.completed': {
+      // An undo often targets a checkpoint made by an earlier run, so the
+      // checkpoint need not have been created in this one.
+      const previous = run.checkpoints[event.payload.checkpointId];
+      return {
+        ...base,
+        checkpoints: withRecord(run.checkpoints, event.payload.checkpointId, {
+          id: event.payload.checkpointId,
+          revision: event.payload.revision,
+          createdAt: previous?.createdAt,
+          restoredAt: event.createdAt,
         }),
       };
     }
@@ -639,18 +830,9 @@ function applyRunEvent(run: RunStateV1, event: AgentEventV1): RunStateV1 {
     }
 
     case 'checkpoint.restored': {
+      // A checkpoint can legitimately be restored by a later run than the one
+      // that made it, which is exactly what an undo does.
       const previous = run.checkpoints[event.payload.checkpointId];
-      if (previous === undefined) {
-        throw contractError(
-          'event_checkpoint_not_created',
-          'A checkpoint must be created before it can be restored.',
-          {
-            eventId: event.id,
-            runId: event.runId,
-            checkpointId: event.payload.checkpointId,
-          },
-        );
-      }
       const checkpoint: CheckpointStateV1 = {
         id: event.payload.checkpointId,
         revision: event.payload.revision,
@@ -863,6 +1045,8 @@ function createdEntity(
       return { kind: 'tool_call', id: event.payload.toolCallId };
     case 'approval.requested':
       return { kind: 'approval', id: event.payload.approvalId };
+    case 'proposal.created':
+      return { kind: 'proposal', id: event.payload.proposalId };
     case 'file.transaction_started':
       return { kind: 'file_transaction', id: event.payload.transactionId };
     case 'checkpoint.created':

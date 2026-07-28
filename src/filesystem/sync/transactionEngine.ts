@@ -34,6 +34,10 @@ function mutationPaths(mutation: WorkspaceMutation): readonly WorkspacePath[] {
     : [validatePath(mutation.path)];
 }
 
+function mutationSubject(mutation: WorkspaceMutation): WorkspacePath {
+  return mutation.type === 'move' ? mutation.from : mutation.path;
+}
+
 function overlaps(left: WorkspacePath, right: WorkspacePath): boolean {
   return isWithinRoot(left, right) || isWithinRoot(right, left);
 }
@@ -220,7 +224,7 @@ export class WorkspaceTransactionEngine {
           mutation,
           expectedRevision,
           transaction.origin,
-          initialStats.get(mutation.type === 'move' ? mutation.from : mutation.path)
+          initialStats.get(mutationSubject(mutation))
         );
         appliedMutations += 1;
         changedPaths.push(...mutationPaths(mutation));
@@ -272,6 +276,16 @@ export class WorkspaceTransactionEngine {
         if (mutation.createOnly && existing) throw conflict(`"${path}" already exists.`, path);
         if (existing?.kind === 'directory') throw conflict(`"${path}" is a directory.`, path);
         assertHash(path, existing, mutation.expectedHash);
+      } else if (mutation.type === 'create-directory') {
+        const path = validatePath(mutation.path);
+        const existing = await optionalStat(this.fs, path);
+        initialStats.set(path, existing);
+        if (existing?.kind === 'file') throw conflict(`"${path}" is a file.`, path);
+        // An already-present directory would make this mutation a no-op, and a
+        // mutation that does not advance the revision breaks the per-step
+        // accounting that rollback safety depends on: a concurrent write
+        // elsewhere could then be mistaken for this step's own advance.
+        if (existing) throw conflict(`"${path}" already exists.`, path);
       } else if (mutation.type === 'delete') {
         const path = validatePath(mutation.path);
         const existing = await optionalStat(this.fs, path);
@@ -313,6 +327,13 @@ export class WorkspaceTransactionEngine {
             : { type: 'create-only', projectRevision: revision },
         origin
       );
+      return;
+    }
+    if (mutation.type === 'create-directory') {
+      await this.fs.createDirectory(validatePath(mutation.path), {
+        projectRevision: revision,
+        destinationMustNotExist: true,
+      });
       return;
     }
     if (mutation.type === 'delete') {

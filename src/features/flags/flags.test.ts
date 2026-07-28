@@ -59,7 +59,7 @@ describe('registry', () => {
     // A default-on flag for an unimplemented phase would ship a half-migrated
     // code path. Only `localFolderProjects` is on, and it already exists today.
     const defaultOn = listFlagDefinitions().filter((d) => d.defaultValue).map((d) => d.key);
-    expect(defaultOn).toEqual(['localFolderProjects']);
+    expect(defaultOn).toEqual(['clientAgentRuntime', 'localFolderProjects']);
   });
 
   it('rejects an unknown key', () => {

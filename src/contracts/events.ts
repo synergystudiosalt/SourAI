@@ -82,15 +82,43 @@ export interface AgentEventPayloadsV1 {
     readonly toolCallId: string;
     readonly error: SourErrorData;
   };
+  readonly 'proposal.created': {
+    readonly proposalId: string;
+    readonly toolCallId: string;
+    readonly summary: string;
+    readonly digest: string;
+    readonly paths: readonly string[];
+    readonly changeCount: number;
+    readonly projectRevision: number;
+  };
+  readonly 'proposal.superseded': {
+    readonly proposalId: string;
+    readonly replacedByProposalId?: string;
+    readonly reason: string;
+  };
   readonly 'approval.requested': {
     readonly approvalId: string;
     readonly toolCallId?: string;
     readonly summary: string;
     readonly risk: ApprovalRiskV1;
+    readonly proposalId?: string;
+    readonly digest?: string;
+    readonly paths?: readonly string[];
+    readonly expiresAt?: number;
   };
   readonly 'approval.resolved': {
     readonly approvalId: string;
     readonly decision: ApprovalDecision;
+    /** Digest actually approved, which differs when the user edited it. */
+    readonly digest?: string;
+    readonly reason?: string;
+  };
+  readonly 'approval.expired': {
+    readonly approvalId: string;
+  };
+  readonly 'approval.consumed': {
+    readonly approvalId: string;
+    readonly transactionId: string;
   };
   readonly 'tool.started': {
     readonly toolCallId: string;
@@ -112,11 +140,42 @@ export interface AgentEventPayloadsV1 {
   readonly 'file.transaction_started': {
     readonly transactionId: string;
     readonly paths: readonly string[];
+    readonly checkpointId?: string;
+    readonly projectRevision?: number;
   };
   readonly 'file.transaction_completed': {
     readonly transactionId: string;
     readonly revision: number;
     readonly changedPaths: readonly string[];
+    readonly checkpointId?: string;
+    readonly previousRevision?: number;
+  };
+  readonly 'file.transaction_rolled_back': {
+    readonly transactionId: string;
+    readonly error: SourErrorData;
+    readonly checkpointId?: string;
+    readonly restored: boolean;
+  };
+  readonly 'verification.started': {
+    readonly transactionId: string;
+    readonly checks: readonly string[];
+  };
+  readonly 'verification.completed': {
+    readonly transactionId: string;
+    readonly results: readonly {
+      readonly id: string;
+      readonly label: string;
+      readonly status: 'passed' | 'failed' | 'skipped' | 'unavailable';
+      readonly detail: string;
+    }[];
+  };
+  readonly 'restore.started': {
+    readonly checkpointId: string;
+  };
+  readonly 'restore.completed': {
+    readonly checkpointId: string;
+    readonly revision: number;
+    readonly restoredPaths: readonly string[];
   };
   readonly 'file.conflict': {
     readonly transactionId?: string;
@@ -247,17 +306,26 @@ function parseEventType(value: unknown): AgentEventTypeV1 {
     case 'assistant.message_completed':
     case 'tool.proposed':
     case 'tool.validation_failed':
+    case 'proposal.created':
+    case 'proposal.superseded':
     case 'approval.requested':
     case 'approval.resolved':
+    case 'approval.expired':
+    case 'approval.consumed':
     case 'tool.started':
     case 'tool.progress':
     case 'tool.completed':
     case 'tool.failed':
     case 'file.transaction_started':
     case 'file.transaction_completed':
+    case 'file.transaction_rolled_back':
     case 'file.conflict':
     case 'checkpoint.created':
     case 'checkpoint.restored':
+    case 'verification.started':
+    case 'verification.completed':
+    case 'restore.started':
+    case 'restore.completed':
     case 'todo.changed':
     case 'usage.changed':
     case 'run.waiting_for_user':
@@ -278,7 +346,10 @@ function parseEventPayload(
 
   switch (type) {
     case 'run.created':
-      return { input: parseRunInputV1(payload.input) };
+      {
+        const input = parseRunInputV1(payload.input);
+        return { input: { ...input, message: redactString(input.message) } };
+      }
 
     case 'run.status_changed':
       return { status: parseRunStatus(payload.status, 'payload.status') };
@@ -352,6 +423,34 @@ function parseEventPayload(
         error: parseSourErrorData(payload.error, 'payload.error'),
       };
 
+    case 'proposal.created':
+      return {
+        proposalId: eventString(payload.proposalId, 'payload.proposalId'),
+        toolCallId: eventString(payload.toolCallId, 'payload.toolCallId'),
+        summary: eventString(payload.summary, 'payload.summary', true),
+        digest: eventString(payload.digest, 'payload.digest'),
+        paths: eventStringArray(payload.paths, 'payload.paths'),
+        changeCount: eventInteger(payload.changeCount, 'payload.changeCount'),
+        projectRevision: eventInteger(
+          payload.projectRevision,
+          'payload.projectRevision',
+        ),
+      };
+
+    case 'proposal.superseded':
+      return {
+        proposalId: eventString(payload.proposalId, 'payload.proposalId'),
+        reason: eventString(payload.reason, 'payload.reason'),
+        ...(payload.replacedByProposalId === undefined
+          ? {}
+          : {
+              replacedByProposalId: eventString(
+                payload.replacedByProposalId,
+                'payload.replacedByProposalId',
+              ),
+            }),
+      };
+
     case 'approval.requested':
       return {
         approvalId: eventString(payload.approvalId, 'payload.approvalId'),
@@ -365,12 +464,44 @@ function parseEventPayload(
             }),
         summary: eventString(payload.summary, 'payload.summary'),
         risk: parseApprovalRisk(payload.risk, 'payload.risk'),
+        ...(payload.proposalId === undefined
+          ? {}
+          : { proposalId: eventString(payload.proposalId, 'payload.proposalId') }),
+        ...(payload.digest === undefined
+          ? {}
+          : { digest: eventString(payload.digest, 'payload.digest') }),
+        ...(payload.paths === undefined
+          ? {}
+          : { paths: eventStringArray(payload.paths, 'payload.paths') }),
+        ...(payload.expiresAt === undefined
+          ? {}
+          : { expiresAt: eventNumber(payload.expiresAt, 'payload.expiresAt', 0) }),
       };
 
     case 'approval.resolved':
       return {
         approvalId: eventString(payload.approvalId, 'payload.approvalId'),
         decision: parseApprovalDecision(payload.decision, 'payload.decision'),
+        ...(payload.digest === undefined
+          ? {}
+          : { digest: eventString(payload.digest, 'payload.digest') }),
+        ...(payload.reason === undefined
+          ? {}
+          : { reason: eventString(payload.reason, 'payload.reason') }),
+      };
+
+    case 'approval.expired':
+      return {
+        approvalId: eventString(payload.approvalId, 'payload.approvalId'),
+      };
+
+    case 'approval.consumed':
+      return {
+        approvalId: eventString(payload.approvalId, 'payload.approvalId'),
+        transactionId: eventString(
+          payload.transactionId,
+          'payload.transactionId',
+        ),
       };
 
     case 'tool.started':
@@ -425,6 +556,17 @@ function parseEventPayload(
           'payload.transactionId',
         ),
         paths: eventStringArray(payload.paths, 'payload.paths'),
+        ...(payload.checkpointId === undefined
+          ? {}
+          : { checkpointId: eventString(payload.checkpointId, 'payload.checkpointId') }),
+        ...(payload.projectRevision === undefined
+          ? {}
+          : {
+              projectRevision: eventInteger(
+                payload.projectRevision,
+                'payload.projectRevision',
+              ),
+            }),
       };
 
     case 'file.transaction_completed':
@@ -437,6 +579,65 @@ function parseEventPayload(
         changedPaths: eventStringArray(
           payload.changedPaths,
           'payload.changedPaths',
+        ),
+        ...(payload.checkpointId === undefined
+          ? {}
+          : { checkpointId: eventString(payload.checkpointId, 'payload.checkpointId') }),
+        ...(payload.previousRevision === undefined
+          ? {}
+          : {
+              previousRevision: eventInteger(
+                payload.previousRevision,
+                'payload.previousRevision',
+              ),
+            }),
+      };
+
+    case 'file.transaction_rolled_back':
+      return {
+        transactionId: eventString(
+          payload.transactionId,
+          'payload.transactionId',
+        ),
+        error: parseSourErrorData(payload.error, 'payload.error'),
+        restored: payload.restored === true,
+        ...(payload.checkpointId === undefined
+          ? {}
+          : { checkpointId: eventString(payload.checkpointId, 'payload.checkpointId') }),
+      };
+
+    case 'verification.started':
+      return {
+        transactionId: eventString(
+          payload.transactionId,
+          'payload.transactionId',
+        ),
+        checks: eventStringArray(payload.checks, 'payload.checks'),
+      };
+
+    case 'verification.completed':
+      return {
+        transactionId: eventString(
+          payload.transactionId,
+          'payload.transactionId',
+        ),
+        results: eventArray(payload.results, 'payload.results').map(
+          (item, index) => parseVerificationResult(item, `payload.results[${index}]`),
+        ),
+      };
+
+    case 'restore.started':
+      return {
+        checkpointId: eventString(payload.checkpointId, 'payload.checkpointId'),
+      };
+
+    case 'restore.completed':
+      return {
+        checkpointId: eventString(payload.checkpointId, 'payload.checkpointId'),
+        revision: eventInteger(payload.revision, 'payload.revision'),
+        restoredPaths: eventStringArray(
+          payload.restoredPaths,
+          'payload.restoredPaths',
         ),
       };
 
@@ -570,6 +771,28 @@ function parseTodoItem(value: unknown, field: string): TodoItemV1 {
     id: eventString(item.id, `${field}.id`),
     title: eventString(item.title, `${field}.title`),
     status,
+  };
+}
+
+function parseVerificationResult(
+  value: unknown,
+  field: string,
+): AgentEventPayloadsV1['verification.completed']['results'][number] {
+  const item = eventRecord(value, field);
+  const status = item.status;
+  if (
+    status !== 'passed' &&
+    status !== 'failed' &&
+    status !== 'skipped' &&
+    status !== 'unavailable'
+  ) {
+    throw invalidEvent(`${field}.status`, 'Invalid verification status.');
+  }
+  return {
+    id: eventString(item.id, `${field}.id`),
+    label: eventString(item.label, `${field}.label`),
+    status,
+    detail: eventString(item.detail, `${field}.detail`, true),
   };
 }
 
@@ -717,7 +940,7 @@ function eventString(
   ) {
     throw invalidEvent(field, 'Expected a string.');
   }
-  return value;
+  return redactString(value);
 }
 
 function eventStringArray(

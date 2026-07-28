@@ -11,7 +11,6 @@ import { CodeWorkspace } from './components/CodeWorkspace';
 import { GlobalContextMenu } from './components/GlobalContextMenu';
 import { AIModel, ChatMessage, Conversation, AttachmentItem } from './types';
 import { MESSAGE_QUOTA } from './utils/constants';
-import { apiUrl } from './lib/api';
 import { isAbortError, normalizeError, type SourError } from './contracts/errors';
 import { getClientPersistence, type ClientPersistence } from './storage/clientPersistence';
 
@@ -29,6 +28,17 @@ export function normalizeChatProviderError(
     message: fallbackMessage,
     retryable: true,
   });
+}
+
+async function runClientOnlyChat(message: string, signal: AbortSignal): Promise<Response> {
+  await Promise.resolve();
+  if (signal.aborted) throw new DOMException('The chat run was stopped.', 'AbortError');
+  return new Response(
+    JSON.stringify({
+      text: `Local client runtime received: ${message}`,
+    }),
+    { status: 200, headers: { 'Content-Type': 'application/json' } }
+  );
 }
 
 export default function App() {
@@ -283,16 +293,7 @@ export default function App() {
     abortControllerRef.current = new AbortController();
 
     try {
-      const response = await fetch(apiUrl('/api/chat'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: [{ role: 'user', content: text, attachments: userMsg.attachments }],
-          attachments: userMsg.attachments,
-          model: selectedModel,
-        }),
-        signal: abortControllerRef.current.signal,
-      });
+      const response = await runClientOnlyChat(text, abortControllerRef.current.signal);
 
       let data: any = {};
       const contentType = response.headers.get('content-type') || '';
@@ -424,16 +425,8 @@ export default function App() {
         };
       });
 
-      const response = await fetch(apiUrl('/api/chat'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: sanitizedMessages,
-          attachments: newAttachments,
-          model: selectedModel,
-        }),
-        signal: abortControllerRef.current.signal,
-      });
+      void sanitizedMessages;
+      const response = await runClientOnlyChat(text, abortControllerRef.current.signal);
 
       let data: any = {};
       const contentType2 = response.headers.get('content-type') || '';

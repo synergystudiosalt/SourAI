@@ -33,6 +33,17 @@ function rawEvent(type: string, payload: unknown, sequence = 0): unknown {
 }
 
 describe('versioned agent contracts', () => {
+  it('redacts secrets at the durable event boundary', () => {
+    const event = parseAgentEventV1(
+      rawEvent('run.created', {
+        input: { message: 'Use API_KEY=super-private-value', mode: 'ask' },
+      })
+    );
+
+    expect(JSON.stringify(event)).not.toContain('super-private-value');
+    expect(JSON.stringify(event)).toContain('[redacted]');
+  });
+
   it('keeps commands explicit and structured-cloneable', () => {
     const command: AgentCommandV1 = {
       version: AGENT_COMMAND_VERSION,
@@ -115,6 +126,50 @@ describe('versioned agent contracts', () => {
       'approval.resolved': {
         approvalId: 'approval-1',
         decision: 'approved',
+      },
+      'proposal.created': {
+        proposalId: 'proposal-1',
+        toolCallId: 'tool-1',
+        summary: 'Change one file',
+        digest: 'a'.repeat(64),
+        paths: ['src/file.ts'],
+        changeCount: 1,
+        projectRevision: 3,
+      },
+      'proposal.superseded': {
+        proposalId: 'proposal-1',
+        reason: 'The user edited the change.',
+      },
+      'approval.expired': { approvalId: 'approval-1' },
+      'approval.consumed': {
+        approvalId: 'approval-1',
+        transactionId: 'transaction-1',
+      },
+      'file.transaction_rolled_back': {
+        transactionId: 'transaction-1',
+        error: normalizedError,
+        restored: true,
+      },
+      'verification.started': {
+        transactionId: 'transaction-1',
+        checks: ['applied-content'],
+      },
+      'verification.completed': {
+        transactionId: 'transaction-1',
+        results: [
+          {
+            id: 'applied-content',
+            label: 'Applied content matches',
+            status: 'passed',
+            detail: '1 file verified.',
+          },
+        ],
+      },
+      'restore.started': { checkpointId: 'checkpoint-1' },
+      'restore.completed': {
+        checkpointId: 'checkpoint-1',
+        revision: 4,
+        restoredPaths: ['src/file.ts'],
       },
       'tool.started': { toolCallId: 'tool-1' },
       'tool.progress': { toolCallId: 'tool-1', message: '', percent: 0 },

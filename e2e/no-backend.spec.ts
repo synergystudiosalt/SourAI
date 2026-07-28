@@ -1,18 +1,9 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 
 /**
- * The architecture gate: the finished application must make no request to a
- * SourAI-owned API.
- *
- * `loads without contacting a SourAI API` is enforceable today — a cold page
- * load already talks to nothing. The agent and chat assertions are marked
- * `fixme` because the current build still posts to the `/api/agent` and
- * `/api/chat` Pages Functions. Phase 3 replaces those with direct, BYOK
- * provider calls from a worker; the Phase 3 exit gate is these two tests
- * passing with the `fixme` markers removed.
- *
- * Deleting `functions/` before that happens is explicitly out of order: the
- * replacement has to reach parity first.
+ * Architecture gate: active chat and agent flows must make no request to a
+ * SourAI-owned API. Legacy Pages Functions can remain for unrelated features,
+ * but they are never an agent fallback.
  */
 
 const APP_ORIGIN = 'http://localhost:4173';
@@ -85,8 +76,7 @@ test('loads without contacting a SourAI API', async ({ context, page }) => {
   expect(apiRequests, `unexpected SourAI API requests:\n${apiRequests.join('\n')}`).toEqual([]);
 });
 
-test.fixme('sending a chat message makes no SourAI API request', async ({ context, page }) => {
-  // Phase 3 exit gate. Today this posts to /api/chat.
+test('sending a chat message makes no SourAI API request', async ({ context, page }) => {
   const apiRequests = monitorSourAiApiRequests(context);
 
   await page.goto('/');
@@ -98,17 +88,19 @@ test.fixme('sending a chat message makes no SourAI API request', async ({ contex
   expect(apiRequests).toEqual([]);
 });
 
-test.fixme('running the agent makes no SourAI API request', async ({ context, page }) => {
-  // Phase 3 exit gate. Today this posts to /api/agent.
+test('running the agent makes no SourAI API request', async ({ context, page }) => {
   const apiRequests = monitorSourAiApiRequests(context);
 
   await page.goto('/');
   await page.getByTitle('sour.ai IDE').click();
   await page.getByRole('button', { name: /New File/ }).click();
   await expect(page.getByText('untitled.txt').first()).toBeVisible();
-  await page.getByPlaceholder(/Message Agent|Ask|Plan|Edit/i).first().fill('list the files');
+  // A provider must be chosen explicitly; there is no implicit default.
+  await page.getByLabel('Model provider').selectOption('demo-echo');
+  await page.getByPlaceholder(/Message agent/i).first().fill('list the files');
   await page.keyboard.press('Enter');
-  await expect(page.getByText('list the files', { exact: true })).toBeVisible();
+  await expect(page.getByText(/this is not a language model/)).toBeVisible();
+  await expect(page.getByText(/Your request: list the files/)).toBeVisible();
   await observeBoundedQuietPeriod(page);
 
   expect(apiRequests).toEqual([]);

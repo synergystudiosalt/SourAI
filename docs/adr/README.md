@@ -15,6 +15,8 @@ supersedes the old one; the old one stays, marked superseded.
 | [0004](0004-structured-tool-protocol.md) | Structured tool calls replace the prose protocol | Accepted |
 | [0005](0005-credential-handling.md) | BYOK, session-scoped by default | Accepted |
 | [0006](0006-bundle-strategy.md) | Lazy runtimes and an enforced bundle ratchet | Accepted |
+| [0007](0007-agent-composition-root.md) | The agent composition root and its context boundary | Accepted |
+| [0008](0008-approved-mutations.md) | Approved, transaction-backed workspace mutation | Accepted |
 
 ## Template
 

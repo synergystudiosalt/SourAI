@@ -44,6 +44,11 @@ export interface MovePrecondition extends DeletePrecondition {
   readonly destinationMustNotExist: true;
 }
 
+export interface CreateDirectoryPrecondition {
+  readonly projectRevision: number;
+  readonly destinationMustNotExist: true;
+}
+
 export interface SnapshotEntry {
   readonly path: WorkspacePath;
   readonly kind: 'file' | 'directory';
@@ -81,7 +86,7 @@ export interface WorkspaceFileSystem {
     precondition: WritePrecondition,
     origin?: FileChangeOrigin
   ): Promise<FileVersion>;
-  createDirectory(path: WorkspacePath): Promise<void>;
+  createDirectory(path: WorkspacePath, precondition?: CreateDirectoryPrecondition): Promise<void>;
   deletePath(
     path: WorkspacePath,
     precondition: DeletePrecondition,
@@ -112,7 +117,8 @@ export type WorkspaceMutation =
       readonly from: WorkspacePath;
       readonly to: WorkspacePath;
       readonly expectedHash?: string;
-    };
+    }
+  | { readonly type: 'create-directory'; readonly path: WorkspacePath };
 
 export interface WorkspaceTransaction {
   readonly id: string;
