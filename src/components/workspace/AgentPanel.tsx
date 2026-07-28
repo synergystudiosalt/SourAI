@@ -7,6 +7,7 @@ import { AttachmentPopover } from '../AttachmentPopover';
 import { AttachmentItem } from '../../types';
 import { parseUploadedFile } from '../../utils/fileParser';
 import { AgentChatMessage, AgentFileOp, AgentMode, AgentReasoningEffort, AgentToolCall, AIModel, WorkspaceFileNode } from '../../types';
+import { EFFORT_ORDER, EFFORT_PROFILES, resolveEffortProfile } from '@/functions/shared/effortProfile';
 import {
   collapseAgentFileOps,
   extractMentionedPaths,
@@ -97,17 +98,11 @@ const MODEL_LABELS: Record<AIModel, string> = {
 
 const MODEL_OPTIONS: AIModel[] = ['sour-omni-flash', 'sour-intelligence', 'sour-ultra', 'sour-overclock', 'sour-overcode'];
 
-const REASONING_OPTIONS: {
-  id: AgentReasoningEffort;
-  label: string;
-  description: string;
-  maxTurns: number;
-}[] = [
-  { id: 'light', label: 'Light', description: 'Fast answers and small edits', maxTurns: 3 },
-  { id: 'standard', label: 'Standard', description: 'Balanced coding workflow', maxTurns: 6 },
-  { id: 'deep', label: 'Deep', description: 'More analysis and verification', maxTurns: 8 },
-  { id: 'ultracode', label: 'UltraCODE', description: 'Maximum coding rigor', maxTurns: 12 },
-];
+/**
+ * Derived from the shared profiles rather than re-declared, so the slider can
+ * never advertise an effort level the request layer doesn't actually apply.
+ */
+const REASONING_OPTIONS = EFFORT_ORDER.map((id) => EFFORT_PROFILES[id]);
 
 export const AgentPanel: React.FC<AgentPanelProps> = ({
   isDarkMode,
@@ -734,33 +729,38 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     setMessages(historyBase);
     setIsSending(true);
 
+    // Effort decides how much of the project is worth sending, not just how
+    // long the agent may run.
+    const effort = resolveEffortProfile(reasoningEffort);
+
     const knownPaths = files.map((f) => f.path);
     const mentionPaths = extractMentionedPaths(text, knownPaths);
     const mentionedFiles = mentionPaths
       .map((p) => files.find((f) => f.path === p))
       .filter((f): f is WorkspaceFileNode => Boolean(f))
-      .map((f) => ({ path: f.path, content: (f.content || '').slice(0, 6000) }));
+      .map((f) => ({ path: f.path, content: (f.content || '').slice(0, effort.context.mentionedFileChars) }));
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
     try {
-      const maxAgentTurns =
-        REASONING_OPTIONS.find((option) => option.id === reasoningEffort)?.maxTurns ?? 6;
+      const maxAgentTurns = effort.maxTurns;
       const basePayload = {
         model: selectedModel,
         mode,
         reasoningEffort,
-        activeFile: activeFile ? { path: activeFile.path, content: activeFile.content.slice(0, 8000) } : null,
-        projectFiles: knownPaths.slice(0, 300),
+        activeFile: activeFile
+          ? { path: activeFile.path, content: activeFile.content.slice(0, effort.context.activeFileChars) }
+          : null,
+        projectFiles: knownPaths.slice(0, effort.context.maxProjectFiles),
         mentionedFiles,
         projectMemory: selectProjectMemory(contextRef.current, text),
       };
 
       // ── Agent loop: send prompt, resolve tools, repeat until no more tool calls ──
-      // Expanded context: keep up to40 messages so AI remembers code + chat
+      // History depth scales with effort so higher tiers keep more of the thread.
       let conversationHistory: { role: 'user' | 'assistant'; content: string }[] =
-        historyBase.slice(-40).map((m) => ({
+        historyBase.slice(-effort.context.historyMessages).map((m) => ({
           role: m.role,
           content: m.role === 'assistant' ? summarizeForHistory(m.content, m.ops) : m.content,
         }));

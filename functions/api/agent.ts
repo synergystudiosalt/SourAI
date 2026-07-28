@@ -1,5 +1,6 @@
-import { generateText, streamText, resolveModelRoute, getApiKeys } from '../shared/ai';
+import { generateText, streamText, resolveModelRoute, getApiKeys, type GenerationTuning } from '../shared/ai';
 import { AGENT_SYSTEM_PROMPT, AGENT_WRITE_MODE_NOTE, AGENT_PLAN_MODE_NOTE, buildAgentContextBlock, buildReasoningEffortInstruction } from '../shared/systemPrompts';
+import { resolveEffortProfile } from '../shared/effortProfile';
 import { splitThinkingAndText } from '../shared/responseFormatting';
 
 const AGENT_SYSTEM_PROMPT_BASE = AGENT_SYSTEM_PROMPT;
@@ -53,6 +54,17 @@ export const onRequest: PagesFunction = async (context) => {
 
     const route = resolveModelRoute(model);
 
+    // The selected effort drives real generation parameters, not just the
+    // prompt wording: sampling temperature, the output cap, and the provider's
+    // own reasoning budget.
+    const effort = resolveEffortProfile(reasoningEffort);
+    const tuning: GenerationTuning = {
+      temperature: effort.temperature,
+      maxOutputTokens: effort.maxOutputTokens,
+      openAiEffort: effort.openAiEffort,
+      thinkingBudget: effort.thinkingBudget,
+    };
+
     // Build the context block with file information
     const safeProjectMemory = Array.isArray(projectMemory)
       ? projectMemory.slice(0, 32).flatMap((entry) => {
@@ -66,7 +78,8 @@ export const onRequest: PagesFunction = async (context) => {
       projectFiles,
       activeFile,
       mentionedFiles,
-      safeProjectMemory
+      safeProjectMemory,
+      effort.context.maxProjectFiles
     );
 
     // Build the full prompt with system instruction
@@ -104,7 +117,7 @@ export const onRequest: PagesFunction = async (context) => {
             let fullText = '';
             for await (const token of streamText({
               geminiKeys, groqKeys, cerebrasKeys, mistralKeys,
-              contents, plainMessages, systemInstruction, route,
+              contents, plainMessages, systemInstruction, route, tuning,
             })) {
               fullText += token;
               controller.enqueue(encoder.encode(`data: ${JSON.stringify({ token })}\n\n`));
@@ -144,6 +157,7 @@ export const onRequest: PagesFunction = async (context) => {
       plainMessages,
       systemInstruction,
       route,
+      tuning,
     })) || '';
 
     const { text, thinking } = splitThinkingAndText(rawText);

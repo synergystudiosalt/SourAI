@@ -46,11 +46,44 @@ export function takeMistralKey(keys: string[]): string | null {
   return key;
 }
 
+/**
+ * Per-request generation knobs. Every field is optional so existing callers
+ * (e.g. /api/chat) keep their previous behaviour when they pass nothing.
+ */
+export interface GenerationTuning {
+  readonly temperature?: number;
+  readonly maxOutputTokens?: number;
+  /** Applied only to models whose route declares `openai_effort`. */
+  readonly openAiEffort?: 'low' | 'medium' | 'high';
+  /** Applied only to models whose route declares `gemini_thinking`. */
+  readonly thinkingBudget?: number;
+}
+
+/**
+ * Which provider-side reasoning control a model accepts. Sending the wrong one
+ * is a 400, so this is opt-in per route rather than assumed.
+ */
+export type ReasoningControl = 'openai_effort' | 'gemini_thinking' | null;
+
+function buildGeminiGenerationConfig(
+  tuning: GenerationTuning | undefined,
+  reasoning: ReasoningControl
+): Record<string, unknown> {
+  const config: Record<string, unknown> = { temperature: tuning?.temperature ?? 0.3 };
+  if (tuning?.maxOutputTokens) config.maxOutputTokens = tuning.maxOutputTokens;
+  if (reasoning === 'gemini_thinking' && typeof tuning?.thinkingBudget === 'number') {
+    config.thinkingConfig = { thinkingBudget: tuning.thinkingBudget };
+  }
+  return config;
+}
+
 export async function generateWithGemini(
   keys: string[],
   contents: any,
   systemInstruction: string,
-  model: string
+  model: string,
+  tuning?: GenerationTuning,
+  reasoning: ReasoningControl = null
 ): Promise<string> {
   if (keys.length === 0) throw new Error('No Gemini API keys configured');
   let lastErr: unknown;
@@ -65,7 +98,7 @@ export async function generateWithGemini(
           body: JSON.stringify({
             contents,
             systemInstruction: { parts: [{ text: systemInstruction }] },
-            generationConfig: { temperature: 0.3 },
+            generationConfig: buildGeminiGenerationConfig(tuning, reasoning),
           }),
         }
       );
@@ -87,16 +120,15 @@ export async function generateWithGemini(
   throw lastErr instanceof Error ? lastErr : new Error('All Gemini API keys failed');
 }
 
-async function generateWithOpenAICompatible(
-  baseUrl: string,
-  keys: string[],
-  takeKey: (keys: string[]) => string | null,
+export function buildOpenAICompatibleBody(
+  model: string,
   messages: { role: string; content: string }[],
   systemInstruction: string,
-  model: string
-): Promise<string> {
-  if (keys.length === 0) throw new Error(`No API keys configured for ${baseUrl}`);
-  const body = {
+  tuning: GenerationTuning | undefined,
+  reasoning: ReasoningControl,
+  extra?: Record<string, unknown>
+): Record<string, unknown> {
+  const body: Record<string, unknown> = {
     model,
     messages: [
       { role: 'system', content: systemInstruction },
@@ -105,16 +137,60 @@ async function generateWithOpenAICompatible(
         content: m.content || '',
       })),
     ],
+    ...extra,
   };
+  if (typeof tuning?.temperature === 'number') body.temperature = tuning.temperature;
+  if (tuning?.maxOutputTokens) body.max_tokens = tuning.maxOutputTokens;
+  if (reasoning === 'openai_effort' && tuning?.openAiEffort) {
+    body.reasoning_effort = tuning.openAiEffort;
+  }
+  return body;
+}
+
+/**
+ * POSTs a chat completion, and if the provider rejects the request with a 400
+ * while we were sending `reasoning_effort`, retries once without it. Provider
+ * support for that field varies per model and changes over time; degrading to
+ * a normal completion beats failing the user's request outright.
+ */
+async function postChatCompletion(
+  baseUrl: string,
+  key: string,
+  body: Record<string, unknown>
+): Promise<Response> {
+  const send = (payload: Record<string, unknown>) =>
+    fetch(`${baseUrl}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+      body: JSON.stringify(payload),
+    });
+
+  const res = await send(body);
+  if (res.status === 400 && 'reasoning_effort' in body) {
+    const { reasoning_effort: _dropped, ...withoutReasoning } = body;
+    console.warn(`${baseUrl} rejected reasoning_effort for ${body.model}; retrying without it.`);
+    return send(withoutReasoning);
+  }
+  return res;
+}
+
+async function generateWithOpenAICompatible(
+  baseUrl: string,
+  keys: string[],
+  takeKey: (keys: string[]) => string | null,
+  messages: { role: string; content: string }[],
+  systemInstruction: string,
+  model: string,
+  tuning?: GenerationTuning,
+  reasoning: ReasoningControl = null
+): Promise<string> {
+  if (keys.length === 0) throw new Error(`No API keys configured for ${baseUrl}`);
+  const body = buildOpenAICompatibleBody(model, messages, systemInstruction, tuning, reasoning);
   let lastErr: unknown;
   for (let attempt = 0; attempt < keys.length; attempt++) {
     const key = takeKey(keys)!;
     try {
-      const res = await fetch(`${baseUrl}/v1/chat/completions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-        body: JSON.stringify(body),
-      });
+      const res = await postChatCompletion(baseUrl, key, body);
       if (!res.ok) {
         const errText = await res.text().catch(() => '');
         throw new Error(`HTTP ${res.status}: ${errText.slice(0, 300)}`);
@@ -133,41 +209,53 @@ export async function generateWithGroq(
   keys: string[],
   messages: { role: string; content: string }[],
   systemInstruction: string,
-  model: string = 'llama-3.3-70b-versatile'
+  model: string = 'llama-3.3-70b-versatile',
+  tuning?: GenerationTuning,
+  reasoning: ReasoningControl = null
 ): Promise<string> {
-  return generateWithOpenAICompatible('https://api.groq.com', keys, takeGroqKey, messages, systemInstruction, model);
+  return generateWithOpenAICompatible('https://api.groq.com', keys, takeGroqKey, messages, systemInstruction, model, tuning, reasoning);
 }
 
 export async function generateWithCerebras(
   keys: string[],
   messages: { role: string; content: string }[],
   systemInstruction: string,
-  model: string
+  model: string,
+  tuning?: GenerationTuning,
+  reasoning: ReasoningControl = null
 ): Promise<string> {
-  return generateWithOpenAICompatible('https://api.cerebras.ai', keys, takeCerebrasKey, messages, systemInstruction, model);
+  return generateWithOpenAICompatible('https://api.cerebras.ai', keys, takeCerebrasKey, messages, systemInstruction, model, tuning, reasoning);
 }
 
 export async function generateWithMistral(
   keys: string[],
   messages: { role: string; content: string }[],
   systemInstruction: string,
-  model: string
+  model: string,
+  tuning?: GenerationTuning,
+  reasoning: ReasoningControl = null
 ): Promise<string> {
-  return generateWithOpenAICompatible('https://api.mistral.ai', keys, takeMistralKey, messages, systemInstruction, model);
+  return generateWithOpenAICompatible('https://api.mistral.ai', keys, takeMistralKey, messages, systemInstruction, model, tuning, reasoning);
 }
 
 export type Provider = 'gemini' | 'groq' | 'cerebras' | 'mistral';
 export interface ModelRoute {
   provider: Provider;
   model: string;
+  /**
+   * Reasoning control this model accepts, if any. Left null where support is
+   * unconfirmed — `postChatCompletion` degrades on 400, but not asking for a
+   * knob we aren't sure exists avoids the wasted round trip.
+   */
+  reasoning?: ReasoningControl;
 }
 
 export const MODEL_ROUTES: Record<string, ModelRoute> = {
-  'sour-omni-flash': { provider: 'groq', model: 'openai/gpt-oss-20b' },
-  'sour-intelligence': { provider: 'groq', model: 'qwen/qwen3.6-27b' },
-  'sour-ultra': { provider: 'gemini', model: 'gemini-3.5-flash-lite' },
-  'sour-overclock': { provider: 'cerebras', model: 'zai-glm-4.7' },
-  'sour-overcode': { provider: 'gemini', model: 'gemini-3.6-flash' },
+  'sour-omni-flash': { provider: 'groq', model: 'openai/gpt-oss-20b', reasoning: 'openai_effort' },
+  'sour-intelligence': { provider: 'groq', model: 'qwen/qwen3.6-27b', reasoning: null },
+  'sour-ultra': { provider: 'gemini', model: 'gemini-3.5-flash-lite', reasoning: 'gemini_thinking' },
+  'sour-overclock': { provider: 'cerebras', model: 'zai-glm-4.7', reasoning: null },
+  'sour-overcode': { provider: 'gemini', model: 'gemini-3.6-flash', reasoning: 'gemini_thinking' },
 };
 
 const DEFAULT_ROUTE: ModelRoute = MODEL_ROUTES['sour-omni-flash'];
@@ -186,20 +274,22 @@ export async function generateText(opts: {
   plainMessages: { role: string; content: string }[];
   systemInstruction: string;
   route: ModelRoute;
+  tuning?: GenerationTuning;
 }): Promise<string> {
-  const { route, contents, plainMessages, systemInstruction, geminiKeys, groqKeys, cerebrasKeys = [], mistralKeys = [] } = opts;
+  const { route, contents, plainMessages, systemInstruction, geminiKeys, groqKeys, cerebrasKeys = [], mistralKeys = [], tuning } = opts;
+  const reasoning = route.reasoning ?? null;
 
   const tryProvider = async (): Promise<string> => {
     switch (route.provider) {
       case 'groq':
-        return await generateWithGroq(groqKeys, plainMessages, systemInstruction, route.model);
+        return await generateWithGroq(groqKeys, plainMessages, systemInstruction, route.model, tuning, reasoning);
       case 'cerebras':
-        return await generateWithCerebras(cerebrasKeys, plainMessages, systemInstruction, route.model);
+        return await generateWithCerebras(cerebrasKeys, plainMessages, systemInstruction, route.model, tuning, reasoning);
       case 'mistral':
-        return await generateWithMistral(mistralKeys, plainMessages, systemInstruction, route.model);
+        return await generateWithMistral(mistralKeys, plainMessages, systemInstruction, route.model, tuning, reasoning);
       case 'gemini':
       default:
-        return await generateWithGemini(geminiKeys, contents, systemInstruction, route.model);
+        return await generateWithGemini(geminiKeys, contents, systemInstruction, route.model, tuning, reasoning);
     }
   };
 
@@ -211,10 +301,12 @@ export async function generateText(opts: {
       primaryErr
     );
     try {
-      return await generateWithGemini(geminiKeys, contents, systemInstruction, 'gemini-3.5-flash-lite');
+      // Fallback models have their own capabilities: keep temperature and the
+      // output cap, but only ask for the reasoning knob the fallback supports.
+      return await generateWithGemini(geminiKeys, contents, systemInstruction, 'gemini-3.5-flash-lite', tuning, 'gemini_thinking');
     } catch (fallbackErr) {
       console.warn('Global Gemini fallback exhausted, falling back to Groq default...', fallbackErr);
-      return await generateWithGroq(groqKeys, plainMessages, systemInstruction);
+      return await generateWithGroq(groqKeys, plainMessages, systemInstruction, undefined, tuning, null);
     }
   }
 }
@@ -227,29 +319,17 @@ async function* streamWithOpenAICompatible(
   takeKey: (keys: string[]) => string | null,
   messages: { role: string; content: string }[],
   systemInstruction: string,
-  model: string
+  model: string,
+  tuning?: GenerationTuning,
+  reasoning: ReasoningControl = null
 ): AsyncGenerator<string> {
   if (keys.length === 0) throw new Error(`No API keys configured for ${baseUrl}`);
-  const body = {
-    model,
-    messages: [
-      { role: 'system', content: systemInstruction },
-      ...messages.map((m) => ({
-        role: m.role === 'assistant' ? 'assistant' : 'user',
-        content: m.content || '',
-      })),
-    ],
-    stream: true,
-  };
+  const body = buildOpenAICompatibleBody(model, messages, systemInstruction, tuning, reasoning, { stream: true });
   let lastErr: unknown;
   for (let attempt = 0; attempt < keys.length; attempt++) {
     const key = takeKey(keys)!;
     try {
-      const res = await fetch(`${baseUrl}/v1/chat/completions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-        body: JSON.stringify(body),
-      });
+      const res = await postChatCompletion(baseUrl, key, body);
       if (!res.ok) {
         const errText = await res.text().catch(() => '');
         throw new Error(`HTTP ${res.status}: ${errText.slice(0, 300)}`);
@@ -289,7 +369,9 @@ async function* streamWithGemini(
   keys: string[],
   contents: any,
   systemInstruction: string,
-  model: string
+  model: string,
+  tuning?: GenerationTuning,
+  reasoning: ReasoningControl = null
 ): AsyncGenerator<string> {
   if (keys.length === 0) throw new Error('No Gemini API keys configured');
   let lastErr: unknown;
@@ -304,7 +386,7 @@ async function* streamWithGemini(
           body: JSON.stringify({
             contents,
             systemInstruction: { parts: [{ text: systemInstruction }] },
-            generationConfig: { temperature: 0.3 },
+            generationConfig: buildGeminiGenerationConfig(tuning, reasoning),
           }),
         }
       );
@@ -350,32 +432,34 @@ export async function* streamText(opts: {
   plainMessages: { role: string; content: string }[];
   systemInstruction: string;
   route: ModelRoute;
+  tuning?: GenerationTuning;
 }): AsyncGenerator<string> {
-  const { route, contents, plainMessages, systemInstruction, geminiKeys, groqKeys, cerebrasKeys = [], mistralKeys = [] } = opts;
+  const { route, contents, plainMessages, systemInstruction, geminiKeys, groqKeys, cerebrasKeys = [], mistralKeys = [], tuning } = opts;
+  const reasoning = route.reasoning ?? null;
 
   try {
     switch (route.provider) {
       case 'groq':
-        yield* streamWithOpenAICompatible('https://api.groq.com', groqKeys, takeGroqKey, plainMessages, systemInstruction, route.model);
+        yield* streamWithOpenAICompatible('https://api.groq.com', groqKeys, takeGroqKey, plainMessages, systemInstruction, route.model, tuning, reasoning);
         return;
       case 'cerebras':
-        yield* streamWithOpenAICompatible('https://api.cerebras.ai', cerebrasKeys, takeCerebrasKey, plainMessages, systemInstruction, route.model);
+        yield* streamWithOpenAICompatible('https://api.cerebras.ai', cerebrasKeys, takeCerebrasKey, plainMessages, systemInstruction, route.model, tuning, reasoning);
         return;
       case 'mistral':
-        yield* streamWithOpenAICompatible('https://api.mistral.ai', mistralKeys, takeMistralKey, plainMessages, systemInstruction, route.model);
+        yield* streamWithOpenAICompatible('https://api.mistral.ai', mistralKeys, takeMistralKey, plainMessages, systemInstruction, route.model, tuning, reasoning);
         return;
       case 'gemini':
       default:
-        yield* streamWithGemini(geminiKeys, contents, systemInstruction, route.model);
+        yield* streamWithGemini(geminiKeys, contents, systemInstruction, route.model, tuning, reasoning);
         return;
     }
   } catch (primaryErr) {
     console.warn(`Primary ${route.provider} stream failed, trying Gemini fallback...`, primaryErr);
     try {
-      yield* streamWithGemini(geminiKeys, contents, systemInstruction, 'gemini-3.5-flash-lite');
+      yield* streamWithGemini(geminiKeys, contents, systemInstruction, 'gemini-3.5-flash-lite', tuning, 'gemini_thinking');
     } catch {
       console.warn('Gemini fallback exhausted, falling back to non-streaming Groq...');
-      const text = await generateWithGroq(groqKeys, plainMessages, systemInstruction);
+      const text = await generateWithGroq(groqKeys, plainMessages, systemInstruction, undefined, tuning, null);
       yield text;
     }
   }

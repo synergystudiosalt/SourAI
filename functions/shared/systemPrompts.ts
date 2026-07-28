@@ -3,11 +3,12 @@
  * sour.ai is powered by Synergy Studios
  */
 
-export type AgentReasoningEffort = 'light' | 'standard' | 'deep' | 'ultracode';
+import { resolveEffortProfile, type AgentReasoningEffort } from './effortProfile';
+
+export type { AgentReasoningEffort };
 
 export function buildReasoningEffortInstruction(value: unknown): string {
-  const effort: AgentReasoningEffort =
-    value === 'light' || value === 'deep' || value === 'ultracode' ? value : 'standard';
+  const effort = resolveEffortProfile(value).id;
   switch (effort) {
     case 'light':
       return 'Reasoning effort: LIGHT. Prefer the shortest correct path. Use tools only when required, handle obvious edge cases, and keep verification minimal.';
@@ -308,13 +309,15 @@ export function buildAgentContextBlock(
   projectFiles: string[],
   activeFile: { path: string; content: string } | null | undefined,
   mentionedFiles: { path: string; content: string }[],
-  projectMemory: { key: string; value: string }[] = []
+  projectMemory: { key: string; value: string }[] = [],
+  /** Set from the effort profile so higher tiers actually see more of the tree. */
+  maxProjectFiles = 300
 ): string {
   const lines: string[] = [];
 
   if (projectFiles.length > 0) {
     lines.push(`## Project Files (${projectFiles.length} total)`);
-    lines.push(projectFiles.slice(0, 300).map((p) => `- ${p}`).join('\n'));
+    lines.push(projectFiles.slice(0, maxProjectFiles).map((p) => `- ${p}`).join('\n'));
   } else {
     lines.push('## Project Files\nNo files in the project yet.');
   }
