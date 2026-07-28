@@ -298,8 +298,10 @@ describe('mid-stream rate limit', () => {
     let calls = 0;
     vi.stubGlobal('fetch', vi.fn(async () => {
       calls++;
+      // Distinct content each time, so this measures boundedness rather than
+      // the seam de-duplication covered above.
       return sseStream([
-        token('x'),
+        token(`part${calls} `),
         `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'length' }] })}\n\n`,
         'data: [DONE]\n\n',
       ]);
@@ -318,7 +320,70 @@ describe('mid-stream rate limit', () => {
 
     // First response plus a capped number of resumes — it terminates.
     expect(calls).toBe(4);
-    expect(out).toBe('xxxx');
+    expect(out).toBe('part1 part2 part3 part4 ');
+  });
+
+  // A provider that ignores the prefill replies to it, retelling the whole
+  // answer. Splicing is impossible because sampling never reproduces it token
+  // for token, so the caller would receive the opening several times over.
+  it('does not append a second copy when the model restarts instead of resuming', async () => {
+    const opening = 'A'.repeat(150) + ' the quick brown fox jumps over the lazy dog';
+    let calls = 0;
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      calls++;
+      if (calls === 1) {
+        return sseStream([
+          token(opening),
+          `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'length' }] })}\n\n`,
+          'data: [DONE]\n\n',
+        ]);
+      }
+      // Retells the answer from the top rather than continuing it.
+      return sseStream([token(opening + ' and then some more'), 'data: [DONE]\n\n']);
+    }));
+
+    const out = await collect(
+      streamText({
+        geminiKeys: [],
+        groqKeys: KEYS,
+        contents: [],
+        plainMessages: [{ role: 'user', content: 'write' }],
+        systemInstruction: 'sys',
+        route: { provider: 'groq', model: 'm', prefill: 'openai' },
+      })
+    );
+
+    expect(out).toBe(opening);
+    expect(out.match(/quick brown fox/g)).toHaveLength(1);
+  });
+
+  it('de-duplicates an overlapping seam when the model repeats its last words', async () => {
+    let calls = 0;
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      calls++;
+      if (calls === 1) {
+        return sseStream([
+          token('function add(a, b) { return a'),
+          `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'length' }] })}\n\n`,
+          'data: [DONE]\n\n',
+        ]);
+      }
+      // Repeats "return a" before carrying on.
+      return sseStream([token(' return a + b; }'), 'data: [DONE]\n\n']);
+    }));
+
+    const out = await collect(
+      streamText({
+        geminiKeys: [],
+        groqKeys: KEYS,
+        contents: [],
+        plainMessages: [{ role: 'user', content: 'write' }],
+        systemInstruction: 'sys',
+        route: { provider: 'groq', model: 'm', prefill: 'openai' },
+      })
+    );
+
+    expect(out).toBe('function add(a, b) { return a + b; }');
   });
 
   it('retries from scratch when the limit lands before any output', async () => {

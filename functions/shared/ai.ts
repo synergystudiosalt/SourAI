@@ -199,6 +199,66 @@ export function withGeminiContinuation(contents: any, partial: string): any {
   ];
 }
 
+/** How much of a resumed stream to inspect before letting it through. */
+const RESUME_SCAN_CHARS = 1200;
+
+/** Longest suffix of what was sent that the continuation repeats as a prefix. */
+export function seamOverlap(sent: string, next: string): number {
+  const max = Math.min(sent.length, next.length, RESUME_SCAN_CHARS);
+  for (let k = max; k > 0; k--) {
+    if (sent.endsWith(next.slice(0, k))) return k;
+  }
+  return 0;
+}
+
+/**
+ * True when a resume began the answer over instead of continuing it.
+ *
+ * Not every provider honours a prefill turn, and one that doesn't replies to
+ * it — restating the whole answer. Splicing that is hopeless, because sampling
+ * means the retelling never matches token for token, so the caller would
+ * receive the opening several times over.
+ */
+export function looksLikeRestart(sent: string, next: string): boolean {
+  const probe = Math.min(200, sent.length, next.length);
+  return probe >= 80 && next.slice(0, probe) === sent.slice(0, probe);
+}
+
+/**
+ * Gates a resumed stream: holds the opening back, decides whether the model
+ * continued or started over, and de-duplicates the seam before anything
+ * reaches the caller. A first attempt passes straight through.
+ */
+class ResumeGate {
+  private pending = '';
+  private open: boolean;
+  restarted = false;
+
+  constructor(private readonly alreadySent: string) {
+    this.open = alreadySent.length === 0;
+  }
+
+  /** Returns text to emit, or '' while still deciding. */
+  push(token: string): string {
+    if (this.open) return token;
+    this.pending += token;
+    return this.pending.length >= RESUME_SCAN_CHARS ? this.flush() : '';
+  }
+
+  /** Releases whatever is still held once the stream ends. */
+  flush(): string {
+    if (this.open) return '';
+    this.open = true;
+    const buffered = this.pending;
+    this.pending = '';
+    if (looksLikeRestart(this.alreadySent, buffered)) {
+      this.restarted = true;
+      return '';
+    }
+    return buffered.slice(seamOverlap(this.alreadySent, buffered));
+  }
+}
+
 /** Providers report mid-stream faults as an error object inside the SSE body. */
 function streamPayloadError(parsed: any): ProviderHttpError | null {
   const error = parsed?.error;
@@ -517,6 +577,7 @@ async function* streamWithOpenAICompatible(
       const reader = res.body?.getReader();
       if (!reader) throw new Error('No response body');
       const decoder = new TextDecoder();
+      const gate = new ResumeGate(emitted);
       let buffer = '';
       let hitOutputCap = false;
       let complete = false;
@@ -548,10 +609,24 @@ async function* streamWithOpenAICompatible(
           if (choice?.finish_reason === 'length') hitOutputCap = true;
           const token = choice?.delta?.content;
           if (token) {
-            emitted += token;
-            yield token;
+            const out = gate.push(token);
+            if (out) {
+              emitted += out;
+              yield out;
+            }
           }
         }
+      }
+      const tail = gate.flush();
+      if (tail) {
+        emitted += tail;
+        yield tail;
+      }
+      if (gate.restarted) {
+        // The model retold the answer instead of continuing it. Keep what the
+        // caller already has rather than appending a second copy of it.
+        console.warn(`${model} restarted instead of resuming; keeping the partial answer.`);
+        return;
       }
       if (hitOutputCap && continuations < MAX_OUTPUT_CONTINUATIONS) {
         continuations++;
@@ -609,6 +684,7 @@ async function* streamWithGemini(
       const reader = response.body?.getReader();
       if (!reader) throw new Error('No response body');
       const decoder = new TextDecoder();
+      const gate = new ResumeGate(emitted);
       let buffer = '';
       let hitOutputCap = false;
       while (true) {
@@ -632,10 +708,22 @@ async function* streamWithGemini(
           if (candidate?.finishReason === 'MAX_TOKENS') hitOutputCap = true;
           const token = candidate?.content?.parts?.[0]?.text;
           if (token) {
-            emitted += token;
-            yield token;
+            const out = gate.push(token);
+            if (out) {
+              emitted += out;
+              yield out;
+            }
           }
         }
+      }
+      const tail = gate.flush();
+      if (tail) {
+        emitted += tail;
+        yield tail;
+      }
+      if (gate.restarted) {
+        console.warn(`${model} restarted instead of resuming; keeping the partial answer.`);
+        return;
       }
       if (hitOutputCap && continuations < MAX_OUTPUT_CONTINUATIONS) {
         continuations++;
