@@ -143,12 +143,29 @@
   transition: --effort-percent 380ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+/* Non-ultracode: neutral track with one tick per effort option. No violet —
+   the purple is reserved for ultracode so the jump to it actually reads.
+   Light is the base and `.dark` overrides, matching how the rest of the app
+   themes itself. Note `.dark` sits on the app root div, not on <html>. */
 .agent-effort-track {
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, rgba(139, 92, 246, 0.28) 0 var(--effort-percent), rgba(120, 116, 107, 0.18) var(--effort-percent) 100%);
+  background:
+    /* strongest tick marks the ultracode slot at the far end */
+    radial-gradient(circle at 90% 50%, rgba(60, 57, 50, 0.75) 0 1px, transparent 1.6px),
+    /* five evenly spaced option ticks: one centred in each 20% cell */
+    radial-gradient(circle at 50% 50%, rgba(90, 87, 79, 0.34) 0 1px, transparent 1.6px) 0 0 / 20% 100% repeat-x,
+    /* neutral trail up to the thumb */
+    linear-gradient(90deg, rgba(90, 87, 79, 0.26) 0 var(--effort-percent), rgba(120, 116, 107, 0.14) var(--effort-percent) 100%);
   border-radius: 6px;
   overflow: hidden;
+}
+
+.dark .agent-effort-control:not(.is-ultracode) .agent-effort-track {
+  background:
+    radial-gradient(circle at 90% 50%, rgba(240, 239, 230, 0.85) 0 1px, transparent 1.6px),
+    radial-gradient(circle at 50% 50%, rgba(181, 178, 169, 0.42) 0 1px, transparent 1.6px) 0 0 / 20% 100% repeat-x,
+    linear-gradient(90deg, rgba(122, 119, 112, 0.30) 0 var(--effort-percent), rgba(120, 116, 107, 0.12) var(--effort-percent) 100%);
 }
 
 /* Ultracode: muted slate->violet ramp over a dark base, so the starfield
@@ -233,12 +250,17 @@
   width: 16px;
   height: 20px;
   border-radius: 6px;
-  background: #f3edff;
-  box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.22), 0 2px 7px rgba(0, 0, 0, 0.3);
+  background: #5f5b52;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18), 0 2px 7px rgba(0, 0, 0, 0.22);
   /* `left` is derived from --effort-percent, which is already transitioned on
      the control. Transitioning it here too would chase a moving value and
      leave the thumb trailing the fill. */
   transition: box-shadow 260ms ease;
+}
+
+.dark .agent-effort-thumb {
+  background: #d8d4c6;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.28), 0 2px 7px rgba(0, 0, 0, 0.35);
 }
 
 .agent-effort-control.is-ultracode .agent-effort-thumb {
