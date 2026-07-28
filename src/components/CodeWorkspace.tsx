@@ -22,7 +22,7 @@ import {
 } from '../utils/realFs';
 import { getLanguageName, isLikelyBinary, getFileIconMeta } from '../utils/languageMeta';
 import { buildPreviewDocument, getPreviewKind, buildReactPreview, isReactProject } from '../utils/webPreview';
-import { buildSandboxedPreviewDocument } from '../security/previewIsolation';
+import { buildSandboxedPreviewDocument, PREVIEW_ENDPOINT } from '../security/previewIsolation';
 import { useFlag } from '../features/flags';
 
 export { buildSandboxedPreviewDocument } from '../security/previewIsolation';
@@ -142,46 +142,62 @@ export const SandboxedPreviewFrame: React.FC<{
   source: string;
   title: string;
   className?: string;
-}> = ({ source, title, className }) => (
-  <iframe
-    srcDoc={buildSandboxedPreviewDocument(source)}
-    sandbox="allow-scripts"
-    referrerPolicy="no-referrer"
-    className={className}
-    title={title}
-  />
-);
+}> = ({ source, title, className }) => {
+  const reactId = React.useId();
+  // useId embeds ':' which is not valid in a browsing-context name.
+  const frameName = React.useMemo(() => `preview-${reactId.replace(/[^a-zA-Z0-9_-]/g, '')}`, [reactId]);
+  const formRef = React.useRef<HTMLFormElement>(null);
+  const fieldRef = React.useRef<HTMLInputElement>(null);
+
+  // Navigating the frame to /api/preview is what gives the document its own
+  // CSP; a srcdoc frame would inherit the app's strict script-src instead.
+  React.useEffect(() => {
+    if (!formRef.current || !fieldRef.current) return;
+    fieldRef.current.value = buildSandboxedPreviewDocument(source);
+    formRef.current.submit();
+  }, [source]);
+
+  return (
+    <>
+      <iframe
+        name={frameName}
+        sandbox="allow-scripts"
+        referrerPolicy="no-referrer"
+        className={className}
+        title={title}
+      />
+      <form ref={formRef} method="POST" action={PREVIEW_ENDPOINT} target={frameName} hidden>
+        <input ref={fieldRef} type="hidden" name="html" />
+      </form>
+    </>
+  );
+};
 
 /**
- * Opens the exact same CSP-restricted preview document in a separate tab.
- * The delayed revoke gives the new tab time to consume the temporary URL.
+ * Opens the same CSP-restricted preview document in a separate tab.
+ *
+ * Posts to the preview endpoint rather than opening a blob: URL. A blob
+ * document inherits the CSP of the page that created it, exactly like srcdoc,
+ * so the old route blocked every runtime CDN too. The response carries
+ * `sandbox allow-scripts`, so the new tab is still an opaque origin.
  */
 export function openSafePreviewInNewTab(source: string): void {
-  const previewDocument = buildSandboxedPreviewDocument(source);
-  const escapedPreview = previewDocument
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;');
-  const outerDocument = [
-    '<!doctype html><html><head>',
-    '<meta name="referrer" content="no-referrer">',
-    '<style>html,body,iframe{width:100%;height:100%;margin:0;border:0;background:#111}</style>',
-    '</head><body>',
-    `<iframe title="SourAI preview" sandbox="allow-scripts" referrerpolicy="no-referrer" srcdoc="${escapedPreview}"></iframe>`,
-    '</body></html>',
-  ].join('');
-  const blob = new Blob([outerDocument], {
-    type: 'text/html;charset=utf-8',
-  });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.target = '_blank';
-  link.rel = 'noopener noreferrer';
-  link.setAttribute('aria-label', 'Open safe preview in new tab');
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = PREVIEW_ENDPOINT;
+  form.target = '_blank';
+  form.hidden = true;
+  form.setAttribute('aria-label', 'Open safe preview in new tab');
+
+  const field = document.createElement('input');
+  field.type = 'hidden';
+  field.name = 'html';
+  field.value = buildSandboxedPreviewDocument(source);
+  form.appendChild(field);
+
+  document.body.appendChild(form);
+  form.submit();
+  document.body.removeChild(form);
 }
 
 export function getRenameBlockReason(

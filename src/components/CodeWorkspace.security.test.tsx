@@ -10,7 +10,11 @@ import {
   getRenameBlockReason,
   openSafePreviewInNewTab,
 } from './CodeWorkspace';
-import { stripUntrustedMetaElements } from '../security/previewIsolation';
+import {
+  PREVIEW_RESPONSE_POLICY,
+  PREVIEW_SCRIPT_SOURCES,
+  stripUntrustedMetaElements,
+} from '../security/previewIsolation';
 
 describe('CodeWorkspace preview security', () => {
   afterEach(() => {
@@ -21,25 +25,49 @@ describe('CodeWorkspace preview security', () => {
   });
 
   it('runs project scripts inside an opaque sandbox without same-origin privileges', () => {
+    const submit = vi.spyOn(HTMLFormElement.prototype, 'submit').mockImplementation(() => undefined);
     const source = '<svg onload="window.parent.__pwned=true"><script>window.parent.__pwned=true</script></svg>';
     const { container } = render(<SandboxedPreviewFrame source={source} title="safe preview" />);
 
     const frame = screen.getByTitle('safe preview');
     expect(frame).toHaveAttribute('sandbox', 'allow-scripts');
     expect(frame.getAttribute('sandbox')).not.toContain('allow-same-origin');
-    expect(frame.getAttribute('sandbox')).toContain('allow-scripts');
     expect(frame).toHaveAttribute('referrerpolicy', 'no-referrer');
     expect(container.querySelector('svg')).toBeNull();
-    const document = frame.getAttribute('srcdoc') ?? '';
+
+    // Loaded as a real navigation, not srcdoc: a srcdoc document inherits the
+    // app's strict script-src and could never reach a runtime CDN.
+    expect(frame).not.toHaveAttribute('srcdoc');
+    const form = container.querySelector('form');
+    expect(form?.method).toBe('post');
+    expect(form?.getAttribute('action')).toBe('/api/preview');
+    expect(form?.getAttribute('target')).toBe(frame.getAttribute('name'));
+    expect(submit).toHaveBeenCalled();
+
+    const document = container.querySelector<HTMLInputElement>('input[name="html"]')?.value ?? '';
     expect(document).toContain('Content-Security-Policy');
     expect(document).toContain("default-src 'none'");
     expect(document).toContain("connect-src 'none'");
-    expect(document).toContain(
-      "script-src 'unsafe-inline' https://cdnjs.cloudflare.com https://unpkg.com https://esm.sh"
-    );
     expect(document).toContain('img-src data: blob:');
     expect(document.indexOf('Content-Security-Policy')).toBeLessThan(document.indexOf(source));
     expect(document).toContain(source);
+  });
+
+  it('allows the runtime CDNs the preview builders actually use', () => {
+    const document = buildSandboxedPreviewDocument('<p>x</p>');
+    for (const origin of PREVIEW_SCRIPT_SOURCES) {
+      expect(document).toContain(origin);
+    }
+    // jsdelivr is the default for three.js and was previously omitted.
+    expect(document).toContain('https://cdn.jsdelivr.net');
+  });
+
+  it('forces an opaque origin on the served response, however the URL is reached', () => {
+    // The endpoint echoes caller-supplied HTML from our own origin, so without
+    // this a direct navigation would be reflected XSS against the app.
+    expect(PREVIEW_RESPONSE_POLICY.startsWith('sandbox allow-scripts')).toBe(true);
+    expect(PREVIEW_RESPONSE_POLICY).toContain("default-src 'none'");
+    expect(PREVIEW_RESPONSE_POLICY).toContain("connect-src 'none'");
   });
 
   it('wraps passive network payloads behind a restrictive preview CSP', () => {
@@ -85,35 +113,31 @@ describe('CodeWorkspace preview security', () => {
     expect(image).toHaveAttribute('referrerpolicy', 'no-referrer');
   });
 
-  it('opens a CSP-restricted preview in a separate noopener tab', async () => {
-    vi.useFakeTimers();
-    const createObjectURL = vi.fn((_blob: Blob): string => 'blob:safe-preview');
-    const revokeObjectURL = vi.fn((_url: string): void => undefined);
-    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL });
-    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectURL });
-    let clickedLink: HTMLAnchorElement | null = null;
-    const click = vi
-      .spyOn(HTMLAnchorElement.prototype, 'click')
-      .mockImplementation(function (this: HTMLAnchorElement) {
-        clickedLink = this;
+  it('opens a CSP-restricted preview in a separate tab via the preview endpoint', () => {
+    // A blob: document inherits the creating page's CSP just like srcdoc, so
+    // the previous blob-URL route blocked every runtime CDN as well.
+    let submitted: HTMLFormElement | null = null;
+    const submit = vi
+      .spyOn(HTMLFormElement.prototype, 'submit')
+      .mockImplementation(function (this: HTMLFormElement) {
+        submitted = this;
       });
 
     openSafePreviewInNewTab('<script>window.opener.pwned=true</script><p>Preview</p>');
 
-    expect(createObjectURL).toHaveBeenCalledOnce();
-    const blob = createObjectURL.mock.calls[0][0] as Blob;
-    expect(blob.type).toBe('text/html;charset=utf-8');
-    await expect(blob.text()).resolves.toContain("default-src 'none'");
-    expect(click).toHaveBeenCalledOnce();
-    const link = clickedLink as HTMLAnchorElement | null;
-    expect(link).not.toBeNull();
-    if (!link) throw new Error('Preview link was not clicked');
-    expect(link.href).toBe('blob:safe-preview');
-    expect(link.target).toBe('_blank');
-    expect(link.rel).toBe('noopener noreferrer');
+    expect(submit).toHaveBeenCalledOnce();
+    const form = submitted as HTMLFormElement | null;
+    expect(form).not.toBeNull();
+    if (!form) throw new Error('Preview form was not submitted');
+    expect(form.method).toBe('post');
+    expect(form.getAttribute('action')).toBe('/api/preview');
+    expect(form.target).toBe('_blank');
 
-    vi.advanceTimersByTime(60_000);
-    expect(revokeObjectURL).toHaveBeenCalledWith('blob:safe-preview');
+    const field = form.querySelector<HTMLInputElement>('input[name="html"]');
+    expect(field?.value).toContain("default-src 'none'");
+    expect(field?.value).toContain('<p>Preview</p>');
+    // The form is removed again, leaving no stray markup in the app DOM.
+    expect(document.body.contains(form)).toBe(false);
   });
 });
 

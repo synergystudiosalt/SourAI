@@ -56,20 +56,46 @@ export function stripUntrustedMetaElements(source: string): string {
   return output;
 }
 
+/** Endpoint that serves the preview document with its own CSP. */
+export const PREVIEW_ENDPOINT = '/api/preview';
+
+/** Runtime CDNs the preview may load libraries from. */
+export const PREVIEW_SCRIPT_SOURCES = [
+  'https://cdn.jsdelivr.net',
+  'https://cdnjs.cloudflare.com',
+  'https://unpkg.com',
+  'https://esm.sh',
+] as const;
+
+const PREVIEW_POLICY_DIRECTIVES = [
+  "default-src 'none'",
+  "base-uri 'none'",
+  "connect-src 'none'",
+  "frame-src 'none'",
+  "form-action 'none'",
+  'img-src data: blob:',
+  'media-src data: blob:',
+  'font-src data:',
+  "style-src 'unsafe-inline'",
+  `script-src 'unsafe-inline' ${PREVIEW_SCRIPT_SOURCES.join(' ')}`,
+  "worker-src 'none'",
+];
+
+export const PREVIEW_DOCUMENT_POLICY = PREVIEW_POLICY_DIRECTIVES.join('; ');
+
+/**
+ * Policy for the served preview response.
+ *
+ * `sandbox allow-scripts` is the load-bearing part: it drops the document into
+ * an opaque origin no matter how the URL is reached. The endpoint echoes
+ * caller-supplied HTML from our own origin, so without it a direct navigation
+ * would be reflected XSS against the app. With it, the response can never read
+ * app storage or cookies, exactly like the srcdoc frame it replaces.
+ */
+export const PREVIEW_RESPONSE_POLICY = ['sandbox allow-scripts', ...PREVIEW_POLICY_DIRECTIVES].join('; ');
+
 export function buildSandboxedPreviewDocument(source: string): string {
-  const policy = [
-    "default-src 'none'",
-    "base-uri 'none'",
-    "connect-src 'none'",
-    "frame-src 'none'",
-    "form-action 'none'",
-    "img-src data: blob:",
-    "media-src data: blob:",
-    "font-src data:",
-    "style-src 'unsafe-inline'",
-    "script-src 'unsafe-inline' https://cdnjs.cloudflare.com https://unpkg.com https://esm.sh",
-    "worker-src 'none'",
-  ].join('; ');
+  const policy = PREVIEW_DOCUMENT_POLICY;
 
   return [
     '<!doctype html><html><head>',
