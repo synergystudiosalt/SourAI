@@ -1113,6 +1113,14 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           <span className="sm:hidden">Agent</span>
         </span>
         <div className="flex items-center gap-1.5 sm:gap-2.5">
+          <button
+            onClick={() => setShowSlash((visible) => !visible)}
+            title="Open coding tools"
+            className="flex items-center gap-1 hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth transition-colors"
+          >
+            <Settings className="w-3 sm:w-3.5 h-3 sm:h-3.5" />
+            <span className="hidden sm:inline text-[10px]">Tools</span>
+          </button>
           <button onClick={handleNewThread} title="New thread" className="hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth transition-colors">
             <Plus className="w-3 sm:w-3.5 h-3 sm:h-3.5" />
           </button>

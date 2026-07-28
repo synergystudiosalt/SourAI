@@ -9,7 +9,8 @@ import ReactMarkdown from 'react-markdown';
 import Logo from './Logo';
 import { CodeEditor } from './workspace/CodeEditor';
 import { FileExplorer } from './workspace/FileExplorer';
-import { WorkspaceFileNode, WorkspaceTab } from '../types';
+import { AgentPanel } from './workspace/AgentPanel';
+import { AgentFileOp, WorkspaceFileNode, WorkspaceTab } from '../types';
 import {
   upsertFile, upsertFolder, removeNode, renameNode, updateNode, findNode,
   listFiles, generateUniquePath, joinPath, isDescendantOrSelf, getBaseName,
@@ -178,6 +179,7 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
   const [cursorInfo, setCursorInfo] = useState({ line: 1, col: 1, selectionLength: 0 });
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
   const [isAgentCollapsed, setIsAgentCollapsed] = useState(false);
+  const [agentView, setAgentView] = useState<'chat' | 'advanced'>('chat');
   const [isFileExplorerCollapsed, setIsFileExplorerCollapsed] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [truncatedNotice, setTruncatedNotice] = useState(false);
@@ -635,6 +637,55 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
     setActiveTabPath(path);
   };
 
+  const handleLegacyAgentOps = async (ops: AgentFileOp[]): Promise<boolean> => {
+    if (activeProject?.isReal) {
+      alert('Agent changes to local folders remain disabled until safe disk transactions are available.');
+      return false;
+    }
+    for (const op of ops) {
+      const current = findNode(tree, op.path);
+      if (
+        op.originalContent !== undefined &&
+        (current?.type !== 'file' || (current.content ?? '') !== op.originalContent)
+      ) {
+        alert(`"${op.path}" changed after the agent prepared its edit. Ask it to try again.`);
+        return false;
+      }
+    }
+
+    const summary = ops
+      .map((op) => `${op.type === 'delete' ? 'Delete' : 'Change'} ${op.path}`)
+      .join('\n');
+    if (!window.confirm(`Review agent changes:\n\n${summary}\n\nApply these changes?`)) {
+      return false;
+    }
+
+    let next = tree;
+    for (const op of ops) {
+      next =
+        op.type === 'delete'
+          ? removeNode(next, op.path)
+          : upsertFile(next, op.path, op.content ?? '');
+    }
+    setTree(next);
+
+    const writes = ops.filter((op) => op.type === 'write');
+    const deleted = new Set(ops.filter((op) => op.type === 'delete').map((op) => op.path));
+    setOpenTabs((current) => {
+      const remaining = current.filter((tab) => !deleted.has(tab.path));
+      const have = new Set(remaining.map((tab) => tab.path));
+      return [
+        ...remaining,
+        ...writes
+          .filter((op) => !have.has(op.path))
+          .map((op) => ({ path: op.path, isDirty: false })),
+      ];
+    });
+    if (writes.length > 0) setActiveTabPath(writes[writes.length - 1].path);
+    else if (deleted.has(activeTabPath)) setActiveTabPath('');
+    return true;
+  };
+
   // ---------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------
@@ -743,11 +794,19 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
         <div className="flex-1 flex overflow-hidden">
           <motion.div
             initial={false}
-            animate={{ width: isAgentCollapsed ? 36 : clientAgentEnabled ? 440 : 288 }}
+            animate={{ width: isAgentCollapsed ? 36 : agentView === 'advanced' ? 440 : 288 }}
             transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-            className="overflow-hidden"
+            className="overflow-hidden relative"
           >
-            {clientAgentEnabled ? (
+            {agentView === 'advanced' && clientAgentEnabled ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setAgentView('chat')}
+                  className="absolute right-2 top-2 z-30 rounded border border-[#e5e3db] bg-[#fbfaf7] px-2 py-1 text-[10px] text-[#78746a] hover:text-[#1c1b1a] dark:border-[#333230] dark:bg-[#1e1e1e] dark:text-[#a09c94] dark:hover:text-white"
+                >
+                  Back to chat
+                </button>
               <React.Suspense fallback={<div className="h-full border-r p-3 text-xs">Loading agent runtime…</div>}>
                 <ProfessionalAgentWorkspace
                   key={activeProject.id}
@@ -760,13 +819,31 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
                   onOpenFile={handleOpenAgentFile}
                 />
               </React.Suspense>
-            ) : (
+              </>
+            ) : agentView === 'advanced' ? (
               <aside
                 aria-label="Client agent unavailable"
                 className="h-full border-r border-[#e5e3db] p-3 text-xs dark:border-[#2d2d2c]"
               >
                 The client-only agent needs Web Worker support and cannot fall back to a server API.
               </aside>
+            ) : (
+              <AgentPanel
+                key={activeProject.id}
+                isDarkMode={isDarkMode}
+                isCollapsed={isAgentCollapsed}
+                onToggleCollapse={() => setIsAgentCollapsed((value) => !value)}
+                projectId={activeProject.id}
+                projectName={activeProject.name}
+                files={allFiles}
+                activeFile={
+                  activeNode && activeNode.type === 'file'
+                    ? { path: activeNode.path, content: activeNode.content ?? '' }
+                    : null
+                }
+                onApplyOps={handleLegacyAgentOps}
+                onOpenFile={openFile}
+              />
             )}
           </motion.div>
 

@@ -88,20 +88,34 @@ test('sending a chat message makes no SourAI API request', async ({ context, pag
   expect(apiRequests).toEqual([]);
 });
 
-test('running the agent makes no SourAI API request', async ({ context, page }) => {
+test('running the agent uses the Cloudflare Pages API without exposing a key', async ({ context, page }) => {
   const apiRequests = monitorSourAiApiRequests(context);
+  let requestBody = '';
+  await page.route('**/api/agent', async (route) => {
+    requestBody = route.request().postData() ?? '';
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/event-stream',
+      body: `data: ${JSON.stringify({
+        done: true,
+        text: 'I found the workspace file.',
+        thinkingLabel: 'Reviewing workspace',
+      })}\n\n`,
+    });
+  });
 
   await page.goto('/');
   await page.getByTitle('sour.ai IDE').click();
   await page.getByRole('button', { name: /New File/ }).click();
   await expect(page.getByText('untitled.txt').first()).toBeVisible();
-  // A provider must be chosen explicitly; there is no implicit default.
-  await page.getByLabel('Model provider').selectOption('demo-echo');
-  await page.getByPlaceholder(/Message agent/i).first().fill('list the files');
+  await expect(page.getByText('Omni-Flash')).toBeVisible();
+  await expect(page.getByLabel(/API key/i)).toHaveCount(0);
+  await page.getByPlaceholder(/Message Agent/i).first().fill('list the files');
   await page.keyboard.press('Enter');
-  await expect(page.getByText(/this is not a language model/)).toBeVisible();
-  await expect(page.getByText(/Your request: list the files/)).toBeVisible();
-  await observeBoundedQuietPeriod(page);
+  await expect(page.getByText('I found the workspace file.')).toBeVisible();
 
-  expect(apiRequests).toEqual([]);
+  expect(apiRequests).toHaveLength(1);
+  expect(new URL(apiRequests[0]).pathname).toBe('/api/agent');
+  expect(requestBody).toContain('"model":"sour-omni-flash"');
+  expect(requestBody).not.toMatch(/api[_-]?key|bearer/i);
 });
