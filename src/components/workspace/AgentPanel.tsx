@@ -1492,6 +1492,12 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                     } as React.CSSProperties}
                   >
                     <div className="agent-effort-track" aria-hidden="true">
+                      <span className="agent-effort-stars">
+                        <i />
+                        <i />
+                        <i />
+                        <i />
+                      </span>
                       <span className="agent-effort-thumb" />
                     </div>
                     <input
