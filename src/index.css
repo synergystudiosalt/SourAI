@@ -174,14 +174,14 @@
   background:
     linear-gradient(
       90deg,
-      rgba(139, 92, 246, 0.06) 0%,
-      rgba(139, 92, 246, 0.16) 40%,
-      rgba(150, 112, 255, 0.34) calc(var(--effort-percent) - 1%),
+      rgba(217, 107, 67, 0.07) 0%,
+      rgba(217, 107, 67, 0.19) 40%,
+      rgba(240, 126, 74, 0.38) calc(var(--effort-percent) - 1%),
       rgba(120, 116, 107, 0.18) var(--effort-percent),
       rgba(120, 116, 107, 0.18) 100%
     ),
     linear-gradient(90deg, rgba(38, 37, 35, 0.92) 0 var(--effort-percent), transparent var(--effort-percent) 100%);
-  box-shadow: inset 0 0 10px rgba(183, 141, 255, 0.18);
+  box-shadow: inset 0 0 10px rgba(255, 176, 130, 0.2);
 }
 
 /* Starfield. Every layer sits on the same 4px lattice so dots twinkle in
@@ -212,7 +212,7 @@
 
 /* base lattice - always lit, low key */
 .agent-effort-stars i:nth-child(1) {
-  background-image: radial-gradient(circle at 50% 50%, rgba(226, 216, 255, 0.62) 0 0.5px, transparent 1.1px);
+  background-image: radial-gradient(circle at 50% 50%, rgba(255, 234, 214, 0.62) 0 0.5px, transparent 1.1px);
   background-size: 4px 4px;
   background-position: 0 0;
   animation: effortStarsA 1.9s ease-in-out infinite;
@@ -239,7 +239,7 @@
   background-image: radial-gradient(circle at 50% 50%, #fff 0 0.9px, transparent 1.8px);
   background-size: 20px 12px;
   background-position: 4px 4px;
-  filter: drop-shadow(0 0 2px rgba(214, 190, 255, 0.85));
+  filter: drop-shadow(0 0 2px rgba(255, 205, 158, 0.85));
   animation: effortStarsSpark 2.3s ease-in-out infinite;
 }
 
@@ -265,7 +265,7 @@
 
 .agent-effort-control.is-ultracode .agent-effort-thumb {
   background: #fff;
-  box-shadow: 0 0 0 1px rgba(184, 139, 255, 0.5), 0 0 12px rgba(255, 255, 255, 0.55);
+  box-shadow: 0 0 0 1px rgba(240, 138, 88, 0.55), 0 0 12px rgba(255, 236, 220, 0.55);
 }
 
 .agent-effort-input {

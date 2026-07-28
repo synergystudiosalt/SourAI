@@ -1466,7 +1466,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                       <span
                         className={`font-semibold ${
                           reasoningEffort === 'ultracode'
-                            ? 'text-[#a879ff]'
+                            ? 'text-[#d96b43] dark:text-[#e07a52]'
                             : 'text-[#656158] dark:text-[#c1bdb5]'
                         }`}
                       >
