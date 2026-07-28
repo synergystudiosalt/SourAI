@@ -257,6 +257,70 @@ describe('mid-stream rate limit', () => {
     });
   });
 
+  // Hitting max_tokens is reported as a clean finish, not an error, so before
+  // this the reply simply stopped mid-token with nothing to explain why.
+  it('resumes past the output cap instead of stopping mid-answer', async () => {
+    const bodies: any[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: any) => {
+      bodies.push(JSON.parse(init.body));
+      if (bodies.length === 1) {
+        return sseStream([
+          token('function start() {'),
+          `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'length' }] })}\n\n`,
+          'data: [DONE]\n\n',
+        ]);
+      }
+      return sseStream([token(' return 1; }'), 'data: [DONE]\n\n']);
+    }));
+
+    const out = await collect(
+      streamText({
+        geminiKeys: [],
+        groqKeys: KEYS,
+        contents: [],
+        plainMessages: [{ role: 'user', content: 'write code' }],
+        systemInstruction: 'sys',
+        route: { provider: 'groq', model: 'm', prefill: 'openai' },
+      })
+    );
+
+    expect(out).toBe('function start() { return 1; }');
+    expect(bodies).toHaveLength(2);
+    // Resumed by prefill, carrying what had already been emitted.
+    const retry = bodies[1].messages;
+    expect(retry[retry.length - 1]).toEqual({
+      role: 'assistant',
+      content: 'function start() {',
+    });
+  });
+
+  it('stops resuming after a bounded number of output-cap continuations', async () => {
+    let calls = 0;
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      calls++;
+      return sseStream([
+        token('x'),
+        `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'length' }] })}\n\n`,
+        'data: [DONE]\n\n',
+      ]);
+    }));
+
+    const out = await collect(
+      streamText({
+        geminiKeys: [],
+        groqKeys: KEYS,
+        contents: [],
+        plainMessages: [{ role: 'user', content: 'endless' }],
+        systemInstruction: 'sys',
+        route: { provider: 'groq', model: 'm', prefill: 'openai' },
+      })
+    );
+
+    // First response plus a capped number of resumes — it terminates.
+    expect(calls).toBe(4);
+    expect(out).toBe('xxxx');
+  });
+
   it('retries from scratch when the limit lands before any output', async () => {
     const bodies: any[] = [];
     vi.stubGlobal('fetch', vi.fn(async (_url: string, init: any) => {

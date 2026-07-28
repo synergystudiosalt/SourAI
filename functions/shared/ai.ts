@@ -109,6 +109,13 @@ export function isRetryableError(err: unknown): boolean {
 const MAX_BACKOFF_MS = 4000;
 /** How many times to cycle the whole key list before giving up. */
 const FAILOVER_ROUNDS = 2;
+/**
+ * Extra rounds allowed purely for resuming past the output cap. Whole-file
+ * code generation routinely exceeds it, and the provider reports that as a
+ * clean finish rather than an error, so without this the reply just stops
+ * mid-token with nothing to signal why.
+ */
+const MAX_OUTPUT_CONTINUATIONS = 3;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -490,8 +497,9 @@ async function* streamWithOpenAICompatible(
   // the next key to continue from here rather than restarting, because the
   // client appends tokens and would otherwise render the opening twice.
   let emitted = '';
+  let continuations = 0;
   let lastErr: unknown;
-  const attempts = keys.length * FAILOVER_ROUNDS;
+  const attempts = keys.length * FAILOVER_ROUNDS + MAX_OUTPUT_CONTINUATIONS;
 
   for (let attempt = 0; attempt < attempts; attempt++) {
     const key = takeKey(keys)!;
@@ -510,7 +518,9 @@ async function* streamWithOpenAICompatible(
       if (!reader) throw new Error('No response body');
       const decoder = new TextDecoder();
       let buffer = '';
-      while (true) {
+      let hitOutputCap = false;
+      let complete = false;
+      while (!complete) {
         const { done, value } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
@@ -520,7 +530,10 @@ async function* streamWithOpenAICompatible(
           const trimmed = line.trim();
           if (!trimmed || !trimmed.startsWith('data: ')) continue;
           const data = trimmed.slice(6);
-          if (data === '[DONE]') return;
+          if (data === '[DONE]') {
+            complete = true;
+            break;
+          }
           let parsed: any;
           try {
             parsed = JSON.parse(data);
@@ -529,12 +542,23 @@ async function* streamWithOpenAICompatible(
           }
           const payloadError = streamPayloadError(parsed);
           if (payloadError) throw payloadError;
-          const token = parsed?.choices?.[0]?.delta?.content;
+          const choice = parsed?.choices?.[0];
+          // Running out of output budget is reported as a normal finish, so it
+          // has to be detected rather than waited on as an error.
+          if (choice?.finish_reason === 'length') hitOutputCap = true;
+          const token = choice?.delta?.content;
           if (token) {
             emitted += token;
             yield token;
           }
         }
+      }
+      if (hitOutputCap && continuations < MAX_OUTPUT_CONTINUATIONS) {
+        continuations++;
+        console.warn(
+          `${model} hit its output cap at ${emitted.length} chars; resuming (${continuations}/${MAX_OUTPUT_CONTINUATIONS}).`
+        );
+        continue;
       }
       return;
     } catch (err: any) {
@@ -562,8 +586,9 @@ async function* streamWithGemini(
 ): AsyncGenerator<string> {
   if (keys.length === 0) throw new Error('No Gemini API keys configured');
   let emitted = '';
+  let continuations = 0;
   let lastErr: unknown;
-  const attempts = keys.length * FAILOVER_ROUNDS;
+  const attempts = keys.length * FAILOVER_ROUNDS + MAX_OUTPUT_CONTINUATIONS;
 
   for (let attempt = 0; attempt < attempts; attempt++) {
     const key = takeGeminiKey(keys)!;
@@ -585,6 +610,7 @@ async function* streamWithGemini(
       if (!reader) throw new Error('No response body');
       const decoder = new TextDecoder();
       let buffer = '';
+      let hitOutputCap = false;
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -602,12 +628,21 @@ async function* streamWithGemini(
           }
           const payloadError = streamPayloadError(parsed);
           if (payloadError) throw payloadError;
-          const token = parsed?.candidates?.[0]?.content?.parts?.[0]?.text;
+          const candidate = parsed?.candidates?.[0];
+          if (candidate?.finishReason === 'MAX_TOKENS') hitOutputCap = true;
+          const token = candidate?.content?.parts?.[0]?.text;
           if (token) {
             emitted += token;
             yield token;
           }
         }
+      }
+      if (hitOutputCap && continuations < MAX_OUTPUT_CONTINUATIONS) {
+        continuations++;
+        console.warn(
+          `${model} hit its output cap at ${emitted.length} chars; resuming (${continuations}/${MAX_OUTPUT_CONTINUATIONS}).`
+        );
+        continue;
       }
       return;
     } catch (err: any) {

@@ -86,7 +86,7 @@ export const EFFORT_PROFILES: Record<AgentReasoningEffort, EffortProfile> = {
     description: 'More analysis and verification',
     maxTurns: 8,
     temperature: 0.2,
-    maxOutputTokens: 8192,
+    maxOutputTokens: 6144,
     openAiEffort: 'high',
     thinkingBudget: 8192,
     context: {
@@ -102,7 +102,10 @@ export const EFFORT_PROFILES: Record<AgentReasoningEffort, EffortProfile> = {
     description: 'Maximum coding rigor',
     maxTurns: 12,
     temperature: 0.15,
-    maxOutputTokens: 16384,
+    // Kept at a ceiling every provider accepts. Asking for more risks a 400 on
+    // models with an 8k output limit, and long generations are carried by
+    // stream continuation rather than by a bigger single cap.
+    maxOutputTokens: 8192,
     openAiEffort: 'high',
     thinkingBudget: 24576,
     context: {
