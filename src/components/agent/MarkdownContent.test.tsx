@@ -45,6 +45,19 @@ describe('agent structured content', () => {
     ]);
   });
 
+  it('collapses consecutive reasoning sections into one activity disclosure', () => {
+    expect(
+      parseAgentContent(
+        '<think>Inspect files.</think><planning>Prepare edits.</planning><step>Verify.</step>'
+      )
+    ).toEqual([
+      {
+        type: 'think',
+        content: 'Inspect files.\nPrepare edits.\nVerify.',
+      },
+    ]);
+  });
+
   it('presents structured sections behind an explicit disclosure', () => {
     const openTags = new Set<string>();
     const { rerender } = render(

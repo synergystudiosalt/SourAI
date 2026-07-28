@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { extractMentionedPaths, parseAgentResponse, summarizeForHistory } from './agentProtocol';
+import {
+  extractMentionedPaths,
+  filterRepeatedAgentRequests,
+  parseAgentResponse,
+  summarizeForHistory,
+} from './agentProtocol';
 
 /**
  * Characterisation tests for the legacy prose tool protocol.
@@ -42,6 +47,24 @@ describe('parseAgentResponse — current behaviour', () => {
     );
     expect(fileRequests).toEqual(['src/a.ts']);
     expect(findRequests).toEqual(['useState']);
+  });
+
+  it('blocks tool requests already executed in an earlier agent turn', () => {
+    const seen = new Set<string>();
+    const first = filterRepeatedAgentRequests(
+      parseAgentResponse('@@readfile: src/a.ts\n@@listdir: src'),
+      seen
+    );
+    const second = filterRepeatedAgentRequests(
+      parseAgentResponse('@@readfile: src/a.ts\n@@readfile: src/b.ts\n@@listdir: src'),
+      seen
+    );
+
+    expect(first.newRequestCount).toBe(2);
+    expect(second.response.fileRequests).toEqual(['src/b.ts']);
+    expect(second.response.listDirRequests).toEqual([]);
+    expect(second.newRequestCount).toBe(1);
+    expect(second.repeatedRequestCount).toBe(2);
   });
 
   it('parses replace and rename requests with the ||| delimiter', () => {

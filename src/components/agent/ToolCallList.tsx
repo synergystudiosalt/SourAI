@@ -169,8 +169,64 @@ export const ToolCallList: React.FC<ToolCallListProps> = ({
   isReading,
   openItems,
   onToggle,
-}) => (
-  <>
+}) => {
+  if (toolCalls.length > 3) {
+    const groupId = `${messageId}-tool-activity`;
+    const isOpen = openItems.has(groupId);
+    const reads = toolCalls.filter((call) => call.type === 'readfile').length;
+    const searches = toolCalls.filter(
+      (call) => call.type === 'findall' || call.type === 'search_imports' || call.type === 'glob'
+    ).length;
+    const mutations = toolCalls.filter(
+      (call) => call.type === 'replace' || call.type === 'rename'
+    ).length;
+    const summary = [
+      reads ? `${reads} file${reads === 1 ? '' : 's'} read` : '',
+      searches ? `${searches} search${searches === 1 ? '' : 'es'}` : '',
+      mutations ? `${mutations} edit${mutations === 1 ? '' : 's'}` : '',
+    ].filter(Boolean).join(' · ') || `${toolCalls.length} workspace actions`;
+
+    return (
+      <div className="select-none">
+        <button
+          type="button"
+          onClick={() => !isReading && onToggle(groupId)}
+          className="flex items-center gap-1.5 text-[10.5px] font-medium text-[#8c887d] hover:text-[#1c1b1a] dark:text-[#a09c94] dark:hover:text-[#f0efe6]"
+        >
+          {isReading ? (
+            <Loader2 className="h-3 w-3 animate-spin shrink-0" />
+          ) : (
+            <Check className="h-3 w-3 shrink-0 text-amber-600" />
+          )}
+          <span>{isReading ? `Working · ${summary}` : summary}</span>
+          {!isReading && (
+            <ChevronDown
+              className={`h-3 w-3 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+            />
+          )}
+        </button>
+        <AnimatePresence>
+          {isOpen && !isReading && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="mt-1.5 max-h-40 space-y-1 overflow-y-auto border-l border-[#e2dec0] pl-2 text-[10px] text-[#706c62] dark:border-[#383836] dark:text-[#a09d98]"
+            >
+              {toolCalls.map((toolCall, index) => (
+                <div key={`${groupId}-${index}`} className="truncate">
+                  {toolCallLabel(toolCall)}
+                </div>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    );
+  }
+
+  return (
+    <>
     {toolCalls.map((toolCall, index) => {
       const itemId = `${messageId}-tc-${index}`;
       const isOpen = openItems.has(itemId);
@@ -217,5 +273,6 @@ export const ToolCallList: React.FC<ToolCallListProps> = ({
         </div>
       );
     })}
-  </>
-);
+    </>
+  );
+};

@@ -7,7 +7,13 @@ import { AttachmentPopover } from '../AttachmentPopover';
 import { AttachmentItem } from '../../types';
 import { parseUploadedFile } from '../../utils/fileParser';
 import { AgentChatMessage, AgentFileOp, AgentMode, AgentToolCall, AIModel, WorkspaceFileNode } from '../../types';
-import { parseAgentResponse, summarizeForHistory, extractMentionedPaths, extractPathsFromCheckContent } from '../../utils/agentProtocol';
+import {
+  extractMentionedPaths,
+  extractPathsFromCheckContent,
+  filterRepeatedAgentRequests,
+  parseAgentResponse,
+  summarizeForHistory,
+} from '../../utils/agentProtocol';
 import { customApiManager, type CustomApiConfig } from '../../utils/customApiManager';
 import { VoiceRecognizer } from '../../utils/voiceRecognition';
 import { apiUrl } from '../../lib/api';
@@ -633,7 +639,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     return { toolCalls, ops, resultText: parts.join('\n\n') };
   };
 
-  const MAX_AGENT_TURNS = 50;
+  const MAX_AGENT_TURNS = 8;
 
   const handleSend = async (overrideText?: string) => {
     const text = (overrideText ?? input).trim();
@@ -696,6 +702,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       let finalDisplayText = '';
       let turnCount = 0;
       let hasMoreTools = true;
+      const seenToolRequests = new Set<string>();
 
       // Create the message placeholder immediately
       const assistantMsg: AgentChatMessage = {
@@ -771,7 +778,11 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                   if (event.done) {
                     accumulatedThinking = event.thinking || accumulatedThinking;
                     accumulatedThinkingLabel = event.thinkingLabel || accumulatedThinkingLabel;
-                    const finalParsed = parseAgentResponse(event.text || streamText);
+                    const filteredRequests = filterRepeatedAgentRequests(
+                      parseAgentResponse(event.text || streamText),
+                      seenToolRequests
+                    );
+                    const finalParsed = filteredRequests.response;
                     finalDisplayText = finalParsed.displayText || (finalParsed.ops.length ? '' : "I didn't find anything useful to say - try rephrasing that.");
                     allOps = [...allOps, ...finalParsed.ops];
 
@@ -827,7 +838,10 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                       turnToolCalls.push(...replaceResult.toolCalls, ...importsResult.toolCalls, ...renameResult.toolCalls);
                       allOps = [...allOps, ...replaceResult.ops, ...renameResult.ops];
 
-                      const resultText = [readText, findText, listDirText, globText, fileInfoText, replaceResult.resultText, importsResult.resultText, renameResult.resultText, todoResultText, ...checkResultParts, ...contextResultParts].filter(Boolean).join('\n\n');
+                      const duplicateNotice = filteredRequests.repeatedRequestCount > 0
+                        ? `[Runtime: skipped ${filteredRequests.repeatedRequestCount} duplicate tool request(s). Do not request them again; continue from the results already provided.]`
+                        : '';
+                      const resultText = [readText, findText, listDirText, globText, fileInfoText, replaceResult.resultText, importsResult.resultText, renameResult.resultText, todoResultText, ...checkResultParts, ...contextResultParts, duplicateNotice].filter(Boolean).join('\n\n');
 
                       setMessages((prev) =>
                         prev.map((m) =>
@@ -843,6 +857,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                         { role: 'user', content: resultText },
                       ];
                       hasMoreTools = true;
+                    } else if (filteredRequests.repeatedRequestCount > 0) {
+                      finalDisplayText = `${finalDisplayText}\n\n_I stopped the tool loop because the same workspace checks were requested again. The results above are still available._`.trim();
                     }
                   }
                 } catch { /* skip malformed lines */ }
@@ -866,7 +882,11 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           const data = await res.json().catch(() => ({}));
           if (!res.ok) throw normalizeAgentProviderError(data?.error, 'The agent failed to respond.');
 
-          const parsed = parseAgentResponse(data.text || '');
+          const filteredRequests = filterRepeatedAgentRequests(
+            parseAgentResponse(data.text || ''),
+            seenToolRequests
+          );
+          const parsed = filteredRequests.response;
 
           if (data.thinking) accumulatedThinking = data.thinking;
           if (data.thinkingLabel) accumulatedThinkingLabel = data.thinkingLabel;
@@ -922,7 +942,10 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
             turnToolCalls.push(...replaceResult.toolCalls, ...importsResult.toolCalls, ...renameResult.toolCalls);
             allOps = [...allOps, ...replaceResult.ops, ...renameResult.ops];
 
-            const resultText = [readText, findText, listDirText, globText, fileInfoText, replaceResult.resultText, importsResult.resultText, renameResult.resultText, todoResultText, ...checkResultParts, ...contextResultParts].filter(Boolean).join('\n\n');
+            const duplicateNotice = filteredRequests.repeatedRequestCount > 0
+              ? `[Runtime: skipped ${filteredRequests.repeatedRequestCount} duplicate tool request(s). Do not request them again; continue from the results already provided.]`
+              : '';
+            const resultText = [readText, findText, listDirText, globText, fileInfoText, replaceResult.resultText, importsResult.resultText, renameResult.resultText, todoResultText, ...checkResultParts, ...contextResultParts, duplicateNotice].filter(Boolean).join('\n\n');
 
             setMessages((prev) =>
               prev.map((m) =>
@@ -940,9 +963,16 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
             hasMoreTools = true;
           } else {
             finalDisplayText = parsed.displayText || (allOps.length ? '' : "I didn't find anything useful to say - try rephrasing that.");
+            if (filteredRequests.repeatedRequestCount > 0) {
+              finalDisplayText = `${finalDisplayText}\n\n_I stopped the tool loop because the same workspace checks were requested again. The results above are still available._`.trim();
+            }
             allOps = [...allOps, ...parsed.ops];
           }
         }
+      }
+
+      if (hasMoreTools && turnCount >= MAX_AGENT_TURNS) {
+        finalDisplayText = `${finalDisplayText}\n\n_I reached the workspace-tool limit and stopped cleanly. Ask me to continue if another pass is needed._`.trim();
       }
 
       // Enrich ops with original content and diff info for highlighting

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { SECRET_CANARIES, expectNoSecrets } from '../../test/assertions';
@@ -99,5 +99,69 @@ describe('AgentPanel provider error privacy', () => {
 
     expect(await screen.findByText(/agent request failed with/i)).toBeInTheDocument();
     expectNoSecrets(document.body.textContent, 'rendered agent server error');
+  });
+});
+
+describe('AgentPanel progress gate', () => {
+  it('stops when the model repeats an already completed tool request', async () => {
+    const firstTurn = new ReadableStream({
+      start(controller) {
+        controller.enqueue(
+          new TextEncoder().encode(
+            `data: ${JSON.stringify({
+              done: true,
+              text: '@@readfile: src/a.ts',
+              thinkingLabel: 'Inspecting files',
+            })}\n\n`
+          )
+        );
+        controller.close();
+      },
+    });
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        new Response(firstTurn, {
+          status: 200,
+          headers: { 'Content-Type': 'text/event-stream' },
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ text: '@@readfile: src/a.ts' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      );
+
+    render(
+      <AgentPanel
+        isDarkMode={false}
+        isCollapsed={false}
+        onToggleCollapse={vi.fn()}
+        projectId="loop-test"
+        projectName="Loop test"
+        files={[
+          {
+            id: 'src/a.ts',
+            name: 'a.ts',
+            path: 'src/a.ts',
+            type: 'file',
+            content: 'export const value = 1;',
+          },
+        ]}
+        activeFile={null}
+        onApplyOps={vi.fn()}
+        onOpenFile={vi.fn()}
+      />
+    );
+    fireEvent.change(
+      screen.getByPlaceholderText('Message Agent, @ for context, / for commands'),
+      { target: { value: 'inspect the project' } }
+    );
+    fireEvent.click(screen.getByTitle('Send'));
+
+    expect(
+      await screen.findByText(/stopped the tool loop because the same workspace checks/i)
+    ).toBeInTheDocument();
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
   });
 });

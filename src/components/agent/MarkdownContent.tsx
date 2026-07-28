@@ -98,6 +98,7 @@ export interface AgentContentSegment {
 }
 
 const XML_TAG_RE = /<([a-zA-Z][\w-]*)>([\s\S]*?)<\/\1>/g;
+const THINK_TAGS = ['think', 'thinking', 'reasoning', 'analysis', 'reflection', 'planning', 'step'];
 
 export function parseAgentContent(text: string): AgentContentSegment[] {
   const segments: AgentContentSegment[] = [];
@@ -117,12 +118,23 @@ export function parseAgentContent(text: string): AgentContentSegment[] {
     if (value) segments.push({ type: 'text', content: value });
   }
 
-  return segments.length > 0 ? segments : [{ type: 'text', content: text }];
+  const parsed = segments.length > 0 ? segments : [{ type: 'text', content: text }];
+  return parsed.reduce<AgentContentSegment[]>((collapsed, segment) => {
+    const previous = collapsed[collapsed.length - 1];
+    if (
+      previous &&
+      THINK_TAGS.includes(previous.type) &&
+      THINK_TAGS.includes(segment.type)
+    ) {
+      previous.content = `${previous.content}\n${segment.content}`;
+      return collapsed;
+    }
+    collapsed.push({ ...segment });
+    return collapsed;
+  }, []);
 }
 
 type TagIcon = React.FC<{ className?: string }>;
-
-const THINK_TAGS = ['think', 'thinking', 'reasoning', 'analysis', 'reflection', 'planning', 'step'];
 
 const KNOWN_TAGS: Record<
   string,

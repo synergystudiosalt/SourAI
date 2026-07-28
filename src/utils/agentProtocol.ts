@@ -63,6 +63,80 @@ export interface ParsedAgentResponse {
   todoItems: { action: 'add' | 'done' | 'remove'; priority: string; text: string }[];
 }
 
+export interface FilteredAgentRequests {
+  response: ParsedAgentResponse;
+  newRequestCount: number;
+  repeatedRequestCount: number;
+}
+
+/**
+ * Removes tool requests already executed during the current agent run.
+ * This is the progress gate that prevents a model from reading/searching the
+ * same workspace targets forever.
+ */
+export function filterRepeatedAgentRequests(
+  response: ParsedAgentResponse,
+  seen: Set<string>
+): FilteredAgentRequests {
+  let newRequestCount = 0;
+  let repeatedRequestCount = 0;
+  const keep = <T,>(items: T[], prefix: string, key: (item: T) => string): T[] =>
+    items.filter((item) => {
+      const signature = `${prefix}:${key(item)}`;
+      if (seen.has(signature)) {
+        repeatedRequestCount += 1;
+        return false;
+      }
+      seen.add(signature);
+      newRequestCount += 1;
+      return true;
+    });
+
+  const contextList = response.contextList && !seen.has('context:list');
+  if (response.contextList) {
+    if (contextList) {
+      seen.add('context:list');
+      newRequestCount += 1;
+    } else {
+      repeatedRequestCount += 1;
+    }
+  }
+
+  return {
+    response: {
+      ...response,
+      fileRequests: keep(response.fileRequests, 'read', String),
+      findRequests: keep(response.findRequests, 'find', String),
+      listDirRequests: keep(response.listDirRequests, 'dir', String),
+      globRequests: keep(response.globRequests, 'glob', String),
+      fileInfoRequests: keep(response.fileInfoRequests, 'info', String),
+      checkErrorsContent: keep(response.checkErrorsContent, 'check', String),
+      contextStore: keep(response.contextStore, 'context-store', (item) => `${item.key}=${item.value}`),
+      contextGet: keep(response.contextGet, 'context-get', String),
+      contextList,
+      contextClear: keep(response.contextClear, 'context-clear', String),
+      replaceRequests: keep(
+        response.replaceRequests,
+        'replace',
+        (item) => `${item.path}\u0000${item.search}\u0000${item.replace}`
+      ),
+      searchImportsRequests: keep(response.searchImportsRequests, 'imports', String),
+      renameRequests: keep(
+        response.renameRequests,
+        'rename',
+        (item) => `${item.oldPath}\u0000${item.newPath}`
+      ),
+      todoItems: keep(
+        response.todoItems,
+        'todo',
+        (item) => `${item.action}\u0000${item.priority}\u0000${item.text}`
+      ),
+    },
+    newRequestCount,
+    repeatedRequestCount,
+  };
+}
+
 export function parseAgentResponse(raw: string): ParsedAgentResponse {
   const ops: AgentFileOp[] = [];
 
