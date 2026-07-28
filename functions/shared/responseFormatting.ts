@@ -1,5 +1,8 @@
 const THINK_TAG_NAMES = ['think', 'thinking', 'reasoning', 'analysis', 'reflection', 'planning', 'step'];
-const THINK_BLOCK_RE = new RegExp(`<(${THINK_TAG_NAMES.join('|')})>([\\s\\S]*?)<\\/\\1>`, 'gi');
+const THINK_BLOCK_RE = new RegExp(
+  `<(${THINK_TAG_NAMES.join('|')})>([\\s\\S]*?)(?:<\\/[a-zA-Z][\\w-]*>|$)`,
+  'gi'
+);
 
 export function splitThinkingAndText(rawText: string): { text: string; thinking: string } {
   const input = (rawText || '').trim();

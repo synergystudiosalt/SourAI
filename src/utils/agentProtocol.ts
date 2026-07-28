@@ -39,6 +39,25 @@ function normalizePath(raw: string): string {
   return raw.trim().replace(/^\.\/+/, '').replace(/^\/+/, '');
 }
 
+/**
+ * Models occasionally emit the same full-file mutation more than once in a
+ * turn. Only the final action for a normalized path is meaningful.
+ */
+export function collapseAgentFileOps(operations: readonly AgentFileOp[]): AgentFileOp[] {
+  const finalByPath = new Map<string, AgentFileOp>();
+  for (const operation of operations) {
+    const key = normalizePath(operation.path)
+      .replace(/\\/g, '/')
+      .normalize('NFC')
+      .toLowerCase();
+    if (!key) continue;
+    // Reinsert so the displayed order follows each path's final occurrence.
+    finalByPath.delete(key);
+    finalByPath.set(key, operation);
+  }
+  return [...finalByPath.values()];
+}
+
 /** Resolves optional model-added line ranges without accepting guessed paths. */
 export function resolveKnownFileRequest(raw: string, knownPaths: string[]): string | null {
   const normalized = normalizePath(raw);

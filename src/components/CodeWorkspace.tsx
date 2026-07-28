@@ -132,10 +132,11 @@ export const WorkspaceMarkdownImage: React.FC<MarkdownImageProps> = ({
 };
 
 /**
- * Active project content is never inserted into the app DOM. An empty sandbox
- * creates an opaque origin and disables scripts, forms, popups, and navigation.
- * The document-level CSP also blocks passive requests such as CSS backgrounds,
- * SVG images, fonts, and media, which a sandbox alone does not prevent.
+ * Active project content is never inserted into the app DOM. `allow-scripts`
+ * lets the preview run its inlined project JavaScript, while the missing
+ * `allow-same-origin` keeps it in an opaque origin. Forms, popups, navigation,
+ * storage access, and arbitrary network requests remain blocked. The preview
+ * CSP permits only the runtime CDNs used for Three.js and React dependencies.
  */
 export const SandboxedPreviewFrame: React.FC<{
   source: string;
@@ -144,7 +145,7 @@ export const SandboxedPreviewFrame: React.FC<{
 }> = ({ source, title, className }) => (
   <iframe
     srcDoc={buildSandboxedPreviewDocument(source)}
-    sandbox=""
+    sandbox="allow-scripts"
     referrerPolicy="no-referrer"
     className={className}
     title={title}
@@ -156,7 +157,19 @@ export const SandboxedPreviewFrame: React.FC<{
  * The delayed revoke gives the new tab time to consume the temporary URL.
  */
 export function openSafePreviewInNewTab(source: string): void {
-  const blob = new Blob([buildSandboxedPreviewDocument(source)], {
+  const previewDocument = buildSandboxedPreviewDocument(source);
+  const escapedPreview = previewDocument
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;');
+  const outerDocument = [
+    '<!doctype html><html><head>',
+    '<meta name="referrer" content="no-referrer">',
+    '<style>html,body,iframe{width:100%;height:100%;margin:0;border:0;background:#111}</style>',
+    '</head><body>',
+    `<iframe title="SourAI preview" sandbox="allow-scripts" referrerpolicy="no-referrer" srcdoc="${escapedPreview}"></iframe>`,
+    '</body></html>',
+  ].join('');
+  const blob = new Blob([outerDocument], {
     type: 'text/html;charset=utf-8',
   });
   const url = URL.createObjectURL(blob);

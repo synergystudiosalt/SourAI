@@ -1,8 +1,10 @@
 /**
  * Wraps untrusted project markup in a preview-only security boundary.
  *
- * The iframe sandbox blocks script capabilities; this document CSP separately
- * blocks passive network requests from HTML, SVG, CSS, fonts, and media.
+ * The iframe sandbox allows project scripts but keeps them in an opaque origin
+ * without storage, opener, popup, form, or top-navigation privileges. This
+ * document CSP separately blocks arbitrary network requests while allowing
+ * inline project code and the three runtime CDNs used by the preview builders.
  * Keeping the builder free of React/browser state lets Playwright exercise the
  * exact production policy.
  */
@@ -65,6 +67,8 @@ export function buildSandboxedPreviewDocument(source: string): string {
     "media-src data: blob:",
     "font-src data:",
     "style-src 'unsafe-inline'",
+    "script-src 'unsafe-inline' https://cdnjs.cloudflare.com https://unpkg.com https://esm.sh",
+    "worker-src 'none'",
   ].join('; ');
 
   return [

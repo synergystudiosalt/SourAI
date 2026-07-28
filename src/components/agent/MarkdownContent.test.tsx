@@ -58,6 +58,12 @@ describe('agent structured content', () => {
     ]);
   });
 
+  it('repairs a mismatched closing tag instead of exposing raw model markup', () => {
+    expect(
+      parseAgentContent('<thinking>Improving UI polish.</index>')
+    ).toEqual([{ type: 'thinking', content: 'Improving UI polish.' }]);
+  });
+
   it('presents structured sections behind an explicit disclosure', () => {
     const openTags = new Set<string>();
     const { rerender } = render(
@@ -95,5 +101,20 @@ describe('agent structured content', () => {
     expect(screen.getAllByTestId('read-tag-icon')).toHaveLength(1);
     // The remaining SVGs are disclosure chevrons; non-read labels have no leading icon.
     expect(container.querySelectorAll('[data-testid="read-tag-icon"]')).toHaveLength(1);
+  });
+
+  it('animates and truncates every structured section label', () => {
+    const { container } = render(
+      <AgentContent
+        text="<thinking>Inspecting.</thinking><read>game.js</read><check_for_errors>Verify the complete workspace without overflowing the agent panel.</check_for_errors>"
+        messageId="message-gradients"
+        openTags={new Set()}
+        onToggleTag={() => undefined}
+      />
+    );
+
+    const labels = container.querySelectorAll('.agent-active-gradient');
+    expect(labels).toHaveLength(3);
+    labels.forEach((label) => expect(label).toHaveClass('truncate'));
   });
 });

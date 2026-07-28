@@ -6,6 +6,7 @@ import Logo from '../Logo';
 import { AgentContent, TypedMarkdown } from './MarkdownContent';
 import { OperationList } from './OperationList';
 import { ToolCallList } from './ToolCallList';
+import { collapseAgentFileOps } from '../../utils/agentProtocol';
 
 export interface AgentMessageProps {
   message: AgentChatMessage;
@@ -41,6 +42,7 @@ export const AgentMessage: React.FC<AgentMessageProps> = ({
   }
 
   const isTyping = animateTyping && isLatest;
+  const operations = collapseAgentFileOps(message.ops || []);
 
   return (
     <div className="space-y-1.5 mb-5">
@@ -91,12 +93,12 @@ export const AgentMessage: React.FC<AgentMessageProps> = ({
         />
       )}
 
-      {message.ops && message.ops.length > 0 && (
+      {operations.length > 0 && (
         <div className="overflow-hidden rounded-md border border-[#d8d5c9] bg-white dark:border-[#3a3937] dark:bg-[#20201f]">
           <div className="px-2 pt-2">
             <OperationList
               messageId={message.id}
-              operations={message.ops}
+              operations={operations}
               codingPaths={message.codingPaths}
               openItems={openItems}
               onToggle={onToggleItem}
@@ -135,7 +137,7 @@ export const AgentMessage: React.FC<AgentMessageProps> = ({
                 <button
                   type="button"
                   disabled={message.approvalStatus === 'applying'}
-                  onClick={() => onApplyOperations(message.id, message.ops || [])}
+                  onClick={() => onApplyOperations(message.id, operations)}
                   className="flex items-center gap-1 rounded bg-[#d96b43] px-2 py-1 text-[10px] text-white hover:bg-[#c85f3a] disabled:opacity-60"
                 >
                   {message.approvalStatus === 'applying' && <Loader2 className="h-3 w-3 animate-spin" />}

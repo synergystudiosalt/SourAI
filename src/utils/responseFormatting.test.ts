@@ -13,4 +13,11 @@ describe('splitThinkingAndText', () => {
       text: 'The fix is ready.',
     });
   });
+
+  it('recovers reasoning closed with the wrong model-generated tag', () => {
+    expect(splitThinkingAndText('<thinking>Improving the UI.</index>')).toEqual({
+      thinking: 'Improving the UI.',
+      text: '',
+    });
+  });
 });

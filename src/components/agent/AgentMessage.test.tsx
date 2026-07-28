@@ -131,7 +131,7 @@ describe('AgentMessage', () => {
     expect(screen.getByText('const needle = false;')).toBeInTheDocument();
   });
 
-  it('keeps duplicate-path operations independently expandable', () => {
+  it('shows only the final operation when a model repeats the same path', () => {
     render(
       <MessageHarness
         message={{
@@ -158,14 +158,10 @@ describe('AgentMessage', () => {
     );
 
     const operationButtons = screen.getAllByRole('button', { name: /src\/shared\.ts/ });
-    expect(operationButtons).toHaveLength(2);
+    expect(operationButtons).toHaveLength(1);
 
     fireEvent.click(operationButtons[0]);
-    expect(screen.getByText('const firstPass = true;')).toBeInTheDocument();
-    expect(screen.queryByText('const secondPass = true;')).not.toBeInTheDocument();
-
-    fireEvent.click(operationButtons[1]);
-    expect(screen.getByText('const firstPass = true;')).toBeInTheDocument();
+    expect(screen.queryByText('const firstPass = true;')).not.toBeInTheDocument();
     expect(screen.getByText('const secondPass = true;')).toBeInTheDocument();
   });
 

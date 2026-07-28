@@ -204,7 +204,7 @@ export const ToolCallList: React.FC<ToolCallListProps> = ({
         <button
           type="button"
           onClick={() => !isReading && onToggle(groupId)}
-          className="flex items-center gap-1.5 text-[10.5px] font-medium text-[#8c887d] hover:text-[#1c1b1a] dark:text-[#a09c94] dark:hover:text-[#f0efe6]"
+          className="flex min-w-0 max-w-full items-center gap-1.5 text-[10.5px] font-medium text-[#8c887d] hover:text-[#1c1b1a] dark:text-[#a09c94] dark:hover:text-[#f0efe6]"
         >
           {isReading ? (
             <Loader2 className="h-3 w-3 animate-spin shrink-0" />
@@ -213,7 +213,12 @@ export const ToolCallList: React.FC<ToolCallListProps> = ({
           ) : (
             <Check className="h-3 w-3 shrink-0 text-amber-600" />
           )}
-          <span>{isReading ? `Working · ${summary}` : summary}</span>
+          <span
+            className="agent-active-gradient min-w-0 truncate"
+            title={isReading ? `Working · ${summary}` : summary}
+          >
+            {isReading ? `Working · ${summary}` : summary}
+          </span>
           {!isReading && (
             <ChevronDown
               className={`h-3 w-3 transition-transform ${isOpen ? 'rotate-180' : ''}`}
@@ -250,7 +255,7 @@ export const ToolCallList: React.FC<ToolCallListProps> = ({
           <button
             type="button"
             onClick={() => !isReading && onToggle(itemId)}
-            className="flex items-center gap-1.5 text-[10.5px] font-medium text-[#8c887d] dark:text-[#a09c94] hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth"
+            className="flex min-w-0 max-w-full items-center gap-1.5 text-[10.5px] font-medium text-[#8c887d] dark:text-[#a09c94] hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth"
           >
             {isReading && !(toolCall.type === 'readfile' && !toolCall.found) ? (
               <Loader2 className="w-3 h-3 animate-spin shrink-0" />
@@ -265,7 +270,12 @@ export const ToolCallList: React.FC<ToolCallListProps> = ({
             ) : (
               <Search className="w-3 h-3 shrink-0" />
             )}
-            <span>{toolCallLabel(toolCall)}</span>
+            <span
+              className="agent-active-gradient min-w-0 truncate"
+              title={toolCallLabel(toolCall)}
+            >
+              {toolCallLabel(toolCall)}
+            </span>
             {!isReading && (
               <ChevronDown
                 className={`w-3 h-3 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}

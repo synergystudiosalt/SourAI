@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  collapseAgentFileOps,
   extractMentionedPaths,
   filterRepeatedAgentRequests,
   parseAgentResponse,
@@ -192,6 +193,24 @@ describe('summarizeForHistory', () => {
   it('returns the content unchanged when there are no ops', () => {
     expect(summarizeForHistory('Just talking.', [])).toBe('Just talking.');
     expect(summarizeForHistory('Just talking.')).toBe('Just talking.');
+  });
+});
+
+describe('collapseAgentFileOps', () => {
+  it('keeps only the final action for each normalized file path', () => {
+    expect(
+      collapseAgentFileOps([
+        { type: 'write', path: 'index.html', content: 'first' },
+        { type: 'write', path: './style.css', content: 'old' },
+        { type: 'write', path: 'INDEX.HTML', content: 'final' },
+        { type: 'delete', path: 'style.css' },
+        { type: 'write', path: 'game.js', content: 'game' },
+      ])
+    ).toEqual([
+      { type: 'write', path: 'INDEX.HTML', content: 'final' },
+      { type: 'delete', path: 'style.css' },
+      { type: 'write', path: 'game.js', content: 'game' },
+    ]);
   });
 });
 

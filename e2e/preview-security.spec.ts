@@ -15,6 +15,7 @@ test('sandboxed project previews cannot issue passive third-party requests', asy
 
   await page.goto('/');
   const source = [
+    `<script>document.body.dataset.executed='yes';fetch('https://${canaryHost}/script-fetch')</script>`,
     `<style>body{background-image:url(https://${canaryHost}/css)}</style>`,
     `<img src="https://${canaryHost}/image">`,
     `<svg><image href="https://${canaryHost}/svg"></image></svg>`,
@@ -28,12 +29,17 @@ test('sandboxed project previews cannot issue passive third-party requests', asy
 
   await page.evaluate((documentSource) => {
     const frame = document.createElement('iframe');
-    frame.setAttribute('sandbox', '');
+    frame.setAttribute('sandbox', 'allow-scripts');
     frame.setAttribute('referrerpolicy', 'no-referrer');
     frame.srcdoc = documentSource;
     document.body.appendChild(frame);
   }, srcDoc);
   await page.waitForTimeout(300);
+  const frame = page.frames().find((candidate) => candidate !== page.mainFrame());
+  expect(frame).toBeDefined();
+  await expect
+    .poll(async () => frame?.locator('body').getAttribute('data-executed'))
+    .toBe('yes');
 
   expect(
     canaryRequests,

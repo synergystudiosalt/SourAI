@@ -20,20 +20,23 @@ describe('CodeWorkspace preview security', () => {
     delete (URL as unknown as Record<string, unknown>).revokeObjectURL;
   });
 
-  it('keeps active HTML and SVG content in a script-disabled opaque sandbox', () => {
+  it('runs project scripts inside an opaque sandbox without same-origin privileges', () => {
     const source = '<svg onload="window.parent.__pwned=true"><script>window.parent.__pwned=true</script></svg>';
     const { container } = render(<SandboxedPreviewFrame source={source} title="safe preview" />);
 
     const frame = screen.getByTitle('safe preview');
-    expect(frame).toHaveAttribute('sandbox', '');
+    expect(frame).toHaveAttribute('sandbox', 'allow-scripts');
     expect(frame.getAttribute('sandbox')).not.toContain('allow-same-origin');
-    expect(frame.getAttribute('sandbox')).not.toContain('allow-scripts');
+    expect(frame.getAttribute('sandbox')).toContain('allow-scripts');
     expect(frame).toHaveAttribute('referrerpolicy', 'no-referrer');
     expect(container.querySelector('svg')).toBeNull();
     const document = frame.getAttribute('srcdoc') ?? '';
     expect(document).toContain('Content-Security-Policy');
     expect(document).toContain("default-src 'none'");
     expect(document).toContain("connect-src 'none'");
+    expect(document).toContain(
+      "script-src 'unsafe-inline' https://cdnjs.cloudflare.com https://unpkg.com https://esm.sh"
+    );
     expect(document).toContain('img-src data: blob:');
     expect(document.indexOf('Content-Security-Policy')).toBeLessThan(document.indexOf(source));
     expect(document).toContain(source);

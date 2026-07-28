@@ -53,4 +53,26 @@ describe('ToolCallList trust labels', () => {
 
     expect(screen.getByText('Read: src/App.tsx')).toBeInTheDocument();
   });
+
+  it('animates tool labels and keeps long titles on one truncated line', () => {
+    render(
+      <ToolCallList
+        messageId="message-gradient"
+        toolCalls={[
+          {
+            type: 'readfile',
+            path: 'src/a-very-long-directory-name/another-long-directory/file.tsx',
+            found: true,
+          },
+        ]}
+        isReading
+        openItems={new Set()}
+        onToggle={() => undefined}
+      />
+    );
+
+    const label = screen.getByText(/Read: src\/a-very-long-directory-name/);
+    expect(label).toHaveClass('agent-active-gradient', 'truncate');
+    expect(label).toHaveAttribute('title', expect.stringContaining('file.tsx'));
+  });
 });

@@ -91,26 +91,39 @@ export interface AgentContentSegment {
 
 const XML_TAG_RE = /<([a-zA-Z][\w-]*)>([\s\S]*?)<\/\1>/g;
 const THINK_TAGS = ['think', 'thinking', 'reasoning', 'analysis', 'reflection', 'planning', 'step'];
+const LOOSE_THINK_TAG_RE = new RegExp(
+  `<(${THINK_TAGS.join('|')})>([\\s\\S]*?)(?:<\\/[a-zA-Z][\\w-]*>|$)`,
+  'gi'
+);
+
+function repairReasoningTags(text: string): string {
+  return text.replace(
+    LOOSE_THINK_TAG_RE,
+    (_match, tag: string, content: string) => `<${tag}>${content}</${tag}>`
+  );
+}
 
 export function parseAgentContent(text: string): AgentContentSegment[] {
+  const repairedText = repairReasoningTags(text);
   const segments: AgentContentSegment[] = [];
   let lastIndex = 0;
 
-  for (const match of text.matchAll(XML_TAG_RE)) {
+  for (const match of repairedText.matchAll(XML_TAG_RE)) {
     if (match.index! > lastIndex) {
-      const value = text.slice(lastIndex, match.index).trim();
+      const value = repairedText.slice(lastIndex, match.index).trim();
       if (value) segments.push({ type: 'text', content: value });
     }
     segments.push({ type: match[1], content: match[2].trim() });
     lastIndex = match.index! + match[0].length;
   }
 
-  if (lastIndex < text.length) {
-    const value = text.slice(lastIndex).trim();
+  if (lastIndex < repairedText.length) {
+    const value = repairedText.slice(lastIndex).trim();
     if (value) segments.push({ type: 'text', content: value });
   }
 
-  const parsed = segments.length > 0 ? segments : [{ type: 'text', content: text }];
+  const parsed =
+    segments.length > 0 ? segments : [{ type: 'text', content: repairedText }];
   return parsed.reduce<AgentContentSegment[]>((collapsed, segment) => {
     const previous = collapsed[collapsed.length - 1];
     if (
@@ -259,12 +272,12 @@ const ExpandableTag: React.FC<ExpandableTagProps> = ({
       <button
         type="button"
         onClick={() => onToggle(id)}
-        className={`flex items-center gap-1.5 text-[10.5px] font-medium ${color} hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth`}
+        className={`flex min-w-0 max-w-full items-center gap-1.5 text-[10.5px] font-medium ${color} hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth`}
       >
         {showsReadIcon && (
           <FileText data-testid="read-tag-icon" aria-hidden="true" className="w-3 h-3 shrink-0" />
         )}
-        <span className={isActive && isThinkTag ? 'agent-active-gradient' : undefined}>
+        <span className="agent-active-gradient min-w-0 truncate" title={activeLabel}>
           {activeLabel}
         </span>
         <ChevronDown

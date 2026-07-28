@@ -8,6 +8,7 @@ import { AttachmentItem } from '../../types';
 import { parseUploadedFile } from '../../utils/fileParser';
 import { AgentChatMessage, AgentFileOp, AgentMode, AgentReasoningEffort, AgentToolCall, AIModel, WorkspaceFileNode } from '../../types';
 import {
+  collapseAgentFileOps,
   extractMentionedPaths,
   extractPathsFromCheckContent,
   parseAgentResponse,
@@ -855,10 +856,13 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                     );
                   }
                   if (event.done) {
+                    const responseText = event.text || streamText;
+                    const separatedResponse = splitThinkingAndText(responseText);
                     appendThinking(event.thinking);
+                    appendThinking(separatedResponse.thinking);
                     accumulatedThinkingLabel = event.thinkingLabel || accumulatedThinkingLabel;
                     const filteredRequests = runController.filter(
-                      parseAgentResponse(event.text || streamText)
+                      parseAgentResponse(separatedResponse.text)
                     );
                     const finalParsed = filteredRequests.response;
                     finalDisplayText = finalParsed.displayText;
@@ -933,7 +937,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
 
                       conversationHistory = [
                         ...conversationHistory,
-                        { role: 'assistant', content: event.text || streamText },
+                        { role: 'assistant', content: responseText },
                         { role: 'user', content: resultText },
                       ];
                       hasMoreTools = true;
@@ -946,8 +950,26 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                       if (recovery) {
                         conversationHistory = [
                           ...conversationHistory,
-                          { role: 'assistant', content: event.text || streamText },
+                          { role: 'assistant', content: responseText },
                           { role: 'user', content: recovery },
+                        ];
+                        finalDisplayText = '';
+                        hasMoreTools = true;
+                      }
+                    }
+                    if (!hasMoreTools) {
+                      const continuation = runController.consumeIncomplete(
+                        Boolean(separatedResponse.thinking),
+                        finalDisplayText,
+                        finalParsed.ops.length,
+                        turnCount,
+                        maxAgentTurns
+                      );
+                      if (continuation) {
+                        conversationHistory = [
+                          ...conversationHistory,
+                          { role: 'assistant', content: responseText },
+                          { role: 'user', content: continuation },
                         ];
                         finalDisplayText = '';
                         hasMoreTools = true;
@@ -975,10 +997,15 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           const data = await res.json().catch(() => ({}));
           if (!res.ok) throw normalizeAgentProviderError(data?.error, 'The agent failed to respond.');
 
-          const filteredRequests = runController.filter(parseAgentResponse(data.text || ''));
+          const responseText = data.text || '';
+          const separatedResponse = splitThinkingAndText(responseText);
+          const filteredRequests = runController.filter(
+            parseAgentResponse(separatedResponse.text)
+          );
           const parsed = filteredRequests.response;
 
           appendThinking(data.thinking);
+          appendThinking(separatedResponse.thinking);
           if (data.thinkingLabel) accumulatedThinkingLabel = data.thinkingLabel;
 
           const hasToolCalls = parsed.fileRequests.length > 0 || parsed.findRequests.length > 0
@@ -1049,7 +1076,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
 
             conversationHistory = [
               ...conversationHistory,
-              { role: 'assistant', content: data.text || '' },
+              { role: 'assistant', content: responseText },
               { role: 'user', content: resultText },
             ];
             hasMoreTools = true;
@@ -1064,7 +1091,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
               if (recovery) {
                 conversationHistory = [
                   ...conversationHistory,
-                  { role: 'assistant', content: data.text || '' },
+                  { role: 'assistant', content: responseText },
                   { role: 'user', content: recovery },
                 ];
                 finalDisplayText = '';
@@ -1072,6 +1099,24 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
               }
             }
             allOps = [...allOps, ...parsed.ops];
+            if (!hasMoreTools) {
+              const continuation = runController.consumeIncomplete(
+                Boolean(separatedResponse.thinking),
+                finalDisplayText,
+                parsed.ops.length,
+                turnCount,
+                maxAgentTurns
+              );
+              if (continuation) {
+                conversationHistory = [
+                  ...conversationHistory,
+                  { role: 'assistant', content: responseText },
+                  { role: 'user', content: continuation },
+                ];
+                finalDisplayText = '';
+                hasMoreTools = true;
+              }
+            }
           }
         }
       }
@@ -1083,7 +1128,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       );
 
       // Enrich ops with original content and diff info for highlighting
-      const enrichedOps = allOps.map((op) => {
+      const enrichedOps = collapseAgentFileOps(allOps).map((op) => {
         if (op.type !== 'write' || !op.content) return op;
         const existing = files.find((f) => f.path === op.path);
         const original = existing?.content || '';
