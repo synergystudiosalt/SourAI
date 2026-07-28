@@ -22,9 +22,34 @@ const REPLACE_RE = /^@@replace:\s*(.+?)\s*\|\|\|\s*([\s\S]+?)\s*\|\|\|\s*([\s\S]
 const SEARCH_IMPORTS_RE = /^@@search_imports:\s*(.+?)\s*$/gm;
 const RENAME_RE = /^@@rename:\s*(.+?)\s*\|\|\|\s*(.+?)\s*$/gm;
 const TODO_RE = /^@@todo:\s*\[(\w+)\]\s*(.+?)\s*$/gm;
+const INLINE_TOOL_SEQUENCE_RE =
+  /^(@@(?:delete|readfile|findall|listdir|glob|fileinfo|context_store|context_get|context_list|context_clear|replace|search_imports|rename|todo)(?::|\b)[^\r\n]*?)[ \t]+(?=@@(?:delete|readfile|findall|listdir|glob|fileinfo|context_store|context_get|context_list|context_clear|replace|search_imports|rename|todo)(?::|\b))/gim;
+
+function splitInlineToolSequences(raw: string): string {
+  let result = raw;
+  let previous = '';
+  while (result !== previous) {
+    previous = result;
+    result = result.replace(INLINE_TOOL_SEQUENCE_RE, '$1\n');
+  }
+  return result;
+}
 
 function normalizePath(raw: string): string {
   return raw.trim().replace(/^\.\/+/, '').replace(/^\/+/, '');
+}
+
+/** Resolves optional model-added line ranges without accepting guessed paths. */
+export function resolveKnownFileRequest(raw: string, knownPaths: string[]): string | null {
+  const normalized = normalizePath(raw);
+  const withoutRange = normalized
+    .replace(/\s*\|\s*\d+(?:\s*\|\s*\d+)?\s*$/, '')
+    .replace(/:\d+(?::\d+)?\s*$/, '')
+    .trim();
+  return (
+    knownPaths.find((path) => path.toLocaleLowerCase() === withoutRange.toLocaleLowerCase()) ??
+    null
+  );
 }
 
 /** Extract file paths mentioned in check_for_errors content. */
@@ -142,7 +167,10 @@ export function parseAgentResponse(raw: string): ParsedAgentResponse {
 
   // Don't strip <think> or <check_for_errors> tags — they are visible to the user.
   // Only extract file blocks, delete markers, tool requests, and subagent directives.
-  let text = (raw || '');
+  // Providers sometimes put several tool calls on one line. Canonicalise each
+  // marker onto its own line before the anchored parsers run so one path can
+  // never swallow the next command and raw protocol does not leak into chat.
+  let text = splitInlineToolSequences(raw || '');
 
   text = text.replace(FILE_BLOCK_RE, (_match, lang: string, rawPath: string, content: string) => {
     const path = normalizePath(rawPath);

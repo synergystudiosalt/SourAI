@@ -1,6 +1,6 @@
 import React from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { Check, ChevronDown, Loader2, Search, Terminal } from 'lucide-react';
+import { Check, ChevronDown, CircleX, Loader2, Search, Terminal } from 'lucide-react';
 
 import type { AgentToolCall } from '../../types';
 
@@ -15,7 +15,7 @@ export interface ToolCallListProps {
 function toolCallLabel(toolCall: AgentToolCall): string {
   switch (toolCall.type) {
     case 'readfile':
-      return `Read: ${toolCall.path}`;
+      return `${toolCall.found ? 'Read' : 'Missing'}: ${toolCall.path}`;
     case 'findall':
       return `Search: ${toolCall.query}`;
     case 'replace':
@@ -165,15 +165,27 @@ const ToolCallDetails: React.FC<{ toolCall: AgentToolCall }> = ({ toolCall }) =>
 
 export const ToolCallList: React.FC<ToolCallListProps> = ({
   messageId,
-  toolCalls,
+  toolCalls: rawToolCalls,
   isReading,
   openItems,
   onToggle,
 }) => {
+  const seenReadPaths = new Set<string>();
+  const toolCalls = rawToolCalls.filter((call) => {
+    if (call.type !== 'readfile') return true;
+    if (seenReadPaths.has(call.path)) return false;
+    seenReadPaths.add(call.path);
+    return true;
+  });
+
   if (toolCalls.length > 3) {
     const groupId = `${messageId}-tool-activity`;
     const isOpen = openItems.has(groupId);
     const reads = toolCalls.filter((call) => call.type === 'readfile').length;
+    const missing = toolCalls.filter(
+      (call) => call.type === 'readfile' && !call.found
+    ).length;
+    const successfulReads = reads - missing;
     const searches = toolCalls.filter(
       (call) => call.type === 'findall' || call.type === 'search_imports' || call.type === 'glob'
     ).length;
@@ -181,7 +193,8 @@ export const ToolCallList: React.FC<ToolCallListProps> = ({
       (call) => call.type === 'replace' || call.type === 'rename'
     ).length;
     const summary = [
-      reads ? `${reads} file${reads === 1 ? '' : 's'} read` : '',
+      successfulReads ? `${successfulReads} file${successfulReads === 1 ? '' : 's'} read` : '',
+      missing ? `${missing} missing` : '',
       searches ? `${searches} search${searches === 1 ? '' : 'es'}` : '',
       mutations ? `${mutations} edit${mutations === 1 ? '' : 's'}` : '',
     ].filter(Boolean).join(' · ') || `${toolCalls.length} workspace actions`;
@@ -195,6 +208,8 @@ export const ToolCallList: React.FC<ToolCallListProps> = ({
         >
           {isReading ? (
             <Loader2 className="h-3 w-3 animate-spin shrink-0" />
+          ) : missing > 0 && successfulReads === 0 ? (
+            <CircleX className="h-3 w-3 shrink-0 text-red-400" />
           ) : (
             <Check className="h-3 w-3 shrink-0 text-amber-600" />
           )}
@@ -237,13 +252,13 @@ export const ToolCallList: React.FC<ToolCallListProps> = ({
             onClick={() => !isReading && onToggle(itemId)}
             className="flex items-center gap-1.5 text-[10.5px] font-medium text-[#8c887d] dark:text-[#a09c94] hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth"
           >
-            {isReading ? (
+            {isReading && !(toolCall.type === 'readfile' && !toolCall.found) ? (
               <Loader2 className="w-3 h-3 animate-spin shrink-0" />
             ) : toolCall.type === 'readfile' ? (
               toolCall.found ? (
                 <Check className="w-3 h-3 text-amber-600 shrink-0" />
               ) : (
-                <Search className="w-3 h-3 shrink-0" />
+                <CircleX className="w-3 h-3 shrink-0 text-red-400" />
               )
             ) : toolCall.type === 'listdir' || toolCall.type === 'glob' ? (
               <Terminal className="w-3 h-3 shrink-0" />

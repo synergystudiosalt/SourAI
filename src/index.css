@@ -49,6 +49,50 @@
   100% { background-position: -200% 0; }
 }
 
+@keyframes agentTextSweep {
+  0% { background-position: 180% 50%; }
+  100% { background-position: -80% 50%; }
+}
+
+.agent-active-gradient {
+  color: transparent;
+  background-image: linear-gradient(
+    100deg,
+    #77736a 0%,
+    #77736a 32%,
+    #d96b43 45%,
+    #f0b37e 50%,
+    #d96b43 55%,
+    #77736a 68%,
+    #77736a 100%
+  );
+  background-size: 260% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  animation: agentTextSweep 2.15s linear infinite;
+}
+
+.dark .agent-active-gradient {
+  background-image: linear-gradient(
+    100deg,
+    #8f8b83 0%,
+    #8f8b83 32%,
+    #e07a52 45%,
+    #ffd0aa 50%,
+    #e07a52 55%,
+    #8f8b83 68%,
+    #8f8b83 100%
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-active-gradient {
+    animation: none;
+    background: none;
+    color: #d96b43;
+  }
+}
+
 /* Global scrollbar styling to make any remaining scrollbars minimal or hidden */
 ::-webkit-scrollbar {
   width: 0px;

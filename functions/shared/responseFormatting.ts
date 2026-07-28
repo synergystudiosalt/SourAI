@@ -13,8 +13,8 @@ export function splitThinkingAndText(rawText: string): { text: string; thinking:
   }
 
   const thinking = matches.map(m => m[2].trim()).filter(Boolean).join('\n\n');
-  // Preserve think tags in display text so they render in the UI
-  const text = input.trim();
+  // Thinking has its own UI surface; do not duplicate it in the final answer.
+  const text = input.replace(THINK_BLOCK_RE, '').replace(/\n{3,}/g, '\n\n').trim();
   return { text, thinking };
 }
 

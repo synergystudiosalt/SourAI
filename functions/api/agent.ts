@@ -1,5 +1,5 @@
 import { generateText, streamText, resolveModelRoute, getApiKeys } from '../shared/ai';
-import { AGENT_SYSTEM_PROMPT, AGENT_WRITE_MODE_NOTE, AGENT_PLAN_MODE_NOTE, buildAgentContextBlock } from '../shared/systemPrompts';
+import { AGENT_SYSTEM_PROMPT, AGENT_WRITE_MODE_NOTE, AGENT_PLAN_MODE_NOTE, buildAgentContextBlock, buildReasoningEffortInstruction } from '../shared/systemPrompts';
 import { splitThinkingAndText } from '../shared/responseFormatting';
 
 const AGENT_SYSTEM_PROMPT_BASE = AGENT_SYSTEM_PROMPT;
@@ -28,6 +28,7 @@ export const onRequest: PagesFunction = async (context) => {
       projectFiles?: string[];
       mentionedFiles?: { path: string; content: string }[];
       projectMemory?: { key: string; value: string }[];
+      reasoningEffort?: string;
       stream?: boolean;
     };
 
@@ -39,6 +40,7 @@ export const onRequest: PagesFunction = async (context) => {
       projectFiles = [],
       mentionedFiles = [],
       projectMemory = [],
+      reasoningEffort = 'standard',
       stream = false,
     } = body;
 
@@ -70,6 +72,7 @@ export const onRequest: PagesFunction = async (context) => {
     // Build the full prompt with system instruction
     const systemInstruction = [
       AGENT_SYSTEM_PROMPT,
+      buildReasoningEffortInstruction(reasoningEffort),
       mode === 'write' ? AGENT_WRITE_MODE_NOTE : AGENT_PLAN_MODE_NOTE,
       '',
       'File context:',
@@ -108,29 +111,11 @@ export const onRequest: PagesFunction = async (context) => {
             }
             // Send final event with thinking extraction
             const { text, thinking } = splitThinkingAndText(fullText);
-            let thinkingLabel = '';
-            if (thinking) {
-              try {
-                const firstLines = thinking.split('\n').filter(Boolean).slice(0, 3).join('\n');
-                const { generateText: genLabel } = await import('../shared/ai');
-                const labelText = await genLabel({
-                  geminiKeys, groqKeys, cerebrasKeys, mistralKeys,
-                  contents: [{ role: 'user', parts: [{ text: `Based on this thinking process:\n${firstLines}\n\nReturn ONLY a 2-4 word action label.` }] }],
-                  plainMessages: [{ role: 'user', content: `Based on this thinking process:\n${firstLines}\n\nReturn ONLY a 2-4 word action label.` }],
-                  systemInstruction: 'You are a concise label generator. Output ONLY a 2 to 4 word phrase with no quotes or punctuation.',
-                  route,
-                });
-                const generatedLabel = (labelText || '').trim().replace(/['"]/g, '');
-                if (generatedLabel && generatedLabel.split(/\s+/).length <= 5) {
-                  thinkingLabel = generatedLabel;
-                }
-              } catch { /* label generation failed, use default */ }
-            }
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({
               done: true,
-              text: text || "I'm sour.ai, created by Synergy Studios.",
-              thinking: thinking || 'I reviewed the workspace context and prepared an answer.',
-              thinkingLabel: thinkingLabel || 'Reviewing workspace',
+              text,
+              thinking,
+              thinkingLabel: thinking ? 'Reasoning' : '',
             })}\n\n`));
             controller.close();
           } catch (err: any) {
@@ -162,34 +147,11 @@ export const onRequest: PagesFunction = async (context) => {
     })) || '';
 
     const { text, thinking } = splitThinkingAndText(rawText);
-    let thinkingLabel = '';
-    if (thinking) {
-      try {
-        const firstLines = thinking.split('\n').filter(Boolean).slice(0, 3).join('\n');
-        const labelPrompt = `Based on this thinking process:\n${firstLines}\n\nReturn ONLY a 2-4 word action label describing what this reasoning step was doing (e.g., "Planning the fix", "Scanning project files", "Drafting the component"). Do not include quotes, punctuation, or any other text.`;
-        const labelText = await generateText({
-          geminiKeys,
-          groqKeys,
-          cerebrasKeys,
-          mistralKeys,
-          contents: [{ role: 'user', parts: [{ text: labelPrompt }] }],
-          plainMessages: [{ role: 'user', content: labelPrompt }],
-          systemInstruction: 'You are a concise label generator. Output ONLY a 2 to 4 word phrase with no quotes or punctuation.',
-          route,
-        });
-        const generatedLabel = (labelText || '').trim().replace(/['"]/g, '');
-        if (generatedLabel && generatedLabel.split(/\s+/).length <= 5) {
-          thinkingLabel = generatedLabel;
-        }
-      } catch (labelErr) {
-        console.warn('Failed to generate dynamic thinking label for agent:', labelErr);
-      }
-    }
 
     return new Response(JSON.stringify({
-      text: text || "I'm sour.ai, created by Synergy Studios. The AI provider returned no text for this request.",
-      thinking: thinking || 'I reviewed the workspace context and prepared an answer.',
-      thinkingLabel: thinkingLabel || 'Reviewing workspace',
+      text,
+      thinking,
+      thinkingLabel: thinking ? 'Reasoning' : '',
     }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },

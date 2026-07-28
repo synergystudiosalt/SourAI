@@ -36,6 +36,44 @@ function MessageHarness({ message }: { message: AgentChatMessage }) {
 }
 
 describe('AgentMessage', () => {
+  it('keeps provider reasoning in a collapsed Thinking section', () => {
+    render(
+      <MessageHarness
+        message={{
+          id: 'assistant-thinking',
+          role: 'assistant',
+          content: 'The fix is ready.',
+          thinking: 'Inspecting the existing implementation.',
+          createdAt: 1,
+        }}
+      />
+    );
+
+    expect(screen.getByText('The fix is ready.')).toBeInTheDocument();
+    expect(screen.queryByText('Inspecting the existing implementation.')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Thinking/i }));
+    expect(screen.getByText('Inspecting the existing implementation.')).toBeInTheDocument();
+  });
+
+  it('shows a single animated status while a run is active', () => {
+    render(
+      <MessageHarness
+        message={{
+          id: 'assistant-active',
+          role: 'assistant',
+          content: '',
+          thinkingLabel: 'Inspecting workspace',
+          isReadingFiles: true,
+          createdAt: 1,
+        }}
+      />
+    );
+
+    const status = screen.getByRole('status');
+    expect(status).toHaveTextContent('Inspecting workspace');
+    expect(status.querySelector('.agent-active-gradient')).toBeInTheDocument();
+  });
+
   it('renders user messages without agent presentation chrome', () => {
     render(
       <MessageHarness

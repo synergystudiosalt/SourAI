@@ -103,7 +103,7 @@ describe('AgentPanel provider error privacy', () => {
 });
 
 describe('AgentPanel progress gate', () => {
-  it('stops when the model repeats an already completed tool request', async () => {
+  it('recovers once when the model repeats an already completed tool request', async () => {
     const firstTurn = new ReadableStream({
       start(controller) {
         controller.enqueue(
@@ -127,6 +127,12 @@ describe('AgentPanel progress gate', () => {
       )
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ text: '@@readfile: src/a.ts' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ text: 'Inspection complete using the existing result.' }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         })
@@ -159,9 +165,8 @@ describe('AgentPanel progress gate', () => {
     );
     fireEvent.click(screen.getByTitle('Send'));
 
-    expect(
-      await screen.findByText(/stopped the tool loop because the same workspace checks/i)
-    ).toBeInTheDocument();
-    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText('Inspection complete using the existing result.')).toBeInTheDocument();
+    expect(screen.queryByText(/stopped the tool loop/i)).not.toBeInTheDocument();
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(3));
   });
 });

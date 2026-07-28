@@ -81,11 +81,14 @@ test('the browser sends model choice but never an API key', async ({ page }) => 
   const payloads = await mockPagesAgent(page);
   await openWorkspace(page);
 
+  await page.getByTitle('Reasoning: Standard').click();
+  await page.getByRole('button', { name: /UltraCODE/ }).click();
   await requestChange(page);
   await expect(page.getByText('Added release notes.')).toBeVisible();
 
   expect(payloads).toHaveLength(1);
   expect(payloads[0]).toContain('"model":"sour-omni-flash"');
+  expect(payloads[0]).toContain('"reasoningEffort":"ultracode"');
   expect(payloads[0]).not.toMatch(/api[_-]?key|sk-e2e|bearer/i);
   await expect(page.getByLabel(/API key/i)).toHaveCount(0);
 });

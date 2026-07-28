@@ -48,6 +48,24 @@ export const AgentMessage: React.FC<AgentMessageProps> = ({
         <Logo size={12} /> sour.ai Agent
       </div>
 
+      {message.isReadingFiles && (
+        <div role="status" aria-live="polite" className="flex items-center gap-1.5 text-[11px] font-medium">
+          <span className="h-1.5 w-1.5 rounded-full bg-[#d96b43] shadow-[0_0_8px_rgba(217,107,67,0.55)]" />
+          <span className="agent-active-gradient">
+            {message.thinkingLabel || 'Working on your request'}
+          </span>
+        </div>
+      )}
+
+      {message.thinking && (
+        <AgentContent
+          text={`<thinking>${message.thinking}</thinking>`}
+          messageId={`${message.id}-provider-thinking`}
+          openTags={openTags}
+          onToggleTag={onToggleTag}
+        />
+      )}
+
       {message.content && (
         <div
           className={`text-[12px] leading-[1.7] wrap-break-word ${

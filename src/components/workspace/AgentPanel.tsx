@@ -1,17 +1,17 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Plus, ChevronRight, AtSign, Check, Square, Loader2,
-  ArrowLeft, Settings, Mic, MicOff, X, Image as ImageIcon,
+  ArrowLeft, Settings, Mic, MicOff, X, Image as ImageIcon, BrainCircuit,
 } from 'lucide-react';
 import { AttachmentPopover } from '../AttachmentPopover';
 import { AttachmentItem } from '../../types';
 import { parseUploadedFile } from '../../utils/fileParser';
-import { AgentChatMessage, AgentFileOp, AgentMode, AgentToolCall, AIModel, WorkspaceFileNode } from '../../types';
+import { AgentChatMessage, AgentFileOp, AgentMode, AgentReasoningEffort, AgentToolCall, AIModel, WorkspaceFileNode } from '../../types';
 import {
   extractMentionedPaths,
   extractPathsFromCheckContent,
-  filterRepeatedAgentRequests,
   parseAgentResponse,
+  resolveKnownFileRequest,
   summarizeForHistory,
 } from '../../utils/agentProtocol';
 import { customApiManager, type CustomApiConfig } from '../../utils/customApiManager';
@@ -28,6 +28,8 @@ import {
   normalizeProjectMemoryEntry,
   selectProjectMemory,
 } from '../../agent/context/projectMemory';
+import { splitThinkingAndText } from '../../../functions/shared/responseFormatting';
+import { ChatRunController } from '../../agent/runtime/chatRunController';
 
 export { AgentMarkdownImage, MiniMarkdown } from '../agent/MarkdownContent';
 
@@ -94,6 +96,18 @@ const MODEL_LABELS: Record<AIModel, string> = {
 
 const MODEL_OPTIONS: AIModel[] = ['sour-omni-flash', 'sour-intelligence', 'sour-ultra', 'sour-overclock', 'sour-overcode'];
 
+const REASONING_OPTIONS: {
+  id: AgentReasoningEffort;
+  label: string;
+  description: string;
+  maxTurns: number;
+}[] = [
+  { id: 'light', label: 'Light', description: 'Fast answers and small edits', maxTurns: 3 },
+  { id: 'standard', label: 'Standard', description: 'Balanced coding workflow', maxTurns: 6 },
+  { id: 'deep', label: 'Deep', description: 'More analysis and verification', maxTurns: 8 },
+  { id: 'ultracode', label: 'UltraCODE', description: 'Maximum coding rigor', maxTurns: 12 },
+];
+
 export const AgentPanel: React.FC<AgentPanelProps> = ({
   isDarkMode,
   isCollapsed,
@@ -110,10 +124,12 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   const [isSending, setIsSending] = useState(false);
   const [mode, setMode] = useState<AgentMode>('write');
   const [selectedModel, setSelectedModel] = useState<AIModel>('sour-omni-flash');
+  const [reasoningEffort, setReasoningEffort] = useState<AgentReasoningEffort>('standard');
   const [hydratedProjectId, setHydratedProjectId] = useState<string | null>(null);
   const persistenceRef = useRef<ClientPersistence | null>(null);
   const contextRef = useRef<Record<string, string>>({});
   const [showModelPopover, setShowModelPopover] = useState(false);
+  const [showReasoningPopover, setShowReasoningPopover] = useState(false);
   const [showCustomApiModal, setShowCustomApiModal] = useState(false);
   const [customApiConfigs, setCustomApiConfigs] = useState<CustomApiConfig[]>(customApiManager.getConfigs());
   const [isListening, setIsListening] = useState(false);
@@ -149,6 +165,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const modelPopoverRef = useRef<HTMLDivElement>(null);
+  const reasoningPopoverRef = useRef<HTMLDivElement>(null);
   const voiceRecognizerRef = useRef<VoiceRecognizer | null>(null);
   // Messages generated during this mount get a typewriter effect; messages
   // restored from localStorage on load render instantly.
@@ -225,10 +242,11 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     void getClientPersistence()
       .then(async (persistence) => {
         persistenceRef.current = persistence;
-        const [storedMessages, storedMode, storedModel, storedContext] = await Promise.all([
+        const [storedMessages, storedMode, storedModel, storedReasoning, storedContext] = await Promise.all([
           persistence.loadAgentMessages(projectId),
           persistence.settings.getValue<string>('agent.mode'),
           persistence.settings.getValue<string>('agent.model'),
+          persistence.settings.getValue<string>('agent.reasoningEffort'),
           persistence.loadContext(projectId, projectName),
         ]);
         if (cancelled) return;
@@ -237,6 +255,9 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         if (storedMode === 'write' || storedMode === 'plan') setMode(storedMode);
         if (storedModel && MODEL_OPTIONS.includes(storedModel as AIModel)) {
           setSelectedModel(storedModel as AIModel);
+        }
+        if (REASONING_OPTIONS.some((option) => option.id === storedReasoning)) {
+          setReasoningEffort(storedReasoning as AgentReasoningEffort);
         }
         contextRef.current = Object.fromEntries(
           Object.entries(storedContext)
@@ -275,6 +296,11 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   }, [hydratedProjectId, selectedModel]);
 
   useEffect(() => {
+    if (!hydratedProjectId) return;
+    void persistenceRef.current?.settings.set('agent.reasoningEffort', 'agent', reasoningEffort);
+  }, [hydratedProjectId, reasoningEffort]);
+
+  useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, isSending]);
@@ -289,6 +315,20 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     window.addEventListener('mousedown', onPointerDown);
     return () => window.removeEventListener('mousedown', onPointerDown);
   }, [showModelPopover]);
+
+  useEffect(() => {
+    if (!showReasoningPopover) return;
+    const onPointerDown = (event: MouseEvent) => {
+      if (
+        reasoningPopoverRef.current &&
+        !reasoningPopoverRef.current.contains(event.target as Node)
+      ) {
+        setShowReasoningPopover(false);
+      }
+    };
+    window.addEventListener('mousedown', onPointerDown);
+    return () => window.removeEventListener('mousedown', onPointerDown);
+  }, [showReasoningPopover]);
 
   useEffect(() => {
     if (!showAttachmentPopover) return;
@@ -374,14 +414,18 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   ): { toolCalls: AgentToolCall[]; resultText: string } => {
     const toolCalls: AgentToolCall[] = [];
     const parts: string[] = [];
-    for (const p of paths) {
+    const knownFilePaths = files.filter((file) => file.type === 'file').map((file) => file.path);
+    for (const requestedPath of paths) {
+      const p = resolveKnownFileRequest(requestedPath, knownFilePaths) ?? requestedPath;
       const node = files.find((f) => f.path === p);
       if (node && node.content !== undefined) {
         toolCalls.push({ type: 'readfile', path: p, found: true });
         parts.push(`[File read: ${p}]\n\`\`\`\n${node.content.slice(0, 6000)}\n\`\`\``);
       } else {
         toolCalls.push({ type: 'readfile', path: p, found: false });
-        parts.push(`[File not found: ${p}]`);
+        parts.push(
+          `[File not found: ${p}]\nThe runtime did not read anything. Choose an exact path from the supplied Project Files list; do not guess filenames.`
+        );
       }
     }
     return { toolCalls, resultText: parts.join('\n\n') };
@@ -667,8 +711,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     return { toolCalls, ops, resultText: parts.join('\n\n') };
   };
 
-  const MAX_AGENT_TURNS = 8;
-
   const handleSend = async (overrideText?: string) => {
     const text = (overrideText ?? input).trim();
     if (!text || isSending) return;
@@ -702,9 +744,12 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     abortControllerRef.current = controller;
 
     try {
+      const maxAgentTurns =
+        REASONING_OPTIONS.find((option) => option.id === reasoningEffort)?.maxTurns ?? 6;
       const basePayload = {
         model: selectedModel,
         mode,
+        reasoningEffort,
         activeFile: activeFile ? { path: activeFile.path, content: activeFile.content.slice(0, 8000) } : null,
         projectFiles: knownPaths.slice(0, 300),
         mentionedFiles,
@@ -731,7 +776,12 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       let finalDisplayText = '';
       let turnCount = 0;
       let hasMoreTools = true;
-      const seenToolRequests = new Set<string>();
+      const runController = new ChatRunController();
+      const appendThinking = (value: string | undefined) => {
+        const next = value?.trim();
+        if (!next || accumulatedThinking.includes(next)) return;
+        accumulatedThinking = accumulatedThinking ? `${accumulatedThinking}\n\n${next}` : next;
+      };
 
       // Create the message placeholder immediately
       const assistantMsg: AgentChatMessage = {
@@ -750,7 +800,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       freshMessageIdsRef.current.add(msgId);
       setMessages((prev) => [...prev, assistantMsg]);
 
-      while (hasMoreTools && turnCount < MAX_AGENT_TURNS) {
+      while (hasMoreTools && turnCount < maxAgentTurns) {
         turnCount++;
         hasMoreTools = false;
 
@@ -794,25 +844,24 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                 try {
                   if (event.token) {
                     streamText += event.token;
-                    // Update message with live text (truncate think tags for display)
-                    const { displayText: displayPart } = parseAgentResponse(streamText);
+                    const { thinking: liveThinking } = splitThinkingAndText(streamText);
+                    appendThinking(liveThinking);
                     setMessages((prev) =>
                       prev.map((m) =>
                         m.id === msgId
-                          ? { ...m, content: displayPart || streamText }
+                          ? { ...m, content: '', thinking: accumulatedThinking }
                           : m
                       )
                     );
                   }
                   if (event.done) {
-                    accumulatedThinking = event.thinking || accumulatedThinking;
+                    appendThinking(event.thinking);
                     accumulatedThinkingLabel = event.thinkingLabel || accumulatedThinkingLabel;
-                    const filteredRequests = filterRepeatedAgentRequests(
-                      parseAgentResponse(event.text || streamText),
-                      seenToolRequests
+                    const filteredRequests = runController.filter(
+                      parseAgentResponse(event.text || streamText)
                     );
                     const finalParsed = filteredRequests.response;
-                    finalDisplayText = finalParsed.displayText || (finalParsed.ops.length ? '' : "I didn't find anything useful to say - try rephrasing that.");
+                    finalDisplayText = finalParsed.displayText;
                     allOps = [...allOps, ...finalParsed.ops];
 
                     const hasToolCalls = finalParsed.fileRequests.length > 0 || finalParsed.findRequests.length > 0
@@ -823,6 +872,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                     const hasTodoOps = finalParsed.todoItems.length > 0;
 
                     if (hasToolCalls || hasCheckErrors || hasContextOps || hasTodoOps) {
+                      appendThinking(finalParsed.displayText);
+                      finalDisplayText = '';
                       // Resolve all tool types
                       const { toolCalls: readCalls, resultText: readText } = resolveFileRequests(finalParsed.fileRequests);
                       const { toolCalls: findCalls, resultText: findText } = resolveFindRequests(finalParsed.findRequests);
@@ -887,7 +938,20 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                       ];
                       hasMoreTools = true;
                     } else if (filteredRequests.repeatedRequestCount > 0) {
-                      finalDisplayText = `${finalDisplayText}\n\n_I stopped the tool loop because the same workspace checks were requested again. The results above are still available._`.trim();
+                      const recovery = runController.consumeRecovery(
+                        filteredRequests.repeatedRequestCount,
+                        turnCount,
+                        maxAgentTurns
+                      );
+                      if (recovery) {
+                        conversationHistory = [
+                          ...conversationHistory,
+                          { role: 'assistant', content: event.text || streamText },
+                          { role: 'user', content: recovery },
+                        ];
+                        finalDisplayText = '';
+                        hasMoreTools = true;
+                      }
                     }
                   }
                 } catch { /* skip malformed lines */ }
@@ -911,13 +975,10 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           const data = await res.json().catch(() => ({}));
           if (!res.ok) throw normalizeAgentProviderError(data?.error, 'The agent failed to respond.');
 
-          const filteredRequests = filterRepeatedAgentRequests(
-            parseAgentResponse(data.text || ''),
-            seenToolRequests
-          );
+          const filteredRequests = runController.filter(parseAgentResponse(data.text || ''));
           const parsed = filteredRequests.response;
 
-          if (data.thinking) accumulatedThinking = data.thinking;
+          appendThinking(data.thinking);
           if (data.thinkingLabel) accumulatedThinkingLabel = data.thinkingLabel;
 
           const hasToolCalls = parsed.fileRequests.length > 0 || parsed.findRequests.length > 0
@@ -928,6 +989,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           const hasTodoOps = parsed.todoItems.length > 0;
 
           if (hasToolCalls || hasCheckErrors || hasContextOps || hasTodoOps) {
+            appendThinking(parsed.displayText);
+            finalDisplayText = '';
             const { toolCalls: readCalls, resultText: readText } = resolveFileRequests(parsed.fileRequests);
             const { toolCalls: findCalls, resultText: findText } = resolveFindRequests(parsed.findRequests);
             const { toolCalls: listDirCalls, resultText: listDirText } = resolveListDirRequests(parsed.listDirRequests);
@@ -991,18 +1054,33 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
             ];
             hasMoreTools = true;
           } else {
-            finalDisplayText = parsed.displayText || (allOps.length ? '' : "I didn't find anything useful to say - try rephrasing that.");
+            finalDisplayText = parsed.displayText;
             if (filteredRequests.repeatedRequestCount > 0) {
-              finalDisplayText = `${finalDisplayText}\n\n_I stopped the tool loop because the same workspace checks were requested again. The results above are still available._`.trim();
+              const recovery = runController.consumeRecovery(
+                filteredRequests.repeatedRequestCount,
+                turnCount,
+                maxAgentTurns
+              );
+              if (recovery) {
+                conversationHistory = [
+                  ...conversationHistory,
+                  { role: 'assistant', content: data.text || '' },
+                  { role: 'user', content: recovery },
+                ];
+                finalDisplayText = '';
+                hasMoreTools = true;
+              }
             }
             allOps = [...allOps, ...parsed.ops];
           }
         }
       }
 
-      if (hasMoreTools && turnCount >= MAX_AGENT_TURNS) {
-        finalDisplayText = `${finalDisplayText}\n\n_I reached the workspace-tool limit and stopped cleanly. Ask me to continue if another pass is needed._`.trim();
-      }
+      finalDisplayText = runController.finalText(
+        finalDisplayText,
+        allOps.length,
+        hasMoreTools && turnCount >= maxAgentTurns
+      );
 
       // Enrich ops with original content and diff info for highlighting
       const enrichedOps = allOps.map((op) => {
@@ -1215,9 +1293,10 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         ) : (
           messages.map(renderMessage)
         )}
-        {isSending && (
+        {isSending && !messages.some((message) => message.role === 'assistant' && message.isReadingFiles) && (
           <div className="flex items-center gap-2 text-[10px] sm:text-[11px] text-[#8c887d] dark:text-[#a09c94]">
-            <Loader2 className="w-2.5 h-2.5 sm:w-3 sm:h-3 animate-spin" /> Thinking…
+            <Loader2 className="w-2.5 h-2.5 sm:w-3 sm:h-3 animate-spin" />
+            <span className="agent-active-gradient">Starting agent</span>
           </div>
         )}
       </div>
@@ -1324,6 +1403,46 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                   strokeLinecap="round"
                 />
               </svg>
+            </div>
+            <div className="relative" ref={reasoningPopoverRef}>
+              <button
+                type="button"
+                onClick={() => setShowReasoningPopover((visible) => !visible)}
+                title={`Reasoning: ${REASONING_OPTIONS.find((option) => option.id === reasoningEffort)?.label}`}
+                className="flex min-w-[44px] items-center justify-center gap-1 p-1.5 text-[9px] transition-colors hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] sm:h-auto sm:min-w-0 sm:p-0 sm:text-[11px]"
+              >
+                <BrainCircuit className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">
+                  {REASONING_OPTIONS.find((option) => option.id === reasoningEffort)?.label}
+                </span>
+              </button>
+              {showReasoningPopover && (
+                <div className="absolute bottom-full left-0 z-20 mb-2 w-52 border border-[#d8d5c9] bg-white p-1 shadow-lg dark:border-[#333230] dark:bg-[#1e1e1d]">
+                  {REASONING_OPTIONS.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => {
+                        setReasoningEffort(option.id);
+                        setShowReasoningPopover(false);
+                      }}
+                      className={`flex w-full items-start justify-between gap-2 px-2 py-1.5 text-left ${
+                        option.id === reasoningEffort
+                          ? 'bg-[#f4f2eb] text-[#1c1b1a] dark:bg-[#282826] dark:text-[#f0efe6]'
+                          : 'text-[#3d3a33] hover:bg-[#f5f3ec] dark:text-[#dedcd6] dark:hover:bg-[#282826]'
+                      }`}
+                    >
+                      <span>
+                        <span className="block text-[11px] font-medium">{option.label}</span>
+                        <span className="block text-[9px] text-[#8c887d] dark:text-[#8f8b84]">
+                          {option.description}
+                        </span>
+                      </span>
+                      {option.id === reasoningEffort && <Check className="mt-0.5 h-3 w-3" />}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="relative" ref={modelPopoverRef}>
               <button onClick={() => setShowModelPopover((v) => !v)} className="flex items-center justify-center p-1.5 sm:p-0 gap-0.5 sm:gap-1 hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth transition-colors text-[9px] sm:text-[11px] min-w-[44px] sm:min-w-auto h-[44px] sm:h-auto">

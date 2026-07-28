@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import {
   Plus, Folder, ArrowLeft, Save, AlertCircle, CheckCircle2, X, Loader2,
-  Download, WrapText, RefreshCw, Eye, EyeOff, RotateCw,
+  Download, WrapText, RefreshCw, Eye, EyeOff, RotateCw, ExternalLink,
 } from 'lucide-react';
 import JSZip from 'jszip';
 import ReactMarkdown from 'react-markdown';
@@ -110,6 +110,26 @@ export const SandboxedPreviewFrame: React.FC<{
     title={title}
   />
 );
+
+/**
+ * Opens the exact same CSP-restricted preview document in a separate tab.
+ * The delayed revoke gives the new tab time to consume the temporary URL.
+ */
+export function openSafePreviewInNewTab(source: string): void {
+  const blob = new Blob([buildSandboxedPreviewDocument(source)], {
+    type: 'text/html;charset=utf-8',
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
+  link.setAttribute('aria-label', 'Open safe preview in new tab');
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
 
 export function getRenameBlockReason(
   tree: WorkspaceFileNode[],
@@ -935,6 +955,20 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
                       <button onClick={() => setPreviewNonce((n) => n + 1)} title="Refresh preview" className="cursor-pointer hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] blurry-hover">
                         <RotateCw className="w-3 h-3" />
                       </button>
+                      {(previewKind === 'html' || previewKind === 'svg') && (
+                        <button
+                          onClick={() =>
+                            openSafePreviewInNewTab(
+                              previewKind === 'svg' ? htmlEntry.content || '' : previewDoc
+                            )
+                          }
+                          title="Open safe preview in new tab"
+                          aria-label="Open safe preview in new tab"
+                          className="cursor-pointer hover:text-[#1c1b1a] dark:hover:text-[#f0efe6]"
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                        </button>
+                      )}
                       {previewKind === 'html' && (
                         <button
                           onClick={() => {

@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { WorkspaceFileNode } from '../types';
 import {
@@ -7,10 +7,18 @@ import {
   WorkspaceMarkdownImage,
   buildSandboxedPreviewDocument,
   getRenameBlockReason,
+  openSafePreviewInNewTab,
 } from './CodeWorkspace';
 import { stripUntrustedMetaElements } from '../security/previewIsolation';
 
 describe('CodeWorkspace preview security', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+    delete (URL as unknown as Record<string, unknown>).createObjectURL;
+    delete (URL as unknown as Record<string, unknown>).revokeObjectURL;
+  });
+
   it('keeps active HTML and SVG content in a script-disabled opaque sandbox', () => {
     const source = '<svg onload="window.parent.__pwned=true"><script>window.parent.__pwned=true</script></svg>';
     const { container } = render(<SandboxedPreviewFrame source={source} title="safe preview" />);
@@ -71,6 +79,37 @@ describe('CodeWorkspace preview security', () => {
     const image = screen.getByRole('img', { name: 'tracking pixel' });
     expect(image).toHaveAttribute('src', 'https://tracker.example/pixel.png');
     expect(image).toHaveAttribute('referrerpolicy', 'no-referrer');
+  });
+
+  it('opens a CSP-restricted preview in a separate noopener tab', async () => {
+    vi.useFakeTimers();
+    const createObjectURL = vi.fn((_blob: Blob): string => 'blob:safe-preview');
+    const revokeObjectURL = vi.fn((_url: string): void => undefined);
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectURL });
+    let clickedLink: HTMLAnchorElement | null = null;
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(function (this: HTMLAnchorElement) {
+        clickedLink = this;
+      });
+
+    openSafePreviewInNewTab('<script>window.opener.pwned=true</script><p>Preview</p>');
+
+    expect(createObjectURL).toHaveBeenCalledOnce();
+    const blob = createObjectURL.mock.calls[0][0] as Blob;
+    expect(blob.type).toBe('text/html;charset=utf-8');
+    await expect(blob.text()).resolves.toContain("default-src 'none'");
+    expect(click).toHaveBeenCalledOnce();
+    const link = clickedLink as HTMLAnchorElement | null;
+    expect(link).not.toBeNull();
+    if (!link) throw new Error('Preview link was not clicked');
+    expect(link.href).toBe('blob:safe-preview');
+    expect(link.target).toBe('_blank');
+    expect(link.rel).toBe('noopener noreferrer');
+
+    vi.advanceTimersByTime(60_000);
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:safe-preview');
   });
 });
 

@@ -4,6 +4,7 @@ import {
   extractMentionedPaths,
   filterRepeatedAgentRequests,
   parseAgentResponse,
+  resolveKnownFileRequest,
   summarizeForHistory,
 } from './agentProtocol';
 
@@ -47,6 +48,15 @@ describe('parseAgentResponse — current behaviour', () => {
     );
     expect(fileRequests).toEqual(['src/a.ts']);
     expect(findRequests).toEqual(['useState']);
+  });
+
+  it('splits multiple inline tool calls instead of treating them as one filename', () => {
+    const parsed = parseAgentResponse(
+      '@@readfile: game.js @@readfile: style.css\n@@readfile: index.html'
+    );
+
+    expect(parsed.fileRequests).toEqual(['game.js', 'style.css', 'index.html']);
+    expect(parsed.displayText).toBe('');
   });
 
   it('blocks tool requests already executed in an earlier agent turn', () => {
@@ -198,5 +208,18 @@ describe('extractMentionedPaths', () => {
 
   it('ignores an email address that is not a known path', () => {
     expect(extractMentionedPaths('mail me at user@example.com', known)).toEqual([]);
+  });
+});
+
+describe('resolveKnownFileRequest', () => {
+  const known = ['index.html', 'style.css', 'game.js'];
+
+  it('resolves a known path carrying a model-added line range', () => {
+    expect(resolveKnownFileRequest('game.js | 120 | 350', known)).toBe('game.js');
+    expect(resolveKnownFileRequest('style.css:40:12', known)).toBe('style.css');
+  });
+
+  it('never resolves a path that is absent from the workspace', () => {
+    expect(resolveKnownFileRequest('missing.js | 1 | 20', known)).toBeNull();
   });
 });
