@@ -6,6 +6,7 @@ import {
   SandboxedPreviewFrame,
   WorkspaceMarkdownImage,
   buildSandboxedPreviewDocument,
+  dedupeWorkspaceTabs,
   getRenameBlockReason,
   openSafePreviewInNewTab,
 } from './CodeWorkspace';
@@ -110,6 +111,25 @@ describe('CodeWorkspace preview security', () => {
 
     vi.advanceTimersByTime(60_000);
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:safe-preview');
+  });
+});
+
+describe('CodeWorkspace editor tabs', () => {
+  it('keeps one tab per normalized path and preserves active and dirty state', () => {
+    expect(
+      dedupeWorkspaceTabs(
+        [
+          { path: 'game.js', isDirty: false },
+          { path: './game.js', isDirty: true },
+          { path: 'style.css', isDirty: false },
+          { path: 'STYLE.CSS', isDirty: true },
+        ],
+        './game.js'
+      )
+    ).toEqual([
+      { path: './game.js', isDirty: true },
+      { path: 'style.css', isDirty: true },
+    ]);
   });
 });
 

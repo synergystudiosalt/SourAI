@@ -46,6 +46,46 @@ const createProjectId = () =>
     ? crypto.randomUUID()
     : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 
+const workspaceTabKey = (path: string): string =>
+  path
+    .replace(/\\/g, '/')
+    .split('/')
+    .filter((part) => part && part !== '.')
+    .join('/')
+    .normalize('NFC')
+    .toLowerCase();
+
+/**
+ * Enforces the editor invariant that one workspace file owns one tab.
+ * The active spelling wins when aliases collide and dirty state is never lost.
+ */
+export function dedupeWorkspaceTabs(
+  tabs: readonly WorkspaceTab[],
+  activePath = ''
+): WorkspaceTab[] {
+  const deduped: WorkspaceTab[] = [];
+  const indexByPath = new Map<string, number>();
+
+  for (const tab of tabs) {
+    const key = workspaceTabKey(tab.path);
+    if (!key) continue;
+    const existingIndex = indexByPath.get(key);
+    if (existingIndex === undefined) {
+      indexByPath.set(key, deduped.length);
+      deduped.push({ ...tab });
+      continue;
+    }
+
+    const existing = deduped[existingIndex];
+    deduped[existingIndex] = {
+      path: tab.path === activePath ? tab.path : existing.path,
+      isDirty: existing.isDirty || tab.isDirty,
+    };
+  }
+
+  return deduped;
+}
+
 type MarkdownImageProps = React.ImgHTMLAttributes<HTMLImageElement> & { node?: unknown };
 
 function isRemoteImageSource(src: string | undefined): boolean {
@@ -317,7 +357,9 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
       const { nodes, truncated } = await scanDirectoryTree(rootDirHandleRef.current);
       setTree(nodes);
       setTruncatedNotice(truncated);
-      setOpenTabs((prev) => prev.filter((t) => findNode(nodes, t.path)));
+      setOpenTabs((prev) =>
+        dedupeWorkspaceTabs(prev.filter((t) => findNode(nodes, t.path)), activeTabPath)
+      );
       if (activeTabPath && !findNode(nodes, activeTabPath)) setActiveTabPath('');
     } catch (err) {
       console.error('Failed to refresh directory', err);
@@ -338,8 +380,21 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
         isReal: false,
       });
       setTree(saved.tree || []);
-      setOpenTabs(saved.openTabs || []);
-      setActiveTabPath(saved.activeTabPath || '');
+      const restoredActivePath =
+        typeof saved.activeTabPath === 'string' ? saved.activeTabPath : '';
+      const restoredTabs = Array.isArray(saved.openTabs)
+        ? saved.openTabs.filter(
+            (tab: unknown): tab is WorkspaceTab =>
+              Boolean(
+                tab &&
+                  typeof tab === 'object' &&
+                  typeof (tab as WorkspaceTab).path === 'string' &&
+                  typeof (tab as WorkspaceTab).isDirty === 'boolean'
+              )
+          )
+        : [];
+      setOpenTabs(dedupeWorkspaceTabs(restoredTabs, restoredActivePath));
+      setActiveTabPath(restoredActivePath);
     } catch (err) {
       console.error('Failed to restore previous session', err);
     }
@@ -352,7 +407,9 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
   const openFile = async (path: string) => {
     const node = findNode(tree, path);
     if (!node || node.type !== 'file') return;
-    setOpenTabs((prev) => (prev.some((t) => t.path === path) ? prev : [...prev, { path, isDirty: false }]));
+    setOpenTabs((prev) =>
+      dedupeWorkspaceTabs([...prev, { path, isDirty: false }], path)
+    );
     setActiveTabPath(path);
 
     if (!node.isLoaded && rootDirHandleRef.current && !isLikelyBinary(path)) {
@@ -424,7 +481,7 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
   const handleCreateFile = async (parentPath: string, name: string) => {
     const path = generateUniquePath(tree, joinPath(parentPath, name));
     setTree((prev) => upsertFile(prev, path, ''));
-    setOpenTabs((prev) => [...prev, { path, isDirty: false }]);
+    setOpenTabs((prev) => dedupeWorkspaceTabs([...prev, { path, isDirty: false }], path));
     setActiveTabPath(path);
     if (activeProject?.isReal && rootDirHandleRef.current) {
       try {
@@ -465,7 +522,16 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
     const { tree: nextTree, newPath } = renameNode(tree, path, newName.trim());
     setTree(nextTree);
     setOpenTabs((prev) =>
-      prev.map((t) => (isDescendantOrSelf(t.path, path) ? { ...t, path: newPath + t.path.slice(path.length) } : t))
+      dedupeWorkspaceTabs(
+        prev.map((t) =>
+          isDescendantOrSelf(t.path, path)
+            ? { ...t, path: newPath + t.path.slice(path.length) }
+            : t
+        ),
+        isDescendantOrSelf(activeTabPath, path)
+          ? newPath + activeTabPath.slice(path.length)
+          : activeTabPath
+      )
     );
     setActiveTabPath((prev) => (isDescendantOrSelf(prev, path) ? newPath + prev.slice(path.length) : prev));
   };
@@ -634,10 +700,15 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
     if (written.length > 0) {
       setOpenTabs((previous) => {
         const have = new Set(previous.map((tab) => tab.path));
-        return [
-          ...previous,
-          ...written.filter((path) => !have.has(path)).map((path) => ({ path, isDirty: false })),
-        ];
+        return dedupeWorkspaceTabs(
+          [
+            ...previous,
+            ...written
+              .filter((path) => !have.has(path))
+              .map((path) => ({ path, isDirty: false })),
+          ],
+          written[written.length - 1]
+        );
       });
       setActiveTabPath(written[written.length - 1]);
     }
@@ -652,7 +723,7 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
   const handleOpenAgentFile = (path: string) => {
     if (!findNode(tree, path)) return;
     setOpenTabs((previous) =>
-      previous.some((tab) => tab.path === path) ? previous : [...previous, { path, isDirty: false }]
+      dedupeWorkspaceTabs([...previous, { path, isDirty: false }], path)
     );
     setActiveTabPath(path);
   };
@@ -687,12 +758,15 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
     setOpenTabs((current) => {
       const remaining = current.filter((tab) => !deleted.has(tab.path));
       const have = new Set(remaining.map((tab) => tab.path));
-      return [
-        ...remaining,
-        ...writes
-          .filter((op) => !have.has(op.path))
-          .map((op) => ({ path: op.path, isDirty: false })),
-      ];
+      return dedupeWorkspaceTabs(
+        [
+          ...remaining,
+          ...writes
+            .filter((op) => !have.has(op.path))
+            .map((op) => ({ path: op.path, isDirty: false })),
+        ],
+        writes[writes.length - 1]?.path
+      );
     });
     if (writes.length > 0) setActiveTabPath(writes[writes.length - 1].path);
     else if (deleted.has(activeTabPath)) setActiveTabPath('');
