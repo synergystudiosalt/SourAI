@@ -118,12 +118,29 @@
   60% { opacity: 0.45; }
 }
 
+/* Registering the property is what makes the trail move at all: the fill is a
+   gradient colour stop, and background-image is a discrete property, so a
+   plain `transition: background` snaps instead of interpolating. Typed as a
+   <percentage> the variable itself animates and the gradient follows it. */
+@property --effort-percent {
+  syntax: '<percentage>';
+  inherits: true;
+  initial-value: 33%;
+}
+
 .agent-effort-control {
   --effort-percent: 33%;
   position: relative;
   width: 100%;
   height: 20px;
   cursor: pointer;
+  /* One timing drives trail, thumb and star widths, so they stay locked. */
+  transition: --effort-percent 170ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Ultracode keeps the longer, more deliberate glide. */
+.agent-effort-control.is-ultracode {
+  transition: --effort-percent 380ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .agent-effort-track {
@@ -132,7 +149,6 @@
   background: linear-gradient(90deg, rgba(139, 92, 246, 0.28) 0 var(--effort-percent), rgba(120, 116, 107, 0.18) var(--effort-percent) 100%);
   border-radius: 6px;
   overflow: hidden;
-  transition: background 320ms ease;
 }
 
 /* Ultracode: muted slate->violet ramp over a dark base, so the starfield
@@ -219,7 +235,10 @@
   border-radius: 6px;
   background: #f3edff;
   box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.22), 0 2px 7px rgba(0, 0, 0, 0.3);
-  transition: left 380ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 260ms ease;
+  /* `left` is derived from --effort-percent, which is already transitioned on
+     the control. Transitioning it here too would chase a moving value and
+     leave the thumb trailing the fill. */
+  transition: box-shadow 260ms ease;
 }
 
 .agent-effort-control.is-ultracode .agent-effort-thumb {
@@ -244,6 +263,8 @@
     color: #d96b43;
     -webkit-text-fill-color: currentColor;
   }
+  .agent-effort-control,
+  .agent-effort-control.is-ultracode,
   .agent-effort-thumb {
     transition: none;
   }
