@@ -86,6 +86,17 @@ describe('parseAgentResponse — current behaviour', () => {
     ]);
   });
 
+  it('parses multiple context memories without one value swallowing later tools', () => {
+    const parsed = parseAgentResponse(
+      '@@context_store: architecture = React SPA\n@@context_store: testing = Vitest\n@@readfile: src/App.tsx'
+    );
+    expect(parsed.contextStore).toEqual([
+      { key: 'architecture', value: 'React SPA' },
+      { key: 'testing', value: 'Vitest' },
+    ]);
+    expect(parsed.fileRequests).toEqual(['src/App.tsx']);
+  });
+
   it('leaves reasoning tags in the display text', () => {
     const { displayText } = parseAgentResponse('<think>Considering options.</think>Done.');
     expect(displayText).toContain('<think>Considering options.</think>');

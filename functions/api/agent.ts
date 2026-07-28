@@ -27,6 +27,7 @@ export const onRequest: PagesFunction = async (context) => {
       activeFile?: { path: string; content: string } | null;
       projectFiles?: string[];
       mentionedFiles?: { path: string; content: string }[];
+      projectMemory?: { key: string; value: string }[];
       stream?: boolean;
     };
 
@@ -37,6 +38,7 @@ export const onRequest: PagesFunction = async (context) => {
       activeFile,
       projectFiles = [],
       mentionedFiles = [],
+      projectMemory = [],
       stream = false,
     } = body;
 
@@ -50,7 +52,20 @@ export const onRequest: PagesFunction = async (context) => {
     const route = resolveModelRoute(model);
 
     // Build the context block with file information
-    const contextBlock = buildAgentContextBlock(projectFiles, activeFile, mentionedFiles);
+    const safeProjectMemory = Array.isArray(projectMemory)
+      ? projectMemory.slice(0, 32).flatMap((entry) => {
+          if (!entry || typeof entry.key !== 'string' || typeof entry.value !== 'string') return [];
+          const key = entry.key.replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 64);
+          const value = entry.value.replace(/\s+/g, ' ').trim().slice(0, 1200);
+          return key && value ? [{ key, value }] : [];
+        })
+      : [];
+    const contextBlock = buildAgentContextBlock(
+      projectFiles,
+      activeFile,
+      mentionedFiles,
+      safeProjectMemory
+    );
 
     // Build the full prompt with system instruction
     const systemInstruction = [
@@ -60,11 +75,10 @@ export const onRequest: PagesFunction = async (context) => {
       'File context:',
       contextBlock,
       '',
-      'Reasoning format:',
-      '- Use MULTIPLE thinking/reasoning tags throughout your response (one per logical step).',
-      '- Vary the tag names: <think>, <thinking>, <reasoning>, <analysis>, <reflection>, <planning>, <step>.',
-      '- Each tag: 1-2 sentences of reassuring text, plain text only, no markdown.',
-      '- Example: <thinking>Mapping out the component structure...</thinking>Here is the implementation.',
+      'Progress reporting:',
+      '- Keep private chain-of-thought private.',
+      '- If a task is long, use at most one short <thinking> status describing the current action.',
+      '- Never repeat reasoning tags or narrate obvious steps.',
     ].join('\n');
 
     // Prepare message content for Gemini format

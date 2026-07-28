@@ -23,6 +23,11 @@ import PixelBowlIcon from '../PixelBowlIcon';
 import { CustomApiModal } from '../CustomApiModal';
 import { AgentMessage } from '../agent/AgentMessage';
 import { getClientPersistence, type ClientPersistence } from '../../storage/clientPersistence';
+import {
+  MAX_PROJECT_MEMORY_ENTRIES,
+  normalizeProjectMemoryEntry,
+  selectProjectMemory,
+} from '../../agent/context/projectMemory';
 
 export { AgentMarkdownImage, MiniMarkdown } from '../agent/MarkdownContent';
 
@@ -233,7 +238,12 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         if (storedModel && MODEL_OPTIONS.includes(storedModel as AIModel)) {
           setSelectedModel(storedModel as AIModel);
         }
-        contextRef.current = storedContext;
+        contextRef.current = Object.fromEntries(
+          Object.entries(storedContext)
+            .map(([key, value]) => normalizeProjectMemoryEntry(key, value))
+            .filter((entry): entry is { key: string; value: string } => Boolean(entry))
+            .map((entry) => [entry.key, entry.value])
+        );
         setHydratedProjectId(projectId);
       })
       .catch((error) => {
@@ -498,12 +508,30 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   };
 
   /** Resolves @@context_store: key = value — stores context in persistent memory. */
-  const resolveContextStore = (entries: { key: string; value: string }[]): string => {
-    for (const { key, value } of entries) {
-      contextRef.current[key] = value;
-      void persistenceRef.current?.setContext(projectId, key, value);
+  const resolveContextStore = async (
+    entries: { key: string; value: string }[]
+  ): Promise<string> => {
+    const stored: string[] = [];
+    const refused: string[] = [];
+    for (const candidate of entries) {
+      const entry = normalizeProjectMemoryEntry(candidate.key, candidate.value);
+      if (!entry) {
+        refused.push(candidate.key);
+        continue;
+      }
+      const isNew = contextRef.current[entry.key] === undefined;
+      if (isNew && Object.keys(contextRef.current).length >= MAX_PROJECT_MEMORY_ENTRIES) {
+        refused.push(entry.key);
+        continue;
+      }
+      await persistenceRef.current?.setContext(projectId, entry.key, entry.value);
+      contextRef.current[entry.key] = entry.value;
+      stored.push(entry.key);
     }
-    return entries.map(({ key }) => `[Context stored: "${key}"]`).join('\n');
+    return [
+      ...stored.map((key) => `[Context stored: "${key}"]`),
+      ...refused.map((key) => `[Context not stored: "${key}" — invalid or memory is full]`),
+    ].join('\n');
   };
 
   /** Resolves @@context_get: key — retrieves stored context. */
@@ -527,10 +555,10 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   };
 
   /** Resolves @@context_clear: key — removes a context entry. */
-  const resolveContextClear = (keys: string[]): string => {
+  const resolveContextClear = async (keys: string[]): Promise<string> => {
     for (const k of keys) {
       delete contextRef.current[k];
-      void persistenceRef.current?.removeContext(projectId, k);
+      await persistenceRef.current?.removeContext(projectId, k);
     }
     return keys.map(k => `[Context cleared: "${k}"]`).join('\n');
   };
@@ -680,6 +708,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         activeFile: activeFile ? { path: activeFile.path, content: activeFile.content.slice(0, 8000) } : null,
         projectFiles: knownPaths.slice(0, 300),
         mentionedFiles,
+        projectMemory: selectProjectMemory(contextRef.current, text),
       };
 
       // ── Agent loop: send prompt, resolve tools, repeat until no more tool calls ──
@@ -820,10 +849,10 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
 
                       // Resolve context operations
                       const contextResultParts: string[] = [];
-                      if (finalParsed.contextStore.length > 0) contextResultParts.push(resolveContextStore(finalParsed.contextStore));
+                      if (finalParsed.contextStore.length > 0) contextResultParts.push(await resolveContextStore(finalParsed.contextStore));
                       if (finalParsed.contextGet.length > 0) contextResultParts.push(resolveContextGet(finalParsed.contextGet));
                       if (finalParsed.contextList) contextResultParts.push(resolveContextList());
-                      if (finalParsed.contextClear.length > 0) contextResultParts.push(resolveContextClear(finalParsed.contextClear));
+                      if (finalParsed.contextClear.length > 0) contextResultParts.push(await resolveContextClear(finalParsed.contextClear));
 
                       // Resolve todo operations
                       const todoResultText = finalParsed.todoItems.length > 0 ? resolveTodo(finalParsed.todoItems) : '';
@@ -924,10 +953,10 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
 
             // Resolve context operations
             const contextResultParts: string[] = [];
-            if (parsed.contextStore.length > 0) contextResultParts.push(resolveContextStore(parsed.contextStore));
+            if (parsed.contextStore.length > 0) contextResultParts.push(await resolveContextStore(parsed.contextStore));
             if (parsed.contextGet.length > 0) contextResultParts.push(resolveContextGet(parsed.contextGet));
             if (parsed.contextList) contextResultParts.push(resolveContextList());
-            if (parsed.contextClear.length > 0) contextResultParts.push(resolveContextClear(parsed.contextClear));
+            if (parsed.contextClear.length > 0) contextResultParts.push(await resolveContextClear(parsed.contextClear));
 
             // Resolve todo operations
             const todoResultText = parsed.todoItems.length > 0 ? resolveTodo(parsed.todoItems) : '';

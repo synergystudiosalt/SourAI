@@ -14,7 +14,7 @@ const LISTDIR_RE = /^@@listdir:\s*(.+?)\s*$/gm;
 const GLOB_RE = /^@@glob:\s*(.+?)\s*$/gm;
 const FILEINFO_RE = /^@@fileinfo:\s*(.+?)\s*$/gm;
 const CHECK_ERRORS_RE = /<check_for_errors>([\s\S]*?)<\/check_for_errors>/gi;
-const CONTEXT_STORE_RE = /^@@context_store:\s*(.+?)\s*=\s*([\s\S]+)$/gm;
+const CONTEXT_STORE_RE = /^@@context_store:\s*([^=\r\n]+?)\s*=\s*(.+?)\s*$/gm;
 const CONTEXT_GET_RE = /^@@context_get:\s*(.+?)\s*$/gm;
 const CONTEXT_LIST_RE = /^@@context_list\s*$/gm;
 const CONTEXT_CLEAR_RE = /^@@context_clear:\s*(.+?)\s*$/gm;
