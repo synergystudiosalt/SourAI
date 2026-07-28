@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Plus, ChevronRight, AtSign, Check, Square, Loader2,
-  ArrowLeft, Settings, Mic, MicOff, X, Image as ImageIcon, BrainCircuit,
+  ArrowLeft, Settings, Mic, MicOff, X, Image as ImageIcon, Brain, CircleHelp,
 } from 'lucide-react';
 import { AttachmentPopover } from '../AttachmentPopover';
 import { AttachmentItem } from '../../types';
@@ -1411,36 +1411,43 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                 title={`Reasoning: ${REASONING_OPTIONS.find((option) => option.id === reasoningEffort)?.label}`}
                 className="flex min-w-[44px] items-center justify-center gap-1 p-1.5 text-[9px] transition-colors hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] sm:h-auto sm:min-w-0 sm:p-0 sm:text-[11px]"
               >
-                <BrainCircuit className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">
-                  {REASONING_OPTIONS.find((option) => option.id === reasoningEffort)?.label}
-                </span>
+                <Brain className="h-3.5 w-3.5" />
               </button>
               {showReasoningPopover && (
-                <div className="absolute bottom-full left-0 z-20 mb-2 w-52 border border-[#d8d5c9] bg-white p-1 shadow-lg dark:border-[#333230] dark:bg-[#1e1e1d]">
-                  {REASONING_OPTIONS.map((option) => (
-                    <button
-                      key={option.id}
-                      type="button"
-                      onClick={() => {
-                        setReasoningEffort(option.id);
-                        setShowReasoningPopover(false);
-                      }}
-                      className={`flex w-full items-start justify-between gap-2 px-2 py-1.5 text-left ${
-                        option.id === reasoningEffort
-                          ? 'bg-[#f4f2eb] text-[#1c1b1a] dark:bg-[#282826] dark:text-[#f0efe6]'
-                          : 'text-[#3d3a33] hover:bg-[#f5f3ec] dark:text-[#dedcd6] dark:hover:bg-[#282826]'
-                      }`}
-                    >
-                      <span>
-                        <span className="block text-[11px] font-medium">{option.label}</span>
-                        <span className="block text-[9px] text-[#8c887d] dark:text-[#8f8b84]">
-                          {option.description}
-                        </span>
+                <div className="absolute bottom-full left-0 z-20 mb-2 w-56 rounded-xl border border-[#d8d5c9] bg-[#f5f3ee] p-3 shadow-xl dark:border-[#3a3937] dark:bg-[#242423]">
+                  <div className="mb-3 flex items-center justify-between text-[11px] font-medium text-[#656158] dark:text-[#aaa69e]">
+                    <span>
+                      Effort{' '}
+                      <span className="font-semibold text-[#8b5cf6]">
+                        {REASONING_OPTIONS.find((option) => option.id === reasoningEffort)?.label}
                       </span>
-                      {option.id === reasoningEffort && <Check className="mt-0.5 h-3 w-3" />}
-                    </button>
-                  ))}
+                    </span>
+                    <CircleHelp className="h-3.5 w-3.5 text-[#8c887d]" />
+                  </div>
+                  <div className="mb-1.5 flex items-center justify-between text-[10px] font-semibold text-[#8c887d] dark:text-[#aaa69e]">
+                    <span>Faster</span>
+                    <span>Smarter</span>
+                  </div>
+                  <input
+                    aria-label="Reasoning effort"
+                    type="range"
+                    min={0}
+                    max={REASONING_OPTIONS.length - 1}
+                    step={1}
+                    value={REASONING_OPTIONS.findIndex((option) => option.id === reasoningEffort)}
+                    onChange={(event) => {
+                      const option = REASONING_OPTIONS[Number(event.target.value)];
+                      if (option) setReasoningEffort(option.id);
+                    }}
+                    className="agent-effort-slider"
+                    style={{
+                      '--effort-percent': `${
+                        (REASONING_OPTIONS.findIndex((option) => option.id === reasoningEffort) /
+                          (REASONING_OPTIONS.length - 1)) *
+                        100
+                      }%`,
+                    } as React.CSSProperties}
+                  />
                 </div>
               )}
             </div>

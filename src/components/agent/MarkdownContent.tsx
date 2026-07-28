@@ -3,9 +3,9 @@ import ReactMarkdown from 'react-markdown';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   BarChart3,
+  Brain,
   CheckCircle,
   ChevronDown,
-  Lightbulb,
   Package,
   Settings,
   Tag,
@@ -145,7 +145,7 @@ const KNOWN_TAGS: Record<
       tag,
       {
         label: 'Thinking',
-        Icon: Lightbulb,
+        Icon: Brain,
         color: 'text-[#97948A] dark:text-[#97948A]',
         bg: '',
         border: '',
@@ -244,6 +244,7 @@ interface ExpandableTagProps {
   id: string;
   openSet: Set<string>;
   onToggle: (id: string) => void;
+  isActive?: boolean;
 }
 
 const ExpandableTag: React.FC<ExpandableTagProps> = ({
@@ -252,10 +253,15 @@ const ExpandableTag: React.FC<ExpandableTagProps> = ({
   id,
   openSet,
   onToggle,
+  isActive = false,
 }) => {
   const { label, Icon, color, border } = getTagMeta(tagType);
   const isOpen = openSet.has(id);
   const isThinkTag = THINK_TAGS.includes(tagType);
+  const activeLabel =
+    isActive && isThinkTag
+      ? content.split(/\n/).find(Boolean)?.trim().slice(0, 80) || 'Thinking'
+      : label;
   const steps = content
     .split(/(?<=[.!?])\s+|\n+/)
     .map((step) => step.trim())
@@ -270,7 +276,9 @@ const ExpandableTag: React.FC<ExpandableTagProps> = ({
         className={`flex items-center gap-1.5 text-[10.5px] font-medium ${color} hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth`}
       >
         <Icon className="w-3 h-3 shrink-0" />
-        <span>{label}</span>
+        <span className={isActive && isThinkTag ? 'agent-active-gradient' : undefined}>
+          {activeLabel}
+        </span>
         <ChevronDown
           className={`w-3 h-3 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
         />
@@ -303,6 +311,7 @@ export interface AgentContentProps {
   messageId: string;
   openTags: Set<string>;
   onToggleTag: (id: string) => void;
+  isActive?: boolean;
 }
 
 /** Renders agent content with expandable XML tag sections. */
@@ -311,6 +320,7 @@ export const AgentContent: React.FC<AgentContentProps> = ({
   messageId,
   openTags,
   onToggleTag,
+  isActive = false,
 }) => {
   const segments = parseAgentContent(text);
   return (
@@ -328,6 +338,7 @@ export const AgentContent: React.FC<AgentContentProps> = ({
             id={segmentId}
             openSet={openTags}
             onToggle={onToggleTag}
+            isActive={isActive}
           />
         );
       })}

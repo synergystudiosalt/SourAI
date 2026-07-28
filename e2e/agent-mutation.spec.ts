@@ -82,7 +82,10 @@ test('the browser sends model choice but never an API key', async ({ page }) => 
   await openWorkspace(page);
 
   await page.getByTitle('Reasoning: Standard').click();
-  await page.getByRole('button', { name: /UltraCODE/ }).click();
+  await expect(page.getByText('Faster')).toBeVisible();
+  await expect(page.getByText('Smarter')).toBeVisible();
+  await page.getByLabel('Reasoning effort').fill('3');
+  await expect(page.getByLabel('Reasoning effort')).toHaveValue('3');
   await requestChange(page);
   await expect(page.getByText('Added release notes.')).toBeVisible();
 
