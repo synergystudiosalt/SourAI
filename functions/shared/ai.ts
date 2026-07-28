@@ -65,6 +65,108 @@ export interface GenerationTuning {
  */
 export type ReasoningControl = 'openai_effort' | 'gemini_thinking' | null;
 
+// ─── Failover ──────────────────────────────────────────────────────────────
+
+/** Rate limits and transient upstream faults deserve another key. */
+const RETRYABLE_STATUSES = new Set([408, 409, 425, 429, 500, 502, 503, 504]);
+/** A rejected or exhausted key — a different one may well work. */
+const KEY_SPECIFIC_STATUSES = new Set([401, 403]);
+
+export class ProviderHttpError extends Error {
+  constructor(
+    readonly status: number,
+    readonly body: string,
+    readonly retryAfterMs?: number
+  ) {
+    super(`HTTP ${status}: ${body.slice(0, 300)}`);
+    this.name = 'ProviderHttpError';
+  }
+
+  get retryable(): boolean {
+    return RETRYABLE_STATUSES.has(this.status) || KEY_SPECIFIC_STATUSES.has(this.status);
+  }
+}
+
+export function parseRetryAfter(header: string | null): number | undefined {
+  if (!header) return undefined;
+  const seconds = Number(header);
+  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
+  const at = Date.parse(header);
+  return Number.isNaN(at) ? undefined : Math.max(0, at - Date.now());
+}
+
+async function httpError(res: Response): Promise<ProviderHttpError> {
+  const body = await res.text().catch(() => '');
+  return new ProviderHttpError(res.status, body, parseRetryAfter(res.headers.get('retry-after')));
+}
+
+/** Network faults surface as TypeError rather than a status; those retry too. */
+export function isRetryableError(err: unknown): boolean {
+  return err instanceof ProviderHttpError ? err.retryable : true;
+}
+
+/** Waiting stalls the user's response, so cap it hard and prefer rotating keys. */
+const MAX_BACKOFF_MS = 4000;
+/** How many times to cycle the whole key list before giving up. */
+const FAILOVER_ROUNDS = 2;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Only pauses once every key has been tried this round — switching keys is
+ * instant and is the whole point of holding several.
+ */
+async function pauseBeforeRetry(err: unknown, roundComplete: boolean): Promise<void> {
+  if (!roundComplete) return;
+  const suggested = err instanceof ProviderHttpError ? err.retryAfterMs : undefined;
+  await sleep(Math.min(suggested ?? 700, MAX_BACKOFF_MS));
+}
+
+const CONTINUATION_INSTRUCTION =
+  'Your previous reply was cut off mid-sentence by a provider rate limit. This is exactly what you had already sent to the user:';
+const CONTINUATION_RULES =
+  'Continue from precisely where it stopped. Do not repeat any of it, do not restate the question, and do not apologise — emit only the remaining output, so the two halves join seamlessly.';
+
+/**
+ * Rebuilds the request so a stream cut off by a rate limit can be *finished*
+ * on another key instead of restarting. Restarting would re-emit text the
+ * client has already appended, so the user would see it twice.
+ *
+ * Sent as a user turn rather than an assistant prefill because a trailing
+ * assistant message is not accepted by every provider.
+ */
+export function withContinuation(
+  messages: { role: string; content: string }[],
+  partial: string
+): { role: string; content: string }[] {
+  return [
+    ...messages,
+    { role: 'user', content: `${CONTINUATION_INSTRUCTION}\n\n${partial}\n\n${CONTINUATION_RULES}` },
+  ];
+}
+
+export function withGeminiContinuation(contents: any, partial: string): any {
+  const base = Array.isArray(contents) ? contents : [];
+  return [
+    ...base,
+    {
+      role: 'user',
+      parts: [{ text: `${CONTINUATION_INSTRUCTION}\n\n${partial}\n\n${CONTINUATION_RULES}` }],
+    },
+  ];
+}
+
+/** Providers report mid-stream faults as an error object inside the SSE body. */
+function streamPayloadError(parsed: any): ProviderHttpError | null {
+  const error = parsed?.error;
+  if (!error) return null;
+  const status = Number(error.status ?? error.code);
+  return new ProviderHttpError(
+    Number.isFinite(status) && status >= 400 ? status : 503,
+    typeof error.message === 'string' ? error.message : JSON.stringify(error)
+  );
+}
+
 function buildGeminiGenerationConfig(
   tuning: GenerationTuning | undefined,
   reasoning: ReasoningControl
@@ -87,7 +189,8 @@ export async function generateWithGemini(
 ): Promise<string> {
   if (keys.length === 0) throw new Error('No Gemini API keys configured');
   let lastErr: unknown;
-  for (let attempt = 0; attempt < keys.length; attempt++) {
+  const attempts = keys.length * FAILOVER_ROUNDS;
+  for (let attempt = 0; attempt < attempts; attempt++) {
     const key = takeGeminiKey(keys)!;
     try {
       const response = await fetch(
@@ -102,10 +205,8 @@ export async function generateWithGemini(
           }),
         }
       );
+      if (!response.ok) throw await httpError(response);
       const data: any = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(`Gemini HTTP ${response.status}: ${data?.error?.message || 'Request failed'}`);
-      }
       const text = data?.candidates?.[0]?.content?.parts
         ?.map((part: any) => part?.text || '')
         .join('')
@@ -114,7 +215,9 @@ export async function generateWithGemini(
       return text;
     } catch (err: any) {
       lastErr = err;
-      console.warn(`Gemini key #${attempt + 1}/${keys.length} failed on ${model}:`, err?.message || err);
+      if (!isRetryableError(err)) throw err;
+      console.warn(`Gemini attempt ${attempt + 1}/${attempts} failed on ${model}:`, err?.message || err);
+      await pauseBeforeRetry(err, (attempt + 1) % keys.length === 0);
     }
   }
   throw lastErr instanceof Error ? lastErr : new Error('All Gemini API keys failed');
@@ -187,19 +290,19 @@ async function generateWithOpenAICompatible(
   if (keys.length === 0) throw new Error(`No API keys configured for ${baseUrl}`);
   const body = buildOpenAICompatibleBody(model, messages, systemInstruction, tuning, reasoning);
   let lastErr: unknown;
-  for (let attempt = 0; attempt < keys.length; attempt++) {
+  const attempts = keys.length * FAILOVER_ROUNDS;
+  for (let attempt = 0; attempt < attempts; attempt++) {
     const key = takeKey(keys)!;
     try {
       const res = await postChatCompletion(baseUrl, key, body);
-      if (!res.ok) {
-        const errText = await res.text().catch(() => '');
-        throw new Error(`HTTP ${res.status}: ${errText.slice(0, 300)}`);
-      }
+      if (!res.ok) throw await httpError(res);
       const data: any = await res.json();
       return data?.choices?.[0]?.message?.content || '';
     } catch (err: any) {
       lastErr = err;
-      console.warn(`Attempt ${attempt + 1}/${keys.length} failed for ${model} at ${baseUrl}:`, err?.message || err);
+      if (!isRetryableError(err)) throw err;
+      console.warn(`Attempt ${attempt + 1}/${attempts} failed for ${model} at ${baseUrl}:`, err?.message || err);
+      await pauseBeforeRetry(err, (attempt + 1) % keys.length === 0);
     }
   }
   throw lastErr instanceof Error ? lastErr : new Error(`All API keys failed for ${baseUrl}`);
@@ -324,16 +427,26 @@ async function* streamWithOpenAICompatible(
   reasoning: ReasoningControl = null
 ): AsyncGenerator<string> {
   if (keys.length === 0) throw new Error(`No API keys configured for ${baseUrl}`);
-  const body = buildOpenAICompatibleBody(model, messages, systemInstruction, tuning, reasoning, { stream: true });
+  // Everything already handed to the caller. On a mid-stream rate limit we ask
+  // the next key to continue from here rather than restarting, because the
+  // client appends tokens and would otherwise render the opening twice.
+  let emitted = '';
   let lastErr: unknown;
-  for (let attempt = 0; attempt < keys.length; attempt++) {
+  const attempts = keys.length * FAILOVER_ROUNDS;
+
+  for (let attempt = 0; attempt < attempts; attempt++) {
     const key = takeKey(keys)!;
+    const body = buildOpenAICompatibleBody(
+      model,
+      emitted ? withContinuation(messages, emitted) : messages,
+      systemInstruction,
+      tuning,
+      reasoning,
+      { stream: true }
+    );
     try {
       const res = await postChatCompletion(baseUrl, key, body);
-      if (!res.ok) {
-        const errText = await res.text().catch(() => '');
-        throw new Error(`HTTP ${res.status}: ${errText.slice(0, 300)}`);
-      }
+      if (!res.ok) throw await httpError(res);
       const reader = res.body?.getReader();
       if (!reader) throw new Error('No response body');
       const decoder = new TextDecoder();
@@ -349,17 +462,31 @@ async function* streamWithOpenAICompatible(
           if (!trimmed || !trimmed.startsWith('data: ')) continue;
           const data = trimmed.slice(6);
           if (data === '[DONE]') return;
+          let parsed: any;
           try {
-            const parsed = JSON.parse(data);
-            const token = parsed?.choices?.[0]?.delta?.content;
-            if (token) yield token;
-          } catch { /* skip malformed lines */ }
+            parsed = JSON.parse(data);
+          } catch {
+            continue; // skip malformed lines
+          }
+          const payloadError = streamPayloadError(parsed);
+          if (payloadError) throw payloadError;
+          const token = parsed?.choices?.[0]?.delta?.content;
+          if (token) {
+            emitted += token;
+            yield token;
+          }
         }
       }
       return;
     } catch (err: any) {
       lastErr = err;
-      console.warn(`Stream attempt ${attempt + 1}/${keys.length} failed for ${model} at ${baseUrl}:`, err?.message || err);
+      if (!isRetryableError(err)) throw err;
+      const stage = emitted ? `after ${emitted.length} chars — continuing` : 'before any output';
+      console.warn(
+        `Stream attempt ${attempt + 1}/${attempts} failed for ${model} at ${baseUrl} (${stage}):`,
+        err?.message || err
+      );
+      await pauseBeforeRetry(err, (attempt + 1) % keys.length === 0);
     }
   }
   throw lastErr instanceof Error ? lastErr : new Error(`All API keys failed for ${baseUrl}`);
@@ -374,8 +501,11 @@ async function* streamWithGemini(
   reasoning: ReasoningControl = null
 ): AsyncGenerator<string> {
   if (keys.length === 0) throw new Error('No Gemini API keys configured');
+  let emitted = '';
   let lastErr: unknown;
-  for (let attempt = 0; attempt < keys.length; attempt++) {
+  const attempts = keys.length * FAILOVER_ROUNDS;
+
+  for (let attempt = 0; attempt < attempts; attempt++) {
     const key = takeGeminiKey(keys)!;
     try {
       const response = await fetch(
@@ -384,16 +514,13 @@ async function* streamWithGemini(
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            contents,
+            contents: emitted ? withGeminiContinuation(contents, emitted) : contents,
             systemInstruction: { parts: [{ text: systemInstruction }] },
             generationConfig: buildGeminiGenerationConfig(tuning, reasoning),
           }),
         }
       );
-      if (!response.ok) {
-        const data: any = await response.json().catch(() => ({}));
-        throw new Error(`Gemini HTTP ${response.status}: ${data?.error?.message || 'Request failed'}`);
-      }
+      if (!response.ok) throw await httpError(response);
       const reader = response.body?.getReader();
       if (!reader) throw new Error('No response body');
       const decoder = new TextDecoder();
@@ -407,17 +534,31 @@ async function* streamWithGemini(
         for (const line of lines) {
           const trimmed = line.trim();
           if (!trimmed || !trimmed.startsWith('data: ')) continue;
+          let parsed: any;
           try {
-            const parsed = JSON.parse(trimmed.slice(6));
-            const token = parsed?.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (token) yield token;
-          } catch { /* skip malformed lines */ }
+            parsed = JSON.parse(trimmed.slice(6));
+          } catch {
+            continue; // skip malformed lines
+          }
+          const payloadError = streamPayloadError(parsed);
+          if (payloadError) throw payloadError;
+          const token = parsed?.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (token) {
+            emitted += token;
+            yield token;
+          }
         }
       }
       return;
     } catch (err: any) {
       lastErr = err;
-      console.warn(`Gemini stream key #${attempt + 1}/${keys.length} failed on ${model}:`, err?.message || err);
+      if (!isRetryableError(err)) throw err;
+      const stage = emitted ? `after ${emitted.length} chars — continuing` : 'before any output';
+      console.warn(
+        `Gemini stream attempt ${attempt + 1}/${attempts} failed on ${model} (${stage}):`,
+        err?.message || err
+      );
+      await pauseBeforeRetry(err, (attempt + 1) % keys.length === 0);
     }
   }
   throw lastErr instanceof Error ? lastErr : new Error('All Gemini API keys failed');
