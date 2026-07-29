@@ -1027,6 +1027,13 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           );
           const parsed = filteredRequests.response;
           hadIncompleteFileBlock ||= parsed.incompleteFileBlock;
+          // Recorded before the tool-request branch, not inside one arm of it.
+          // A turn that both edits files and asks for a check is ordinary, and
+          // recording the edits only on the no-tools path silently discarded
+          // them — the run then ended with nothing to apply and no answer.
+          // The streaming branch has always appended unconditionally, which is
+          // why only follow-up turns lost their edits.
+          allOps = [...allOps, ...parsed.ops];
 
           appendThinking(data.thinking);
           appendThinking(separatedResponse.thinking);
@@ -1122,7 +1129,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                 hasMoreTools = true;
               }
             }
-            allOps = [...allOps, ...parsed.ops];
             if (!hasMoreTools) {
               const continuation = runController.consumeIncomplete(
                 Boolean(separatedResponse.thinking),
