@@ -982,7 +982,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                     }
                     if (!hasMoreTools) {
                       const continuation = runController.consumeIncomplete(
-                        Boolean(separatedResponse.thinking),
+                        Boolean(event.thinking || separatedResponse.thinking),
                         finalDisplayText,
                         finalParsed.ops.length,
                         turnCount,
@@ -1131,7 +1131,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
             }
             if (!hasMoreTools) {
               const continuation = runController.consumeIncomplete(
-                Boolean(separatedResponse.thinking),
+                Boolean(data.thinking || separatedResponse.thinking),
                 finalDisplayText,
                 parsed.ops.length,
                 turnCount,

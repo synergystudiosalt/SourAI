@@ -169,4 +169,87 @@ describe('AgentPanel progress gate', () => {
     expect(screen.queryByText(/stopped the tool loop/i)).not.toBeInTheDocument();
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(3));
   });
+
+  it('continues after separately returned reasoning and preserves the eventual file operation', async () => {
+    const firstTurn = new ReadableStream({
+      start(controller) {
+        controller.enqueue(
+          new TextEncoder().encode(
+            `data: ${JSON.stringify({
+              done: true,
+              text: '@@readfile: src/a.ts',
+              thinkingLabel: 'Inspecting files',
+            })}\n\n`
+          )
+        );
+        controller.close();
+      },
+    });
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        new Response(firstTurn, {
+          status: 200,
+          headers: { 'Content-Type': 'text/event-stream' },
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ text: '@@readfile: src/a.ts' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ text: '', thinking: 'Preparing the final edit.' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            text: '```ts path="src/a.ts"\nexport const value = 2;\n```',
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      );
+
+    const onApplyOps = vi.fn().mockResolvedValue(true);
+    render(
+      <AgentPanel
+        isDarkMode={false}
+        isCollapsed={false}
+        onToggleCollapse={vi.fn()}
+        projectId="reasoning-continuation-test"
+        projectName="Reasoning continuation test"
+        files={[
+          {
+            id: 'src/a.ts',
+            name: 'a.ts',
+            path: 'src/a.ts',
+            type: 'file',
+            content: 'export const value = 1;',
+          },
+        ]}
+        activeFile={null}
+        onApplyOps={onApplyOps}
+        onOpenFile={vi.fn()}
+      />
+    );
+    fireEvent.change(
+      screen.getByPlaceholderText('Message Agent, @ for context, / for commands'),
+      { target: { value: 'fix the implementation' } }
+    );
+    fireEvent.click(screen.getByTitle('Send'));
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Apply changes' }));
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(4));
+    expect(onApplyOps).toHaveBeenCalledWith([
+      expect.objectContaining({
+        type: 'write',
+        path: 'src/a.ts',
+        content: 'export const value = 2;',
+      }),
+    ]);
+    expect(screen.queryByText(/returned no final answer/i)).not.toBeInTheDocument();
+  });
 });
