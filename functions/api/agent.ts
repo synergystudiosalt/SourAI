@@ -66,7 +66,12 @@ export const onRequest: PagesFunction = async (context) => {
       // lets each provider use its own model maximum, which is what this did
       // before effort profiles existed and is enough for a full file.
       openAiEffort: effort.openAiEffort,
-      thinkingBudget: effort.thinkingBudget,
+      // Deliberately no thinkingBudget. Gemini charges thinking against the
+      // output budget, so reserving a large allowance left nothing for the
+      // answer: measured against one payload, Light (budget 0) returned 162
+      // characters while Standard, Deep and UltraCODE returned 0, 18 and 0.
+      // An empty reply is indistinguishable downstream from a model that had
+      // nothing to say, which surfaced as "no final answer".
     };
 
     // Build the context block with file information

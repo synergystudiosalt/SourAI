@@ -13,7 +13,6 @@ function bodyFor(effortId: keyof typeof EFFORT_PROFILES, reasoning: 'openai_effo
     {
       temperature: p.temperature,
       openAiEffort: p.openAiEffort,
-      thinkingBudget: p.thinkingBudget,
     },
     reasoning
   );

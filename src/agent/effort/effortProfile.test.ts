@@ -55,10 +55,12 @@ describe('effort ordering', () => {
     }
   });
 
-  it('thinking budget never decreases as effort rises', () => {
-    const values = ascending.map((p) => p.thinkingBudget);
-    for (let i = 1; i < values.length; i++) {
-      expect(values[i]).toBeGreaterThanOrEqual(values[i - 1]);
+  // Gemini charges thinking against the output budget, so reserving one
+  // consumed the whole reply: on one payload Light (budget 0) returned 162
+  // characters where Standard, Deep and UltraCODE returned 0, 18 and 0.
+  it('carries no thinking budget, which starved the answer', () => {
+    for (const profile of ascending) {
+      expect('thinkingBudget' in profile).toBe(false);
     }
   });
 
@@ -76,10 +78,9 @@ describe('effort ordering', () => {
     }
   });
 
-  it('disables thinking only on the fastest tier', () => {
-    expect(EFFORT_PROFILES.light.thinkingBudget).toBe(0);
-    for (const id of EFFORT_ORDER.filter((x) => x !== 'light')) {
-      expect(EFFORT_PROFILES[id].thinkingBudget).toBeGreaterThan(0);
-    }
+  it('raises the provider reasoning control with effort', () => {
+    expect(EFFORT_PROFILES.light.openAiEffort).toBe('low');
+    expect(EFFORT_PROFILES.standard.openAiEffort).toBe('medium');
+    expect(EFFORT_PROFILES.ultracode.openAiEffort).toBe('high');
   });
 });
