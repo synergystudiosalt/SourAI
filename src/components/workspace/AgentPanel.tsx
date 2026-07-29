@@ -786,6 +786,143 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       const composeThinking = () =>
         [accumulatedThinking, streamThinking].filter(Boolean).join('\n\n');
 
+      /**
+       * Applies one completed provider turn.
+       *
+       * The first request arrives through SSE and later tool-result requests
+       * arrive as JSON, but their completed responses have exactly the same
+       * state transitions. Keeping those transitions here prevents the two
+       * transports from drifting on operations, history, recovery, or tool
+       * results.
+       */
+      const consumeCompletedTurn = async (
+        responseText: string,
+        responseThinking?: string,
+        responseThinkingLabel?: string
+      ) => {
+        const separatedResponse = splitThinkingAndText(responseText);
+        const filteredRequests = runController.filter(
+          parseAgentResponse(separatedResponse.text)
+        );
+        const parsed = filteredRequests.response;
+        hadIncompleteFileBlock ||= parsed.incompleteFileBlock;
+        allOps = [...allOps, ...parsed.ops];
+
+        appendThinking(responseThinking);
+        appendThinking(separatedResponse.thinking);
+        if (responseThinkingLabel) accumulatedThinkingLabel = responseThinkingLabel;
+
+        const hasToolCalls = parsed.fileRequests.length > 0 || parsed.findRequests.length > 0
+          || parsed.listDirRequests.length > 0 || parsed.globRequests.length > 0 || parsed.fileInfoRequests.length > 0
+          || parsed.replaceRequests.length > 0 || parsed.searchImportsRequests.length > 0 || parsed.renameRequests.length > 0;
+        const hasCheckErrors = parsed.checkErrorsContent.length > 0;
+        const hasContextOps = parsed.contextStore.length > 0 || parsed.contextGet.length > 0 || parsed.contextList || parsed.contextClear.length > 0;
+        const hasTodoOps = parsed.todoItems.length > 0;
+
+        if (hasToolCalls || hasCheckErrors || hasContextOps || hasTodoOps) {
+          appendThinking(parsed.displayText);
+          finalDisplayText = '';
+          const { toolCalls: readCalls, resultText: readText } = resolveFileRequests(parsed.fileRequests);
+          const { toolCalls: findCalls, resultText: findText } = resolveFindRequests(parsed.findRequests);
+          const { toolCalls: listDirCalls, resultText: listDirText } = resolveListDirRequests(parsed.listDirRequests);
+          const { toolCalls: globCalls, resultText: globText } = resolveGlobRequests(parsed.globRequests);
+          const { resultText: fileInfoText } = resolveFileInfoRequests(parsed.fileInfoRequests);
+          const turnToolCalls = [...readCalls, ...findCalls, ...listDirCalls, ...globCalls];
+
+          const checkResultParts: string[] = [];
+          for (const content of parsed.checkErrorsContent) {
+            const paths = extractPathsFromCheckContent(content);
+            if (paths.length === 0) {
+              const recentPaths = allOps.filter(o => o.type === 'write').map(o => o.path);
+              for (const p of recentPaths) {
+                if (!paths.includes(p)) paths.push(p);
+              }
+            }
+            const { toolCalls: checkCalls, resultText: checkText } = resolveFileRequests(paths);
+            turnToolCalls.push(...checkCalls);
+            checkResultParts.push(`[DIAGNOSTIC — check_for_errors result for: ${content}]\n${checkText}\n\nReview the above file content. If you find any bugs, type errors, missing imports, or logic issues, output corrected file blocks to fix them. If everything looks correct, confirm with a brief message.`);
+          }
+
+          allToolCalls = [...allToolCalls, ...turnToolCalls];
+
+          // Resolve context operations
+          const contextResultParts: string[] = [];
+          if (parsed.contextStore.length > 0) contextResultParts.push(await resolveContextStore(parsed.contextStore));
+          if (parsed.contextGet.length > 0) contextResultParts.push(resolveContextGet(parsed.contextGet));
+          if (parsed.contextList) contextResultParts.push(resolveContextList());
+          if (parsed.contextClear.length > 0) contextResultParts.push(await resolveContextClear(parsed.contextClear));
+
+          // Resolve todo operations
+          const todoResultText = parsed.todoItems.length > 0 ? resolveTodo(parsed.todoItems) : '';
+
+          // Resolve replace / search_imports / rename
+          const replaceResult: { toolCalls: AgentToolCall[]; ops: AgentFileOp[]; resultText: string } = parsed.replaceRequests.length > 0
+            ? resolveReplaceRequests(parsed.replaceRequests) : { toolCalls: [], ops: [], resultText: '' };
+          const importsResult: { toolCalls: AgentToolCall[]; resultText: string } = parsed.searchImportsRequests.length > 0
+            ? resolveSearchImportsRequests(parsed.searchImportsRequests) : { toolCalls: [], resultText: '' };
+          const renameResult: { toolCalls: AgentToolCall[]; ops: AgentFileOp[]; resultText: string } = parsed.renameRequests.length > 0
+            ? resolveRenameRequests(parsed.renameRequests) : { toolCalls: [], ops: [], resultText: '' };
+          turnToolCalls.push(...replaceResult.toolCalls, ...importsResult.toolCalls, ...renameResult.toolCalls);
+          allOps = [...allOps, ...replaceResult.ops, ...renameResult.ops];
+
+          const duplicateNotice = filteredRequests.repeatedRequestCount > 0
+            ? `[Runtime: skipped ${filteredRequests.repeatedRequestCount} duplicate tool request(s). Do not request them again; continue from the results already provided.]`
+            : '';
+          const resultText = [readText, findText, listDirText, globText, fileInfoText, replaceResult.resultText, importsResult.resultText, renameResult.resultText, todoResultText, ...checkResultParts, ...contextResultParts, duplicateNotice].filter(Boolean).join('\n\n');
+
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === msgId
+                ? { ...m, toolCalls: allToolCalls, thinking: composeThinking(), thinkingLabel: accumulatedThinkingLabel }
+                : m
+            )
+          );
+
+          conversationHistory = [
+            ...conversationHistory,
+            { role: 'assistant', content: responseText },
+            { role: 'user', content: resultText },
+          ];
+          hasMoreTools = true;
+        } else {
+          finalDisplayText = parsed.displayText;
+          if (filteredRequests.repeatedRequestCount > 0) {
+            const recovery = runController.consumeRecovery(
+              filteredRequests.repeatedRequestCount,
+              turnCount,
+              maxAgentTurns
+            );
+            if (recovery) {
+              conversationHistory = [
+                ...conversationHistory,
+                { role: 'assistant', content: responseText },
+                { role: 'user', content: recovery },
+              ];
+              finalDisplayText = '';
+              hasMoreTools = true;
+            }
+          }
+          if (!hasMoreTools) {
+            const continuation = runController.consumeIncomplete(
+              Boolean(responseThinking || separatedResponse.thinking),
+              finalDisplayText,
+              parsed.ops.length,
+              turnCount,
+              maxAgentTurns
+            );
+            if (continuation) {
+              conversationHistory = [
+                ...conversationHistory,
+                { role: 'assistant', content: responseText },
+                { role: 'user', content: continuation },
+              ];
+              finalDisplayText = '';
+              hasMoreTools = true;
+            }
+          }
+        }
+      };
+
       // Create the message placeholder immediately
       const assistantMsg: AgentChatMessage = {
         id: msgId,
@@ -860,146 +997,30 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                 if (!trimmed || !trimmed.startsWith('data: ')) continue;
                 const event = parseAgentStreamEvent(trimmed.slice(6));
                 if (!event) continue;
-                try {
-                  if (event.token) {
-                    streamText += event.token;
-                    streamThinking = splitThinkingAndText(streamText).thinking?.trim() || '';
-                    setMessages((prev) =>
-                      prev.map((m) =>
-                        m.id === msgId
-                          ? { ...m, content: '', thinking: composeThinking() }
-                          : m
-                      )
-                    );
-                  }
-                  if (event.done) {
-                    sawDoneEvent = true;
-                    const responseText = event.text || streamText;
-                    const separatedResponse = splitThinkingAndText(responseText);
-                    // The turn is finished: fold its thinking into the record
-                    // once, and release the live slot so the next turn starts
-                    // from empty.
-                    streamThinking = '';
-                    appendThinking(event.thinking);
-                    appendThinking(separatedResponse.thinking);
-                    accumulatedThinkingLabel = event.thinkingLabel || accumulatedThinkingLabel;
-                    const filteredRequests = runController.filter(
-                      parseAgentResponse(separatedResponse.text)
-                    );
-                    const finalParsed = filteredRequests.response;
-                    hadIncompleteFileBlock ||= finalParsed.incompleteFileBlock;
-                    finalDisplayText = finalParsed.displayText;
-                    allOps = [...allOps, ...finalParsed.ops];
-
-                    const hasToolCalls = finalParsed.fileRequests.length > 0 || finalParsed.findRequests.length > 0
-                      || finalParsed.listDirRequests.length > 0 || finalParsed.globRequests.length > 0 || finalParsed.fileInfoRequests.length > 0
-                      || finalParsed.replaceRequests.length > 0 || finalParsed.searchImportsRequests.length > 0 || finalParsed.renameRequests.length > 0;
-                    const hasCheckErrors = finalParsed.checkErrorsContent.length > 0;
-                    const hasContextOps = finalParsed.contextStore.length > 0 || finalParsed.contextGet.length > 0 || finalParsed.contextList || finalParsed.contextClear.length > 0;
-                    const hasTodoOps = finalParsed.todoItems.length > 0;
-
-                    if (hasToolCalls || hasCheckErrors || hasContextOps || hasTodoOps) {
-                      appendThinking(finalParsed.displayText);
-                      finalDisplayText = '';
-                      // Resolve all tool types
-                      const { toolCalls: readCalls, resultText: readText } = resolveFileRequests(finalParsed.fileRequests);
-                      const { toolCalls: findCalls, resultText: findText } = resolveFindRequests(finalParsed.findRequests);
-                      const { toolCalls: listDirCalls, resultText: listDirText } = resolveListDirRequests(finalParsed.listDirRequests);
-                      const { toolCalls: globCalls, resultText: globText } = resolveGlobRequests(finalParsed.globRequests);
-                      const { resultText: fileInfoText } = resolveFileInfoRequests(finalParsed.fileInfoRequests);
-                      const turnToolCalls = [...readCalls, ...findCalls, ...listDirCalls, ...globCalls];
-
-                      const checkResultParts: string[] = [];
-                      for (const content of finalParsed.checkErrorsContent) {
-                        const paths = extractPathsFromCheckContent(content);
-                        if (paths.length === 0) {
-                          const recentPaths = allOps.filter(o => o.type === 'write').map(o => o.path);
-                          for (const p of recentPaths) {
-                            if (!paths.includes(p)) paths.push(p);
-                          }
-                        }
-                        const { toolCalls: checkCalls, resultText: checkText } = resolveFileRequests(paths);
-                        turnToolCalls.push(...checkCalls);
-              checkResultParts.push(`[DIAGNOSTIC — check_for_errors result for: ${content}]\n${checkText}\n\nReview the above file content. If you find any bugs, type errors, missing imports, or logic issues, output corrected file blocks to fix them. If everything looks correct, confirm with a brief message.`);
-                      }
-
-                      allToolCalls = [...allToolCalls, ...turnToolCalls];
-
-                      // Resolve context operations
-                      const contextResultParts: string[] = [];
-                      if (finalParsed.contextStore.length > 0) contextResultParts.push(await resolveContextStore(finalParsed.contextStore));
-                      if (finalParsed.contextGet.length > 0) contextResultParts.push(resolveContextGet(finalParsed.contextGet));
-                      if (finalParsed.contextList) contextResultParts.push(resolveContextList());
-                      if (finalParsed.contextClear.length > 0) contextResultParts.push(await resolveContextClear(finalParsed.contextClear));
-
-                      // Resolve todo operations
-                      const todoResultText = finalParsed.todoItems.length > 0 ? resolveTodo(finalParsed.todoItems) : '';
-
-                      // Resolve replace / search_imports / rename
-                      const replaceResult: { toolCalls: AgentToolCall[]; ops: AgentFileOp[]; resultText: string } = finalParsed.replaceRequests.length > 0
-                        ? resolveReplaceRequests(finalParsed.replaceRequests) : { toolCalls: [], ops: [], resultText: '' };
-                      const importsResult: { toolCalls: AgentToolCall[]; resultText: string } = finalParsed.searchImportsRequests.length > 0
-                        ? resolveSearchImportsRequests(finalParsed.searchImportsRequests) : { toolCalls: [], resultText: '' };
-                      const renameResult: { toolCalls: AgentToolCall[]; ops: AgentFileOp[]; resultText: string } = finalParsed.renameRequests.length > 0
-                        ? resolveRenameRequests(finalParsed.renameRequests) : { toolCalls: [], ops: [], resultText: '' };
-                      turnToolCalls.push(...replaceResult.toolCalls, ...importsResult.toolCalls, ...renameResult.toolCalls);
-                      allOps = [...allOps, ...replaceResult.ops, ...renameResult.ops];
-
-                      const duplicateNotice = filteredRequests.repeatedRequestCount > 0
-                        ? `[Runtime: skipped ${filteredRequests.repeatedRequestCount} duplicate tool request(s). Do not request them again; continue from the results already provided.]`
-                        : '';
-                      const resultText = [readText, findText, listDirText, globText, fileInfoText, replaceResult.resultText, importsResult.resultText, renameResult.resultText, todoResultText, ...checkResultParts, ...contextResultParts, duplicateNotice].filter(Boolean).join('\n\n');
-
-                      setMessages((prev) =>
-                        prev.map((m) =>
-                          m.id === msgId
-                            ? { ...m, toolCalls: allToolCalls, thinking: composeThinking(), thinkingLabel: accumulatedThinkingLabel }
-                            : m
-                        )
-                      );
-
-                      conversationHistory = [
-                        ...conversationHistory,
-                        { role: 'assistant', content: responseText },
-                        { role: 'user', content: resultText },
-                      ];
-                      hasMoreTools = true;
-                    } else if (filteredRequests.repeatedRequestCount > 0) {
-                      const recovery = runController.consumeRecovery(
-                        filteredRequests.repeatedRequestCount,
-                        turnCount,
-                        maxAgentTurns
-                      );
-                      if (recovery) {
-                        conversationHistory = [
-                          ...conversationHistory,
-                          { role: 'assistant', content: responseText },
-                          { role: 'user', content: recovery },
-                        ];
-                        finalDisplayText = '';
-                        hasMoreTools = true;
-                      }
-                    }
-                    if (!hasMoreTools) {
-                      const continuation = runController.consumeIncomplete(
-                        Boolean(event.thinking || separatedResponse.thinking),
-                        finalDisplayText,
-                        finalParsed.ops.length,
-                        turnCount,
-                        maxAgentTurns
-                      );
-                      if (continuation) {
-                        conversationHistory = [
-                          ...conversationHistory,
-                          { role: 'assistant', content: responseText },
-                          { role: 'user', content: continuation },
-                        ];
-                        finalDisplayText = '';
-                        hasMoreTools = true;
-                      }
-                    }
-                  }
-                } catch { /* skip malformed lines */ }
+                if (event.token) {
+                  streamText += event.token;
+                  streamThinking = splitThinkingAndText(streamText).thinking?.trim() || '';
+                  setMessages((prev) =>
+                    prev.map((m) =>
+                      m.id === msgId
+                        ? { ...m, content: '', thinking: composeThinking() }
+                        : m
+                    )
+                  );
+                }
+                if (event.done) {
+                  sawDoneEvent = true;
+                  const responseText = event.text || streamText;
+                  // The turn is finished: fold its thinking into the record
+                  // once, and release the live slot so the next turn starts
+                  // from empty.
+                  streamThinking = '';
+                  await consumeCompletedTurn(
+                    responseText,
+                    event.thinking,
+                    event.thinkingLabel
+                  );
+                }
               }
             }
           }
@@ -1021,133 +1042,11 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           if (!res.ok) throw normalizeAgentProviderError(data?.error, 'The agent failed to respond.');
 
           const responseText = data.text || '';
-          const separatedResponse = splitThinkingAndText(responseText);
-          const filteredRequests = runController.filter(
-            parseAgentResponse(separatedResponse.text)
+          await consumeCompletedTurn(
+            responseText,
+            data.thinking,
+            data.thinkingLabel
           );
-          const parsed = filteredRequests.response;
-          hadIncompleteFileBlock ||= parsed.incompleteFileBlock;
-          // Recorded before the tool-request branch, not inside one arm of it.
-          // A turn that both edits files and asks for a check is ordinary, and
-          // recording the edits only on the no-tools path silently discarded
-          // them — the run then ended with nothing to apply and no answer.
-          // The streaming branch has always appended unconditionally, which is
-          // why only follow-up turns lost their edits.
-          allOps = [...allOps, ...parsed.ops];
-
-          appendThinking(data.thinking);
-          appendThinking(separatedResponse.thinking);
-          if (data.thinkingLabel) accumulatedThinkingLabel = data.thinkingLabel;
-
-          const hasToolCalls = parsed.fileRequests.length > 0 || parsed.findRequests.length > 0
-            || parsed.listDirRequests.length > 0 || parsed.globRequests.length > 0 || parsed.fileInfoRequests.length > 0
-            || parsed.replaceRequests.length > 0 || parsed.searchImportsRequests.length > 0 || parsed.renameRequests.length > 0;
-          const hasCheckErrors = parsed.checkErrorsContent.length > 0;
-          const hasContextOps = parsed.contextStore.length > 0 || parsed.contextGet.length > 0 || parsed.contextList || parsed.contextClear.length > 0;
-          const hasTodoOps = parsed.todoItems.length > 0;
-
-          if (hasToolCalls || hasCheckErrors || hasContextOps || hasTodoOps) {
-            appendThinking(parsed.displayText);
-            finalDisplayText = '';
-            const { toolCalls: readCalls, resultText: readText } = resolveFileRequests(parsed.fileRequests);
-            const { toolCalls: findCalls, resultText: findText } = resolveFindRequests(parsed.findRequests);
-            const { toolCalls: listDirCalls, resultText: listDirText } = resolveListDirRequests(parsed.listDirRequests);
-            const { toolCalls: globCalls, resultText: globText } = resolveGlobRequests(parsed.globRequests);
-            const { resultText: fileInfoText } = resolveFileInfoRequests(parsed.fileInfoRequests);
-            const turnToolCalls = [...readCalls, ...findCalls, ...listDirCalls, ...globCalls];
-
-            const checkResultParts: string[] = [];
-            for (const content of parsed.checkErrorsContent) {
-              const paths = extractPathsFromCheckContent(content);
-              if (paths.length === 0) {
-                const recentPaths = allOps.filter(o => o.type === 'write').map(o => o.path);
-                for (const p of recentPaths) {
-                  if (!paths.includes(p)) paths.push(p);
-                }
-              }
-              const { toolCalls: checkCalls, resultText: checkText } = resolveFileRequests(paths);
-              turnToolCalls.push(...checkCalls);
-              checkResultParts.push(`[DIAGNOSTIC — check_for_errors result for: ${content}]\n${checkText}\n\nReview the above file content. If you find any bugs, type errors, missing imports, or logic issues, output corrected file blocks to fix them. If everything looks correct, confirm with a brief message.`);
-            }
-
-            allToolCalls = [...allToolCalls, ...turnToolCalls];
-
-            // Resolve context operations
-            const contextResultParts: string[] = [];
-            if (parsed.contextStore.length > 0) contextResultParts.push(await resolveContextStore(parsed.contextStore));
-            if (parsed.contextGet.length > 0) contextResultParts.push(resolveContextGet(parsed.contextGet));
-            if (parsed.contextList) contextResultParts.push(resolveContextList());
-            if (parsed.contextClear.length > 0) contextResultParts.push(await resolveContextClear(parsed.contextClear));
-
-            // Resolve todo operations
-            const todoResultText = parsed.todoItems.length > 0 ? resolveTodo(parsed.todoItems) : '';
-
-            // Resolve replace / search_imports / rename
-            const replaceResult: { toolCalls: AgentToolCall[]; ops: AgentFileOp[]; resultText: string } = parsed.replaceRequests.length > 0
-              ? resolveReplaceRequests(parsed.replaceRequests) : { toolCalls: [], ops: [], resultText: '' };
-            const importsResult: { toolCalls: AgentToolCall[]; resultText: string } = parsed.searchImportsRequests.length > 0
-              ? resolveSearchImportsRequests(parsed.searchImportsRequests) : { toolCalls: [], resultText: '' };
-            const renameResult: { toolCalls: AgentToolCall[]; ops: AgentFileOp[]; resultText: string } = parsed.renameRequests.length > 0
-              ? resolveRenameRequests(parsed.renameRequests) : { toolCalls: [], ops: [], resultText: '' };
-            turnToolCalls.push(...replaceResult.toolCalls, ...importsResult.toolCalls, ...renameResult.toolCalls);
-            allOps = [...allOps, ...replaceResult.ops, ...renameResult.ops];
-
-            const duplicateNotice = filteredRequests.repeatedRequestCount > 0
-              ? `[Runtime: skipped ${filteredRequests.repeatedRequestCount} duplicate tool request(s). Do not request them again; continue from the results already provided.]`
-              : '';
-            const resultText = [readText, findText, listDirText, globText, fileInfoText, replaceResult.resultText, importsResult.resultText, renameResult.resultText, todoResultText, ...checkResultParts, ...contextResultParts, duplicateNotice].filter(Boolean).join('\n\n');
-
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === msgId
-                  ? { ...m, toolCalls: allToolCalls, thinking: composeThinking(), thinkingLabel: accumulatedThinkingLabel }
-                  : m
-              )
-            );
-
-            conversationHistory = [
-              ...conversationHistory,
-              { role: 'assistant', content: responseText },
-              { role: 'user', content: resultText },
-            ];
-            hasMoreTools = true;
-          } else {
-            finalDisplayText = parsed.displayText;
-            if (filteredRequests.repeatedRequestCount > 0) {
-              const recovery = runController.consumeRecovery(
-                filteredRequests.repeatedRequestCount,
-                turnCount,
-                maxAgentTurns
-              );
-              if (recovery) {
-                conversationHistory = [
-                  ...conversationHistory,
-                  { role: 'assistant', content: responseText },
-                  { role: 'user', content: recovery },
-                ];
-                finalDisplayText = '';
-                hasMoreTools = true;
-              }
-            }
-            if (!hasMoreTools) {
-              const continuation = runController.consumeIncomplete(
-                Boolean(data.thinking || separatedResponse.thinking),
-                finalDisplayText,
-                parsed.ops.length,
-                turnCount,
-                maxAgentTurns
-              );
-              if (continuation) {
-                conversationHistory = [
-                  ...conversationHistory,
-                  { role: 'assistant', content: responseText },
-                  { role: 'user', content: continuation },
-                ];
-                finalDisplayText = '';
-                hasMoreTools = true;
-              }
-            }
-          }
         }
       }
 
