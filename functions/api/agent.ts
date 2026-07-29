@@ -60,7 +60,11 @@ export const onRequest: PagesFunction = async (context) => {
     const effort = resolveEffortProfile(reasoningEffort);
     const tuning: GenerationTuning = {
       temperature: effort.temperature,
-      maxOutputTokens: effort.maxOutputTokens,
+      // Deliberately no max_tokens. Capping it truncated whole-file edits, and
+      // resuming past the cap depends on the model continuing a prefill turn,
+      // which some refuse — leaving the request to fail outright. Omitting it
+      // lets each provider use its own model maximum, which is what this did
+      // before effort profiles existed and is enough for a full file.
       openAiEffort: effort.openAiEffort,
       thinkingBudget: effort.thinkingBudget,
     };

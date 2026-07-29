@@ -675,7 +675,12 @@ async function* streamWithOpenAICompatible(
         throw new ProviderHttpError(502, 'The provider stream ended before signalling completion.');
       }
       if (gate.restarted) {
-        throw new ProviderHttpError(502, `${model} restarted instead of completing its partial response.`);
+        // Deliver the partial rather than failing the request. The client drops
+        // every file op when a fence is left unclosed, so a truncated answer
+        // cannot be applied — and showing it beats replacing a near-complete
+        // reply with a bare 502.
+        console.warn(`${model} restarted instead of resuming; keeping the partial answer.`);
+        return;
       }
       if (hitOutputCap && continuations < MAX_OUTPUT_CONTINUATIONS) {
         continuations++;
@@ -783,7 +788,12 @@ async function* streamWithGemini(
         throw new ProviderHttpError(502, 'The Gemini stream ended before signalling completion.');
       }
       if (gate.restarted) {
-        throw new ProviderHttpError(502, `${model} restarted instead of completing its partial response.`);
+        // Deliver the partial rather than failing the request. The client drops
+        // every file op when a fence is left unclosed, so a truncated answer
+        // cannot be applied — and showing it beats replacing a near-complete
+        // reply with a bare 502.
+        console.warn(`${model} restarted instead of resuming; keeping the partial answer.`);
+        return;
       }
       if (hitOutputCap && continuations < MAX_OUTPUT_CONTINUATIONS) {
         continuations++;

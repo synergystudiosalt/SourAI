@@ -388,7 +388,10 @@ describe('mid-stream rate limit', () => {
   // A provider that ignores the prefill replies to it, retelling the whole
   // answer. Splicing is impossible because sampling never reproduces it token
   // for token, so the caller would receive the opening several times over.
-  it('fails closed when the model restarts instead of resuming', async () => {
+  // Keeps the partial rather than failing the request. The client drops every
+  // file op when a fence is left unclosed, so a truncated answer cannot be
+  // applied, and a near-complete reply beats replacing it with a bare 502.
+  it('keeps the partial when the model restarts instead of resuming', async () => {
     const opening = 'A'.repeat(150) + ' the quick brown fox jumps over the lazy dog';
     let calls = 0;
     vi.stubGlobal('fetch', vi.fn(async () => {
@@ -404,7 +407,7 @@ describe('mid-stream rate limit', () => {
       return sseStream([token(opening + ' and then some more'), 'data: [DONE]\n\n']);
     }));
 
-    await expect(collect(
+    const out = await collect(
       streamText({
         geminiKeys: [],
         groqKeys: KEYS,
@@ -413,8 +416,11 @@ describe('mid-stream rate limit', () => {
         systemInstruction: 'sys',
         route: { provider: 'groq', model: 'm', prefill: 'openai' },
       })
-    )).rejects.toThrow(/restarted instead of completing/i);
+    );
 
+    // Exactly what was delivered before the restart — no second copy appended.
+    expect(out).toBe(opening);
+    expect(out.match(/quick brown fox/g)).toHaveLength(1);
     expect(calls).toBeGreaterThanOrEqual(2);
   });
 

@@ -44,7 +44,6 @@ describe('effort ordering', () => {
   // edit makes a higher tier cheaper than a lower one, the control is lying.
   it.each([
     ['maxTurns', (p: (typeof ascending)[number]) => p.maxTurns],
-    ['maxOutputTokens', (p: (typeof ascending)[number]) => p.maxOutputTokens],
     ['activeFileChars', (p: (typeof ascending)[number]) => p.context.activeFileChars],
     ['mentionedFileChars', (p: (typeof ascending)[number]) => p.context.mentionedFileChars],
     ['maxProjectFiles', (p: (typeof ascending)[number]) => p.context.maxProjectFiles],

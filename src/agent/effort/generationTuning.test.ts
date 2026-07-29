@@ -12,7 +12,6 @@ function bodyFor(effortId: keyof typeof EFFORT_PROFILES, reasoning: 'openai_effo
     'system',
     {
       temperature: p.temperature,
-      maxOutputTokens: p.maxOutputTokens,
       openAiEffort: p.openAiEffort,
       thinkingBudget: p.thinkingBudget,
     },
@@ -21,17 +20,22 @@ function bodyFor(effortId: keyof typeof EFFORT_PROFILES, reasoning: 'openai_effo
 }
 
 describe('buildOpenAICompatibleBody', () => {
-  it('carries temperature and the output cap from the effort profile', () => {
+  it('carries temperature from the effort profile', () => {
     const light = bodyFor('light', null);
     const ultra = bodyFor('ultracode', null);
 
     expect(light.temperature).toBe(EFFORT_PROFILES.light.temperature);
     expect(ultra.temperature).toBe(EFFORT_PROFILES.ultracode.temperature);
-    expect(light.max_tokens).toBe(EFFORT_PROFILES.light.maxOutputTokens);
-    expect(ultra.max_tokens).toBe(EFFORT_PROFILES.ultracode.maxOutputTokens);
     // The whole point: two efforts must not produce the same request.
     expect(light.temperature).not.toBe(ultra.temperature);
-    expect(light.max_tokens).not.toBe(ultra.max_tokens);
+  });
+
+  // Capping output truncated whole-file edits mid-token, and recovering from
+  // that relied on the model continuing a prefill turn, which Mistral refused.
+  it('never caps output tokens, so a long file cannot be truncated', () => {
+    for (const id of ['light', 'standard', 'deep', 'ultracode'] as const) {
+      expect('max_tokens' in bodyFor(id, null)).toBe(false);
+    }
   });
 
   it('sends reasoning_effort only for routes that declare support', () => {

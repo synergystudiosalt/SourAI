@@ -8,7 +8,11 @@
  *
  * - `maxTurns`        - how long the agent tool loop may run
  * - `temperature`     - falls as effort rises, for more deterministic edits
- * - `maxOutputTokens` - rises as effort rises, so long edits aren't truncated
+ * Note there is no output-token knob. Capping output truncated whole-file
+ * edits mid-token, and recovering from that depends on the model continuing a
+ * prefill turn, which some refuse. Providers use their own model maximum
+ * instead. Effort scales what goes in and how long the loop runs, not how much
+ * the model is allowed to say.
  * - `openAiEffort` /
  *   `thinkingBudget`  - the provider's own reasoning control
  * - `context`         - how much of the project is sent in the first place
@@ -36,7 +40,6 @@ export interface EffortProfile {
   readonly description: string;
   readonly maxTurns: number;
   readonly temperature: number;
-  readonly maxOutputTokens: number;
   /** OpenAI-compatible `reasoning_effort`, for models that accept it. */
   readonly openAiEffort: 'low' | 'medium' | 'high';
   /**
@@ -54,7 +57,6 @@ export const EFFORT_PROFILES: Record<AgentReasoningEffort, EffortProfile> = {
     description: 'Fast answers and small edits',
     maxTurns: 3,
     temperature: 0.45,
-    maxOutputTokens: 2048,
     openAiEffort: 'low',
     thinkingBudget: 0,
     context: {
@@ -70,7 +72,6 @@ export const EFFORT_PROFILES: Record<AgentReasoningEffort, EffortProfile> = {
     description: 'Balanced coding workflow',
     maxTurns: 6,
     temperature: 0.3,
-    maxOutputTokens: 4096,
     openAiEffort: 'medium',
     thinkingBudget: 2048,
     context: {
@@ -86,7 +87,6 @@ export const EFFORT_PROFILES: Record<AgentReasoningEffort, EffortProfile> = {
     description: 'More analysis and verification',
     maxTurns: 8,
     temperature: 0.2,
-    maxOutputTokens: 6144,
     openAiEffort: 'high',
     thinkingBudget: 4096,
     context: {
@@ -102,14 +102,10 @@ export const EFFORT_PROFILES: Record<AgentReasoningEffort, EffortProfile> = {
     description: 'Maximum coding rigor',
     maxTurns: 12,
     temperature: 0.15,
-    // Kept at a ceiling every provider accepts. Asking for more risks a 400 on
-    // models with an 8k output limit, and long generations are carried by
-    // stream continuation rather than by a bigger single cap.
-    maxOutputTokens: 8192,
     openAiEffort: 'high',
-    // Kept well below the output budget. A large thinking allowance is spent
-    // before the first token, so on a long code generation it burns the
-    // request window without producing any file content.
+    // A large thinking allowance is spent before the first token, so on a long
+    // code generation it burns the request window without producing any file
+    // content.
     thinkingBudget: 8192,
     context: {
       activeFileChars: 24000,
