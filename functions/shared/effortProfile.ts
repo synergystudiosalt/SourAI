@@ -75,10 +75,10 @@ export const EFFORT_PROFILES: Record<AgentReasoningEffort, EffortProfile> = {
     openAiEffort: 'medium',
     thinkingBudget: 2048,
     context: {
-      activeFileChars: 8000,
-      mentionedFileChars: 6000,
-      maxProjectFiles: 300,
-      historyMessages: 40,
+      activeFileChars: 6000,
+      mentionedFileChars: 4000,
+      maxProjectFiles: 200,
+      historyMessages: 22,
     },
   },
   deep: {
@@ -90,10 +90,10 @@ export const EFFORT_PROFILES: Record<AgentReasoningEffort, EffortProfile> = {
     openAiEffort: 'high',
     thinkingBudget: 4096,
     context: {
-      activeFileChars: 14000,
-      mentionedFileChars: 10000,
-      maxProjectFiles: 500,
-      historyMessages: 60,
+      activeFileChars: 7500,
+      mentionedFileChars: 5000,
+      maxProjectFiles: 275,
+      historyMessages: 27,
     },
   },
   ultracode: {
@@ -108,10 +108,15 @@ export const EFFORT_PROFILES: Record<AgentReasoningEffort, EffortProfile> = {
     // content.
     thinkingBudget: 8192,
     context: {
-      activeFileChars: 24000,
-      mentionedFileChars: 16000,
-      maxProjectFiles: 800,
-      historyMessages: 80,
+      // Sized so one request stays inside a modest free-tier budget. Groq's
+      // on-demand tier caps at 8000 tokens per minute, and an UltraCODE
+      // request was measured at 9599 — over the entire per-minute allowance
+      // on its own, which fails as a 413 that no retry or key rotation can
+      // help. History is what grows per turn, so it is held tightest.
+      activeFileChars: 9000,
+      mentionedFileChars: 6000,
+      maxProjectFiles: 350,
+      historyMessages: 32,
     },
   },
 };
