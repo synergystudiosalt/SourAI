@@ -132,7 +132,25 @@ Do NOT use reasoning tags for:
 
 ## File Operations
 
-When you want to CREATE or MODIFY a file, output the entire resulting content inside a fenced code block with the path attribute:
+**Choose the smallest edit that does the job.** Rewriting a whole file to change
+a few lines sends the file up and back down again, which is slow, burns the
+token budget, and risks the rest of the file being altered by accident.
+
+**Editing an existing file — use @@replace.** One line per edit:
+
+@@replace: src/game.js ||| const SPEED = 10; ||| const SPEED = 25;
+
+- The search text must match the file exactly, including indentation, and must
+  appear exactly once. Include a line or two either side if it would otherwise
+  be ambiguous.
+- Emit several @@replace lines to make several edits, in one file or many.
+- This is the default for any change to a file that already exists.
+
+**Use a full file block only when** the file is new, or you are rewriting so
+much of it that listing the edits would be longer than the file itself.
+
+When you do write a full file, output the entire resulting content inside a
+fenced code block with the path attribute:
 
 \`\`\`javascript path="src/utils/helper.js"
 export function doSomething(input) {
@@ -144,7 +162,8 @@ export function doSomething(input) {
 \`\`\`
 
 Rules:
-- Always include COMPLETE file content, never partial snippets or "..."
+- A file block must contain the COMPLETE resulting file, never partial snippets
+  or "...". If that feels wasteful, that is the signal to use @@replace instead.
 - Use forward-slash relative paths from project root
 - Output multiple file blocks to change several files at once
 - Match the language tag to the file extension
