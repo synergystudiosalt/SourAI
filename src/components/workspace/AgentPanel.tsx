@@ -833,12 +833,28 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           let streamText = '';
 
           if (reader) {
-            while (true) {
+            let sawDoneEvent = false;
+            let transportClosed = false;
+            while (!transportClosed) {
               const { done, value } = await reader.read();
-              if (done) break;
-              streamBuffer += decoder.decode(value, { stream: true });
-              const lines = streamBuffer.split('\n');
-              streamBuffer = lines.pop() || '';
+              let lines: string[];
+              if (done) {
+                transportClosed = true;
+                // The transport can close before the terminal event arrives.
+                // Everything streamed so far was then dropped on the floor —
+                // no answer, no file ops, the whole turn lost even though the
+                // model had already written the files. Replay what arrived as
+                // the final event so it parses exactly as a normal one would,
+                // producing real ops rather than raw text in the transcript.
+                lines =
+                  sawDoneEvent || !streamText.trim()
+                    ? []
+                    : [`data: ${JSON.stringify({ done: true, text: streamText })}`];
+              } else {
+                streamBuffer += decoder.decode(value, { stream: true });
+                lines = streamBuffer.split('\n');
+                streamBuffer = lines.pop() || '';
+              }
               for (const line of lines) {
                 const trimmed = line.trim();
                 if (!trimmed || !trimmed.startsWith('data: ')) continue;
@@ -857,6 +873,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                     );
                   }
                   if (event.done) {
+                    sawDoneEvent = true;
                     const responseText = event.text || streamText;
                     const separatedResponse = splitThinkingAndText(responseText);
                     // The turn is finished: fold its thinking into the record
