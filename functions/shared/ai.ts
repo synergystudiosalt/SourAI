@@ -1,8 +1,12 @@
+import { redactString } from '../../src/security/redaction';
+
 function parseKeyList(raw: string | undefined): string[] {
-  return (raw || '')
-    .split(',')
-    .map((k) => k.trim())
-    .filter(Boolean);
+  return [...new Set(
+    (raw || '')
+      .split(',')
+      .map((k) => k.trim())
+      .filter(Boolean)
+  )];
 }
 
 export function getApiKeys(env: Record<string, string>) {
@@ -43,6 +47,8 @@ export const takeGeminiKey = createKeyPicker();
 export const takeGroqKey = createKeyPicker();
 export const takeCerebrasKey = createKeyPicker();
 export const takeMistralKey = createKeyPicker();
+
+export type Provider = 'gemini' | 'groq' | 'cerebras' | 'mistral';
 
 /**
  * Per-request generation knobs. Every field is optional so existing callers
@@ -85,6 +91,135 @@ export class ProviderHttpError extends Error {
   }
 }
 
+export interface ProviderFailureDetails {
+  readonly code: 'agent_provider_failed';
+  readonly provider: Provider;
+  readonly model: string;
+  readonly status?: number;
+  readonly providerMessage: string;
+  /** One-based position in the configured provider key list. */
+  readonly keyIndex?: number;
+  readonly keyCount: number;
+  readonly keysTried: number;
+  readonly keyBudget: number;
+  readonly attempts: number;
+  readonly message: string;
+}
+
+const PROVIDER_LABELS: Record<Provider, string> = {
+  gemini: 'Gemini',
+  groq: 'Groq',
+  cerebras: 'Cerebras',
+  mistral: 'Mistral',
+};
+
+function replaceKnownSecrets(value: string, secrets: readonly string[]): string {
+  let safe = value;
+  for (const secret of [...new Set(secrets)].sort((a, b) => b.length - a.length)) {
+    if (secret) safe = safe.split(secret).join('[redacted]');
+  }
+  return redactString(safe);
+}
+
+function extractProviderMessage(raw: string, secrets: readonly string[]): string {
+  let message = raw;
+  try {
+    const parsed = JSON.parse(raw);
+    const candidate =
+      parsed?.error?.message ??
+      parsed?.error?.error?.message ??
+      parsed?.message ??
+      parsed?.error;
+    if (typeof candidate === 'string') message = candidate;
+    else if (candidate) message = JSON.stringify(candidate);
+  } catch {
+    // Plain-text provider bodies are already the useful message.
+  }
+  const normalized = replaceKnownSecrets(message, secrets).replace(/\s+/g, ' ').trim();
+  return (normalized || 'The provider returned an empty error response.').slice(0, 600);
+}
+
+function providerMessageFromError(err: unknown, secrets: readonly string[]): string {
+  if (err instanceof ProviderHttpError) return extractProviderMessage(err.body, secrets);
+  if (err instanceof Error) return extractProviderMessage(err.message, secrets);
+  return extractProviderMessage(String(err || 'Unknown provider error'), secrets);
+}
+
+function formatProviderFailure(
+  details: Omit<ProviderFailureDetails, 'code' | 'message'>
+): string {
+  const http = details.status ? ` HTTP ${details.status}` : '';
+  const key = details.keyIndex
+    ? ` — key ${details.keyIndex}/${details.keyCount};`
+    : ' —';
+  const attempts = `${details.attempts} attempt${details.attempts === 1 ? '' : 's'}`;
+  return `${PROVIDER_LABELS[details.provider]} (${details.model})${http}: ${details.providerMessage}${key} tried ${details.keysTried}/${details.keyBudget} keys, ${attempts}`;
+}
+
+export class AgentProviderError extends Error {
+  readonly details: ProviderFailureDetails;
+  readonly failures: readonly ProviderFailureDetails[];
+
+  constructor(
+    details: Omit<ProviderFailureDetails, 'code' | 'message'>,
+    failures?: readonly ProviderFailureDetails[]
+  ) {
+    const complete: ProviderFailureDetails = {
+      ...details,
+      code: 'agent_provider_failed',
+      message: formatProviderFailure(details),
+    };
+    super(complete.message);
+    this.name = 'AgentProviderError';
+    this.details = complete;
+    this.failures = failures?.length ? failures : [complete];
+  }
+}
+
+function chainProviderErrors(
+  finalError: unknown,
+  earlierErrors: readonly unknown[]
+): unknown {
+  if (!(finalError instanceof AgentProviderError)) return finalError;
+  const failures = [
+    ...earlierErrors.flatMap((error) =>
+      error instanceof AgentProviderError ? [...error.failures] : []
+    ),
+    ...finalError.failures,
+  ];
+  return new AgentProviderError(finalError.details, failures);
+}
+
+export interface SerializedAiError {
+  readonly code: string;
+  readonly message: string;
+  readonly provider?: Provider;
+  readonly model?: string;
+  readonly status?: number;
+  readonly providerMessage?: string;
+  readonly keyIndex?: number;
+  readonly keyCount?: number;
+  readonly keysTried?: number;
+  readonly keyBudget?: number;
+  readonly attempts?: number;
+  readonly failures?: readonly ProviderFailureDetails[];
+}
+
+/** Safe for logs and API responses: contains key positions, never key values. */
+export function serializeAiError(
+  err: unknown,
+  configuredKeys: readonly string[] = []
+): SerializedAiError {
+  if (err instanceof AgentProviderError) {
+    return { ...err.details, failures: err.failures };
+  }
+  const raw = err instanceof Error ? err.message : String(err || 'Internal server error');
+  return {
+    code: 'agent_request_failed',
+    message: extractProviderMessage(raw, configuredKeys),
+  };
+}
+
 export function parseRetryAfter(header: string | null): number | undefined {
   if (!header) return undefined;
   const seconds = Number(header);
@@ -93,8 +228,8 @@ export function parseRetryAfter(header: string | null): number | undefined {
   return Number.isNaN(at) ? undefined : Math.max(0, at - Date.now());
 }
 
-async function httpError(res: Response): Promise<ProviderHttpError> {
-  const body = await res.text().catch(() => '');
+async function httpError(res: Response, secrets: readonly string[]): Promise<ProviderHttpError> {
+  const body = extractProviderMessage(await res.text().catch(() => ''), secrets);
   return new ProviderHttpError(res.status, body, parseRetryAfter(res.headers.get('retry-after')));
 }
 
@@ -127,6 +262,105 @@ const MAX_KEYS_PER_REQUEST = 8;
 function attemptBudget(keyCount: number): { perRound: number; total: number } {
   const perRound = Math.max(1, Math.min(keyCount, MAX_KEYS_PER_REQUEST));
   return { perRound, total: perRound * FAILOVER_ROUNDS };
+}
+
+interface KeySelection {
+  readonly key: string;
+  /** Zero-based position in the de-duplicated configured list. */
+  readonly index: number;
+  readonly total: number;
+}
+
+/**
+ * Stable per-request key subset. Retry rounds cycle this same subset instead of
+ * silently expanding an eight-key budget into sixteen different credentials.
+ */
+class KeyAttemptState {
+  private readonly keys: string[];
+  private readonly plan: KeySelection[];
+  private readonly disabled = new Set<number>();
+  private readonly tried = new Set<number>();
+  private cursor = 0;
+  private failures = 0;
+  attempts = 0;
+
+  constructor(keys: string[], takeKey: (keys: string[]) => string | null) {
+    this.keys = [...new Set(keys)];
+    const { perRound } = attemptBudget(this.keys.length);
+    this.plan = [];
+    for (let i = 0; i < perRound && this.keys.length > 0; i++) {
+      const key = takeKey(this.keys);
+      if (!key) break;
+      const index = this.keys.indexOf(key);
+      if (index >= 0 && !this.plan.some((choice) => choice.index === index)) {
+        this.plan.push({ key, index, total: this.keys.length });
+      }
+    }
+  }
+
+  get keyBudget(): number {
+    return this.plan.length;
+  }
+
+  get keysTried(): number {
+    return this.tried.size;
+  }
+
+  next(): KeySelection | null {
+    if (this.plan.length === 0 || this.disabled.size >= this.plan.length) return null;
+    for (let scanned = 0; scanned < this.plan.length; scanned++) {
+      const choice = this.plan[this.cursor % this.plan.length];
+      this.cursor++;
+      if (!this.disabled.has(choice.index)) return choice;
+    }
+    return null;
+  }
+
+  begin(choice: KeySelection): void {
+    this.attempts++;
+    this.tried.add(choice.index);
+  }
+
+  reject(err: unknown, choice: KeySelection): void {
+    this.failures++;
+    if (err instanceof ProviderHttpError && KEY_SPECIFIC_STATUSES.has(err.status)) {
+      this.disabled.add(choice.index);
+    }
+  }
+
+  canRetry(): boolean {
+    return (
+      this.failures < this.plan.length * FAILOVER_ROUNDS &&
+      this.disabled.size < this.plan.length
+    );
+  }
+
+  roundComplete(): boolean {
+    return this.plan.length > 0 && this.failures % this.plan.length === 0;
+  }
+
+  safeMessage(err: unknown): string {
+    return providerMessageFromError(err, this.keys);
+  }
+
+  failure(
+    provider: Provider,
+    model: string,
+    err: unknown,
+    choice?: KeySelection
+  ): AgentProviderError {
+    return new AgentProviderError({
+      provider,
+      model,
+      status: err instanceof ProviderHttpError ? err.status : undefined,
+      providerMessage: this.safeMessage(err),
+      keyIndex: choice ? choice.index + 1 : undefined,
+      keyCount: this.keys.length,
+      keysTried: this.keysTried,
+      keyBudget: this.keyBudget,
+      attempts: this.attempts,
+    });
+  }
 }
 /**
  * Extra rounds allowed purely for resuming past the output cap. Whole-file
@@ -299,13 +533,16 @@ class ResumeGate {
 }
 
 /** Providers report mid-stream faults as an error object inside the SSE body. */
-function streamPayloadError(parsed: any): ProviderHttpError | null {
+function streamPayloadError(parsed: any, secrets: readonly string[]): ProviderHttpError | null {
   const error = parsed?.error;
   if (!error) return null;
   const status = Number(error.status ?? error.code);
   return new ProviderHttpError(
     Number.isFinite(status) && status >= 400 ? status : 503,
-    typeof error.message === 'string' ? error.message : JSON.stringify(error)
+    extractProviderMessage(
+      typeof error.message === 'string' ? error.message : JSON.stringify(error),
+      secrets
+    )
   );
 }
 
@@ -329,14 +566,18 @@ export async function generateWithGemini(
   tuning?: GenerationTuning,
   reasoning: ReasoningControl = null
 ): Promise<string> {
-  if (keys.length === 0) throw new Error('No Gemini API keys configured');
-  let lastErr: unknown;
-  const { perRound, total: attempts } = attemptBudget(keys.length);
-  for (let attempt = 0; attempt < attempts; attempt++) {
-    const key = takeGeminiKey(keys)!;
+  const state = new KeyAttemptState(keys, takeGeminiKey);
+  let lastErr: unknown = new Error('No Gemini API keys configured');
+  let lastChoice: KeySelection | undefined;
+
+  while (true) {
+    const choice = state.next();
+    if (!choice) throw state.failure('gemini', model, lastErr, lastChoice);
+    lastChoice = choice;
+    state.begin(choice);
     try {
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(choice.key)}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -347,7 +588,7 @@ export async function generateWithGemini(
           }),
         }
       );
-      if (!response.ok) throw await httpError(response);
+      if (!response.ok) throw await httpError(response, keys);
       const data: any = await response.json().catch(() => ({}));
       if (data?.candidates?.[0]?.finishReason === 'MAX_TOKENS') {
         throw new ProviderHttpError(502, 'The model reached its output limit before completing the response.');
@@ -358,14 +599,15 @@ export async function generateWithGemini(
         .trim();
       if (!text) throw new Error('Gemini returned no text content');
       return text;
-    } catch (err: any) {
+    } catch (err: unknown) {
       lastErr = err;
-      if (!isRetryableError(err)) throw err;
-      console.warn(`Gemini attempt ${attempt + 1}/${attempts} failed on ${model}:`, err?.message || err);
-      await pauseBeforeRetry(err, (attempt + 1) % perRound === 0);
+      state.reject(err, choice);
+      const failure = state.failure('gemini', model, err, choice);
+      console.warn(failure.message);
+      if (!isRetryableError(err) || !state.canRetry()) throw failure;
+      await pauseBeforeRetry(err, state.roundComplete());
     }
   }
-  throw lastErr instanceof Error ? lastErr : new Error('All Gemini API keys failed');
 }
 
 export interface ChatMessage {
@@ -436,6 +678,7 @@ async function postChatCompletion(
 }
 
 async function generateWithOpenAICompatible(
+  provider: Exclude<Provider, 'gemini'>,
   baseUrl: string,
   keys: string[],
   takeKey: (keys: string[]) => string | null,
@@ -445,28 +688,33 @@ async function generateWithOpenAICompatible(
   tuning?: GenerationTuning,
   reasoning: ReasoningControl = null
 ): Promise<string> {
-  if (keys.length === 0) throw new Error(`No API keys configured for ${baseUrl}`);
+  const state = new KeyAttemptState(keys, takeKey);
   const body = buildOpenAICompatibleBody(model, messages, systemInstruction, tuning, reasoning);
-  let lastErr: unknown;
-  const { perRound, total: attempts } = attemptBudget(keys.length);
-  for (let attempt = 0; attempt < attempts; attempt++) {
-    const key = takeKey(keys)!;
+  let lastErr: unknown = new Error(`No API keys configured for ${PROVIDER_LABELS[provider]}`);
+  let lastChoice: KeySelection | undefined;
+
+  while (true) {
+    const choice = state.next();
+    if (!choice) throw state.failure(provider, model, lastErr, lastChoice);
+    lastChoice = choice;
+    state.begin(choice);
     try {
-      const res = await postChatCompletion(baseUrl, key, body);
-      if (!res.ok) throw await httpError(res);
+      const res = await postChatCompletion(baseUrl, choice.key, body);
+      if (!res.ok) throw await httpError(res, keys);
       const data: any = await res.json();
       if (data?.choices?.[0]?.finish_reason === 'length') {
         throw new ProviderHttpError(502, 'The model reached its output limit before completing the response.');
       }
       return data?.choices?.[0]?.message?.content || '';
-    } catch (err: any) {
+    } catch (err: unknown) {
       lastErr = err;
-      if (!isRetryableError(err)) throw err;
-      console.warn(`Attempt ${attempt + 1}/${attempts} failed for ${model} at ${baseUrl}:`, err?.message || err);
-      await pauseBeforeRetry(err, (attempt + 1) % perRound === 0);
+      state.reject(err, choice);
+      const failure = state.failure(provider, model, err, choice);
+      console.warn(failure.message);
+      if (!isRetryableError(err) || !state.canRetry()) throw failure;
+      await pauseBeforeRetry(err, state.roundComplete());
     }
   }
-  throw lastErr instanceof Error ? lastErr : new Error(`All API keys failed for ${baseUrl}`);
 }
 
 export async function generateWithGroq(
@@ -477,7 +725,7 @@ export async function generateWithGroq(
   tuning?: GenerationTuning,
   reasoning: ReasoningControl = null
 ): Promise<string> {
-  return generateWithOpenAICompatible('https://api.groq.com/openai', keys, takeGroqKey, messages, systemInstruction, model, tuning, reasoning);
+  return generateWithOpenAICompatible('groq', 'https://api.groq.com/openai', keys, takeGroqKey, messages, systemInstruction, model, tuning, reasoning);
 }
 
 export async function generateWithCerebras(
@@ -488,7 +736,7 @@ export async function generateWithCerebras(
   tuning?: GenerationTuning,
   reasoning: ReasoningControl = null
 ): Promise<string> {
-  return generateWithOpenAICompatible('https://api.cerebras.ai', keys, takeCerebrasKey, messages, systemInstruction, model, tuning, reasoning);
+  return generateWithOpenAICompatible('cerebras', 'https://api.cerebras.ai', keys, takeCerebrasKey, messages, systemInstruction, model, tuning, reasoning);
 }
 
 export async function generateWithMistral(
@@ -499,10 +747,9 @@ export async function generateWithMistral(
   tuning?: GenerationTuning,
   reasoning: ReasoningControl = null
 ): Promise<string> {
-  return generateWithOpenAICompatible('https://api.mistral.ai', keys, takeMistralKey, messages, systemInstruction, model, tuning, reasoning);
+  return generateWithOpenAICompatible('mistral', 'https://api.mistral.ai', keys, takeMistralKey, messages, systemInstruction, model, tuning, reasoning);
 }
 
-export type Provider = 'gemini' | 'groq' | 'cerebras' | 'mistral';
 export interface ModelRoute {
   provider: Provider;
   model: string;
@@ -570,16 +817,23 @@ export async function generateText(opts: {
     return await tryProvider();
   } catch (primaryErr) {
     console.warn(
-      `Primary ${route.provider} model "${route.model}" exhausted, trying global Gemini fallback...`,
-      primaryErr
+      `Primary ${route.provider} model "${route.model}" exhausted; trying Gemini fallback.`,
+      serializeAiError(primaryErr, [...geminiKeys, ...groqKeys, ...cerebrasKeys, ...mistralKeys]).message
     );
     try {
       // Fallback models have their own capabilities: keep temperature and the
       // output cap, but only ask for the reasoning knob the fallback supports.
       return await generateWithGemini(geminiKeys, contents, systemInstruction, 'gemini-3.5-flash-lite', tuning, 'gemini_thinking');
     } catch (fallbackErr) {
-      console.warn('Global Gemini fallback exhausted, falling back to Groq default...', fallbackErr);
-      return await generateWithGroq(groqKeys, plainMessages, systemInstruction, undefined, tuning, null);
+      console.warn(
+        'Gemini fallback exhausted; trying Groq default.',
+        serializeAiError(fallbackErr, [...geminiKeys, ...groqKeys]).message
+      );
+      try {
+        return await generateWithGroq(groqKeys, plainMessages, systemInstruction, undefined, tuning, null);
+      } catch (finalErr) {
+        throw chainProviderErrors(finalErr, [primaryErr, fallbackErr]);
+      }
     }
   }
 }
@@ -587,6 +841,7 @@ export async function generateText(opts: {
 // ─── Streaming variants ────────────────────────────────────────────────────
 
 async function* streamWithOpenAICompatible(
+  provider: Exclude<Provider, 'gemini'>,
   baseUrl: string,
   keys: string[],
   takeKey: (keys: string[]) => string | null,
@@ -597,18 +852,20 @@ async function* streamWithOpenAICompatible(
   reasoning: ReasoningControl = null,
   prefill: PrefillMode = null
 ): AsyncGenerator<string> {
-  if (keys.length === 0) throw new Error(`No API keys configured for ${baseUrl}`);
   // Everything already handed to the caller. On a mid-stream rate limit we ask
   // the next key to continue from here rather than restarting, because the
   // client appends tokens and would otherwise render the opening twice.
+  const state = new KeyAttemptState(keys, takeKey);
   let emitted = '';
   let continuations = 0;
-  let lastErr: unknown;
-  const { perRound, total } = attemptBudget(keys.length);
-  const attempts = total + MAX_OUTPUT_CONTINUATIONS;
+  let lastErr: unknown = new Error(`No API keys configured for ${PROVIDER_LABELS[provider]}`);
+  let lastChoice: KeySelection | undefined;
 
-  for (let attempt = 0; attempt < attempts; attempt++) {
-    const key = takeKey(keys)!;
+  while (true) {
+    const choice = state.next();
+    if (!choice) throw state.failure(provider, model, lastErr, lastChoice);
+    lastChoice = choice;
+    state.begin(choice);
     const body = buildOpenAICompatibleBody(
       model,
       emitted ? continueChatMessages(messages, emitted, prefill) : messages,
@@ -618,8 +875,8 @@ async function* streamWithOpenAICompatible(
       { stream: true }
     );
     try {
-      const res = await postChatCompletion(baseUrl, key, body);
-      if (!res.ok) throw await httpError(res);
+      const res = await postChatCompletion(baseUrl, choice.key, body);
+      if (!res.ok) throw await httpError(res, keys);
       const reader = res.body?.getReader();
       if (!reader) throw new Error('No response body');
       const decoder = new TextDecoder();
@@ -649,7 +906,7 @@ async function* streamWithOpenAICompatible(
           } catch {
             continue; // skip malformed lines
           }
-          const payloadError = streamPayloadError(parsed);
+          const payloadError = streamPayloadError(parsed, keys);
           if (payloadError) throw payloadError;
           const choice = parsed?.choices?.[0];
           // Running out of output budget is reported as a normal finish, so it
@@ -696,18 +953,16 @@ async function* streamWithOpenAICompatible(
         );
       }
       return;
-    } catch (err: any) {
+    } catch (err: unknown) {
       lastErr = err;
-      if (!isRetryableError(err)) throw err;
+      state.reject(err, choice);
+      const failure = state.failure(provider, model, err, choice);
       const stage = emitted ? `after ${emitted.length} chars — continuing` : 'before any output';
-      console.warn(
-        `Stream attempt ${attempt + 1}/${attempts} failed for ${model} at ${baseUrl} (${stage}):`,
-        err?.message || err
-      );
-      await pauseBeforeRetry(err, (attempt + 1) % perRound === 0);
+      console.warn(`${failure.message} (${stage})`);
+      if (!isRetryableError(err) || !state.canRetry()) throw failure;
+      await pauseBeforeRetry(err, state.roundComplete());
     }
   }
-  throw lastErr instanceof Error ? lastErr : new Error(`All API keys failed for ${baseUrl}`);
 }
 
 async function* streamWithGemini(
@@ -719,18 +974,20 @@ async function* streamWithGemini(
   reasoning: ReasoningControl = null,
   prefill: PrefillMode = null
 ): AsyncGenerator<string> {
-  if (keys.length === 0) throw new Error('No Gemini API keys configured');
+  const state = new KeyAttemptState(keys, takeGeminiKey);
   let emitted = '';
   let continuations = 0;
-  let lastErr: unknown;
-  const { perRound, total } = attemptBudget(keys.length);
-  const attempts = total + MAX_OUTPUT_CONTINUATIONS;
+  let lastErr: unknown = new Error('No Gemini API keys configured');
+  let lastChoice: KeySelection | undefined;
 
-  for (let attempt = 0; attempt < attempts; attempt++) {
-    const key = takeGeminiKey(keys)!;
+  while (true) {
+    const choice = state.next();
+    if (!choice) throw state.failure('gemini', model, lastErr, lastChoice);
+    lastChoice = choice;
+    state.begin(choice);
     try {
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(key)}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(choice.key)}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -741,7 +998,7 @@ async function* streamWithGemini(
           }),
         }
       );
-      if (!response.ok) throw await httpError(response);
+      if (!response.ok) throw await httpError(response, keys);
       const reader = response.body?.getReader();
       if (!reader) throw new Error('No response body');
       const decoder = new TextDecoder();
@@ -764,7 +1021,7 @@ async function* streamWithGemini(
           } catch {
             continue; // skip malformed lines
           }
-          const payloadError = streamPayloadError(parsed);
+          const payloadError = streamPayloadError(parsed, keys);
           if (payloadError) throw payloadError;
           const candidate = parsed?.candidates?.[0];
           if (candidate?.finishReason) sawTerminalEvent = true;
@@ -809,18 +1066,16 @@ async function* streamWithGemini(
         );
       }
       return;
-    } catch (err: any) {
+    } catch (err: unknown) {
       lastErr = err;
-      if (!isRetryableError(err)) throw err;
+      state.reject(err, choice);
+      const failure = state.failure('gemini', model, err, choice);
       const stage = emitted ? `after ${emitted.length} chars — continuing` : 'before any output';
-      console.warn(
-        `Gemini stream attempt ${attempt + 1}/${attempts} failed on ${model} (${stage}):`,
-        err?.message || err
-      );
-      await pauseBeforeRetry(err, (attempt + 1) % perRound === 0);
+      console.warn(`${failure.message} (${stage})`);
+      if (!isRetryableError(err) || !state.canRetry()) throw failure;
+      await pauseBeforeRetry(err, state.roundComplete());
     }
   }
-  throw lastErr instanceof Error ? lastErr : new Error('All Gemini API keys failed');
 }
 
 export async function* streamText(opts: {
@@ -843,13 +1098,13 @@ export async function* streamText(opts: {
     let primary: AsyncGenerator<string>;
     switch (route.provider) {
       case 'groq':
-        primary = streamWithOpenAICompatible('https://api.groq.com/openai', groqKeys, takeGroqKey, plainMessages, systemInstruction, route.model, tuning, reasoning, prefill);
+        primary = streamWithOpenAICompatible('groq', 'https://api.groq.com/openai', groqKeys, takeGroqKey, plainMessages, systemInstruction, route.model, tuning, reasoning, prefill);
         break;
       case 'cerebras':
-        primary = streamWithOpenAICompatible('https://api.cerebras.ai', cerebrasKeys, takeCerebrasKey, plainMessages, systemInstruction, route.model, tuning, reasoning, prefill);
+        primary = streamWithOpenAICompatible('cerebras', 'https://api.cerebras.ai', cerebrasKeys, takeCerebrasKey, plainMessages, systemInstruction, route.model, tuning, reasoning, prefill);
         break;
       case 'mistral':
-        primary = streamWithOpenAICompatible('https://api.mistral.ai', mistralKeys, takeMistralKey, plainMessages, systemInstruction, route.model, tuning, reasoning, prefill);
+        primary = streamWithOpenAICompatible('mistral', 'https://api.mistral.ai', mistralKeys, takeMistralKey, plainMessages, systemInstruction, route.model, tuning, reasoning, prefill);
         break;
       case 'gemini':
       default:
@@ -866,15 +1121,25 @@ export async function* streamText(opts: {
     // would append a second answer to the first. Surface the interrupted run;
     // the client will not parse or apply it without the final `done` event.
     if (emittedPrimaryOutput) throw primaryErr;
-    console.warn(`Primary ${route.provider} stream failed, trying Gemini fallback...`, primaryErr);
+    console.warn(
+      `Primary ${route.provider} stream failed; trying Gemini fallback.`,
+      serializeAiError(primaryErr, [...geminiKeys, ...groqKeys, ...cerebrasKeys, ...mistralKeys]).message
+    );
     try {
       // The fallback's own capabilities, not the original route's: it takes
       // a thinking budget but no longer continues a trailing model turn.
       yield* streamWithGemini(geminiKeys, contents, systemInstruction, 'gemini-3.5-flash-lite', tuning, 'gemini_thinking', null);
-    } catch {
-      console.warn('Gemini fallback exhausted, falling back to non-streaming Groq...');
-      const text = await generateWithGroq(groqKeys, plainMessages, systemInstruction, undefined, tuning, null);
-      yield text;
+    } catch (fallbackErr) {
+      console.warn(
+        'Gemini fallback exhausted; trying non-streaming Groq.',
+        serializeAiError(fallbackErr, [...geminiKeys, ...groqKeys]).message
+      );
+      try {
+        const text = await generateWithGroq(groqKeys, plainMessages, systemInstruction, undefined, tuning, null);
+        yield text;
+      } catch (finalErr) {
+        throw chainProviderErrors(finalErr, [primaryErr, fallbackErr]);
+      }
     }
   }
 }

@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { SECRET_CANARIES, expectNoSecrets } from '../../test/assertions';
-import { AgentPanel, MiniMarkdown, parseAgentStreamEvent } from './AgentPanel';
+import { AgentPanel, MiniMarkdown, normalizeAgentProviderError, parseAgentStreamEvent } from './AgentPanel';
 
 describe('AgentPanel Markdown image privacy', () => {
   it('does not materialize a model-provided remote image before consent', () => {
@@ -18,6 +18,26 @@ describe('AgentPanel Markdown image privacy', () => {
 });
 
 describe('AgentPanel provider error privacy', () => {
+  it('formats structured provider diagnostics and the fallback chain for chat', () => {
+    const normalized = normalizeAgentProviderError({
+      code: 'agent_provider_failed',
+      message: 'Groq (qwen/qwen3.6-27b) HTTP 429: rate limit — key 3/37; tried 8/8 keys, 16 attempts',
+      provider: 'groq',
+      model: 'qwen/qwen3.6-27b',
+      status: 429,
+      failures: [
+        { provider: 'mistral', model: 'mistral-small-latest' },
+        { provider: 'gemini', model: 'gemini-3.5-flash-lite' },
+        { provider: 'groq', model: 'qwen/qwen3.6-27b' },
+      ],
+    });
+
+    expect(normalized.message).toBe(
+      'Groq (qwen/qwen3.6-27b) HTTP 429: rate limit — key 3/37; tried 8/8 keys, 16 attempts' +
+      ' · fallback chain: Mistral (mistral-small-latest) → Gemini (gemini-3.5-flash-lite) → Groq (qwen/qwen3.6-27b)'
+    );
+  });
+
   it('normalizes an SSE error payload before throwing it', () => {
     let thrown: unknown;
     try {

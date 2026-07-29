@@ -1,6 +1,9 @@
 import react from '@vitejs/plugin-react';
-import path from 'path';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {defineConfig} from 'vitest/config';
+
+const repoRoot = path.dirname(fileURLToPath(import.meta.url));
 
 /**
  * Unit and integration test configuration.
@@ -13,7 +16,7 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, '.'),
+      '@': path.resolve(repoRoot, '.'),
     },
   },
   test: {

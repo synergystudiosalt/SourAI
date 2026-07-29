@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  AgentProviderError,
   buildOpenAICompatibleBody,
   continueChatMessages,
   continueGeminiContents,
   createKeyPicker,
+  generateText,
   generateWithGroq,
   isRetryableError,
   MODEL_ROUTES,
@@ -184,22 +186,41 @@ describe('key picker start offset', () => {
   it('returns null when no keys are configured', () => {
     expect(createKeyPicker()([])).toBeNull();
   });
+
+
+  it('keeps independent cursors for independent providers', () => {
+    vi.spyOn(Math, 'random')
+      .mockReturnValueOnce(0.125)
+      .mockReturnValueOnce(0.75);
+    const providerA = createKeyPicker();
+    const providerB = createKeyPicker();
+
+    expect(providerA(KEY_LIST)).toBe('k1');
+    expect(providerA(KEY_LIST)).toBe('k2');
+    expect(providerB(KEY_LIST)).toBe('k6');
+    expect(providerB(KEY_LIST)).toBe('k7');
+  });
 });
 
 describe('retry budget', () => {
   // 37 Gemini keys previously meant 74 sequential calls for one request, which
   // outruns the Worker wall clock and reads as a timeout rather than an error.
-  it('caps keys tried per request however many are configured', async () => {
+  it('caps keys tried per request and retries the same bounded subset', async () => {
     const many = Array.from({ length: 37 }, (_, i) => `k${i}`);
-    const fetchMock = vi.fn(async () => rateLimited());
+    const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => rateLimited('0'));
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(
       generateWithGroq(many, [{ role: 'user', content: 'hi' }], 'sys', 'm')
     ).rejects.toThrow(/429/);
 
-    // 8 keys per round, 2 rounds — not 37 x 2.
+    // 8 keys per round, 2 rounds — not 16 distinct keys from the 37-key list.
     expect(fetchMock).toHaveBeenCalledTimes(16);
+    const used = fetchMock.mock.calls.map(([, init]) =>
+      (init.headers as Record<string, string>).Authorization
+    );
+    expect(new Set(used.slice(0, 8)).size).toBe(8);
+    expect(used.slice(8)).toEqual(used.slice(0, 8));
   });
 
   it('still uses every key when the list is short', async () => {
@@ -244,6 +265,119 @@ describe('key failover', () => {
       generateWithGroq(KEYS, [{ role: 'user', content: 'hi' }], 'sys', 'm')
     ).rejects.toThrow(/404/);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+
+  it('never retries a key rejected with 401 in a later round', async () => {
+    const seen: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: any) => {
+      seen.push(init.headers.Authorization);
+      return new Response(JSON.stringify({ error: { message: 'invalid credential' } }), {
+        status: 401,
+      });
+    }));
+
+    let thrown: unknown;
+    try {
+      await generateWithGroq(KEYS, [{ role: 'user', content: 'hi' }], 'sys', 'm');
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(seen).toHaveLength(KEYS.length);
+    expect(new Set(seen).size).toBe(KEYS.length);
+    expect(thrown).toBeInstanceOf(AgentProviderError);
+    expect((thrown as AgentProviderError).details).toMatchObject({
+      status: 401,
+      keysTried: 2,
+      attempts: 2,
+    });
+  });
+
+  it('reports the provider response and key/attempt diagnostics without key values', async () => {
+    const secret = 'gsk_abcdefghijklmnopqrstuvwxyz1234';
+    vi.stubGlobal('fetch', vi.fn(async () =>
+      new Response(JSON.stringify({
+        error: { message: `Request too large for TPM; credential ${secret}` },
+      }), { status: 413 })
+    ));
+
+    let thrown: unknown;
+    try {
+      await generateWithGroq([secret], [{ role: 'user', content: 'hi' }], 'sys', 'model-x');
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(AgentProviderError);
+    const failure = (thrown as AgentProviderError).details;
+    expect(failure).toMatchObject({
+      provider: 'groq',
+      model: 'model-x',
+      status: 413,
+      keyIndex: 1,
+      keyCount: 1,
+      keysTried: 1,
+      keyBudget: 1,
+      attempts: 1,
+    });
+    expect(failure.providerMessage).toContain('Request too large for TPM');
+    expect(JSON.stringify(failure)).not.toContain(secret);
+  });
+});
+
+describe('provider fallback key routing', () => {
+  const base = {
+    contents: [{ role: 'user', parts: [{ text: 'hi' }] }],
+    plainMessages: [{ role: 'user', content: 'hi' }],
+    systemInstruction: 'sys',
+    route: { provider: 'mistral' as const, model: 'primary-model' },
+    mistralKeys: ['mistral-only-key'],
+    geminiKeys: ['gemini-only-key'],
+    groqKeys: ['groq-only-key'],
+  };
+
+  function providerFor(url: string): string {
+    if (url.includes('mistral.ai')) return 'mistral';
+    if (url.includes('googleapis.com')) return 'gemini';
+    if (url.includes('groq.com')) return 'groq';
+    return 'unknown';
+  }
+
+  it('passes each provider its own key through generateText fallbacks', async () => {
+    const calls: { provider: string; url: string; authorization?: string }[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init: any) => {
+      const provider = providerFor(url);
+      calls.push({ provider, url, authorization: init.headers.Authorization });
+      if (provider !== 'groq') {
+        return new Response(JSON.stringify({ error: { message: 'request too large' } }), { status: 413 });
+      }
+      return new Response(JSON.stringify({ choices: [{ message: { content: 'fallback worked' } }] }), { status: 200 });
+    }));
+
+    await expect(generateText(base)).resolves.toBe('fallback worked');
+    expect(calls.map((call) => call.provider)).toEqual(['mistral', 'gemini', 'groq']);
+    expect(calls[0].authorization).toBe('Bearer mistral-only-key');
+    expect(calls[1].url).toContain('key=gemini-only-key');
+    expect(calls[2].authorization).toBe('Bearer groq-only-key');
+  });
+
+  it('passes each provider its own key through streamText fallbacks', async () => {
+    const calls: { provider: string; url: string; authorization?: string }[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init: any) => {
+      const provider = providerFor(url);
+      calls.push({ provider, url, authorization: init.headers.Authorization });
+      if (provider !== 'groq') {
+        return new Response(JSON.stringify({ error: { message: 'request too large' } }), { status: 413 });
+      }
+      return new Response(JSON.stringify({ choices: [{ message: { content: 'stream fallback worked' } }] }), { status: 200 });
+    }));
+
+    await expect(collect(streamText(base))).resolves.toBe('stream fallback worked');
+    expect(calls.map((call) => call.provider)).toEqual(['mistral', 'gemini', 'groq']);
+    expect(calls[0].authorization).toBe('Bearer mistral-only-key');
+    expect(calls[1].url).toContain('key=gemini-only-key');
+    expect(calls[2].authorization).toBe('Bearer groq-only-key');
   });
 });
 

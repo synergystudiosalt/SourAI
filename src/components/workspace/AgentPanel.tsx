@@ -35,19 +35,49 @@ import { ChatRunController } from '../../agent/runtime/chatRunController';
 
 export { AgentMarkdownImage, MiniMarkdown } from '../agent/MarkdownContent';
 
+const AGENT_PROVIDER_LABELS: Record<string, string> = {
+  gemini: 'Gemini',
+  groq: 'Groq',
+  cerebras: 'Cerebras',
+  mistral: 'Mistral',
+};
+
+function messageFromAgentErrorPayload(value: Record<string, unknown>): string | null {
+  const base = typeof value.message === 'string' && value.message.trim()
+    ? value.message.trim()
+    : null;
+  if (!base) return null;
+
+  const failures = Array.isArray(value.failures) ? value.failures : [];
+  const chain = failures.flatMap((failure) => {
+    if (!failure || typeof failure !== 'object' || Array.isArray(failure)) return [];
+    const record = failure as Record<string, unknown>;
+    if (typeof record.provider !== 'string') return [];
+    const provider = AGENT_PROVIDER_LABELS[record.provider] || record.provider;
+    return [typeof record.model === 'string' ? `${provider} (${record.model})` : provider];
+  });
+  return chain.length > 1 ? `${base} · fallback chain: ${chain.join(' → ')}` : base;
+}
+
 export function normalizeAgentProviderError(
   value: unknown,
   fallbackMessage = 'Something went wrong reaching the sour.ai Agent.'
 ): SourError {
+  const structured =
+    value && typeof value === 'object' && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : null;
+  const structuredMessage = structured ? messageFromAgentErrorPayload(structured) : null;
   const candidate =
     value instanceof Error || (typeof value === 'string' && value.trim())
       ? value
-      : fallbackMessage;
+      : structuredMessage || fallbackMessage;
   return normalizeError(candidate, {
-    code: 'agent_provider_failed',
+    code: typeof structured?.code === 'string' ? structured.code : 'agent_provider_failed',
     causeCategory: 'provider',
     message: fallbackMessage,
     retryable: true,
+    details: structured || undefined,
   });
 }
 

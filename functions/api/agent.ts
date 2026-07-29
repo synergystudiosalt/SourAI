@@ -1,4 +1,4 @@
-import { generateText, streamText, resolveModelRoute, getApiKeys, type GenerationTuning } from '../shared/ai';
+import { generateText, streamText, resolveModelRoute, getApiKeys, serializeAiError, type GenerationTuning } from '../shared/ai';
 import { AGENT_SYSTEM_PROMPT, AGENT_WRITE_MODE_NOTE, AGENT_PLAN_MODE_NOTE, buildAgentContextBlock, buildReasoningEffortInstruction } from '../shared/systemPrompts';
 import { resolveEffortProfile } from '../shared/effortProfile';
 import { splitThinkingAndText } from '../shared/responseFormatting';
@@ -13,6 +13,7 @@ export const onRequest: PagesFunction = async (context) => {
   try {
     const env = context.env as Record<string, string>;
     const { geminiKeys, groqKeys, cerebrasKeys, mistralKeys } = getApiKeys(env);
+    const configuredKeys = [...geminiKeys, ...groqKeys, ...cerebrasKeys, ...mistralKeys];
 
     if (geminiKeys.length === 0 && groqKeys.length === 0 && cerebrasKeys.length === 0 && mistralKeys.length === 0) {
       return new Response(
@@ -140,8 +141,10 @@ export const onRequest: PagesFunction = async (context) => {
               thinkingLabel: thinking ? 'Reasoning' : '',
             })}\n\n`));
             controller.close();
-          } catch (err: any) {
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: err?.message || 'Stream failed' })}\n\n`));
+          } catch (err: unknown) {
+            const error = serializeAiError(err, configuredKeys);
+            console.error('Agent stream error:', error.message);
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error })}\n\n`));
             controller.close();
           }
         }
@@ -179,11 +182,21 @@ export const onRequest: PagesFunction = async (context) => {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
-  } catch (err: any) {
-    console.error('Agent error:', err);
+  } catch (err: unknown) {
+    const envKeys = getApiKeys(context.env as Record<string, string>);
+    const error = serializeAiError(err, [
+      ...envKeys.geminiKeys,
+      ...envKeys.groqKeys,
+      ...envKeys.cerebrasKeys,
+      ...envKeys.mistralKeys,
+    ]);
+    console.error('Agent error:', error.message);
     return new Response(
-      JSON.stringify({ error: err?.message || 'Internal server error' }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
+      JSON.stringify({ error }),
+      {
+        status: error.code === 'agent_provider_failed' ? 502 : 500,
+        headers: { 'Content-Type': 'application/json' },
+      }
     );
   }
 };
