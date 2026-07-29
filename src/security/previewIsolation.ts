@@ -94,6 +94,64 @@ export const PREVIEW_DOCUMENT_POLICY = PREVIEW_POLICY_DIRECTIVES.join('; ');
  */
 export const PREVIEW_RESPONSE_POLICY = ['sandbox allow-scripts', ...PREVIEW_POLICY_DIRECTIVES].join('; ');
 
+/** Marks a postMessage as preview console output rather than page traffic. */
+export const PREVIEW_LOG_MESSAGE = 'sour:preview-log';
+
+export interface PreviewLogEntry {
+  readonly level: 'error' | 'warn' | 'log' | 'info';
+  readonly text: string;
+}
+
+/**
+ * Forwards the preview's console and uncaught errors to the parent.
+ *
+ * The frame runs in an opaque origin, so the app cannot read its console
+ * directly; the frame has to volunteer it. Injected ahead of the project's own
+ * markup so a syntax error or a throw during initial evaluation is still
+ * reported — those are exactly the failures worth catching, and they happen
+ * before any project code could report itself.
+ *
+ * Kept to ES5 and wrapped in try/catch: it runs inside untrusted project code
+ * and must never be the thing that breaks the page.
+ */
+const PREVIEW_CONSOLE_BRIDGE = `<script>(function(){
+try{
+var MAX=2000,SENT=0,CAP=200;
+var send=function(level,parts){
+  if(SENT++>CAP)return;
+  var text='';
+  try{
+    for(var i=0;i<parts.length;i++){
+      var a=parts[i];
+      text+=(i?' ':'')+(typeof a==='string'?a:(a&&a.stack)?a.stack:JSON.stringify(a));
+    }
+  }catch(e){text=String(parts[0]);}
+  try{parent.postMessage({type:'${PREVIEW_LOG_MESSAGE}',level:level,text:String(text).slice(0,MAX)},'*');}catch(e){}
+};
+var levels=['error','warn','log','info'];
+for(var i=0;i<levels.length;i++){(function(level){
+  var orig=console[level];
+  console[level]=function(){send(level,arguments);if(orig)try{orig.apply(console,arguments);}catch(e){}};
+})(levels[i]);}
+window.addEventListener('error',function(e){
+  send('error',[(e.message||'Error')+' ('+(e.filename||'inline')+':'+(e.lineno||0)+')']);
+});
+window.addEventListener('unhandledrejection',function(e){
+  var r=e.reason;send('error',['Unhandled promise rejection: '+((r&&(r.stack||r.message))||r)]);
+});
+}catch(e){}
+})();</script>`;
+
+/** Recognises a preview log message. Callers must also check event.source. */
+export function parsePreviewLog(data: unknown): PreviewLogEntry | null {
+  if (!data || typeof data !== 'object') return null;
+  const record = data as Record<string, unknown>;
+  if (record.type !== PREVIEW_LOG_MESSAGE) return null;
+  const level = record.level;
+  if (level !== 'error' && level !== 'warn' && level !== 'log' && level !== 'info') return null;
+  return { level, text: typeof record.text === 'string' ? record.text : '' };
+}
+
 export function buildSandboxedPreviewDocument(source: string): string {
   const policy = PREVIEW_DOCUMENT_POLICY;
 
@@ -101,6 +159,7 @@ export function buildSandboxedPreviewDocument(source: string): string {
     '<!doctype html><html><head>',
     `<meta http-equiv="Content-Security-Policy" content="${policy}">`,
     '<meta name="referrer" content="no-referrer">',
+    PREVIEW_CONSOLE_BRIDGE,
     '</head><body>',
     stripUntrustedMetaElements(source),
     '</body></html>',
