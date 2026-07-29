@@ -132,7 +132,8 @@ async function pauseBeforeRetry(err: unknown, roundComplete: boolean): Promise<v
 const CONTINUATION_INSTRUCTION =
   'Your previous reply was cut off mid-sentence by a provider rate limit. This is exactly what you had already sent to the user:';
 const CONTINUATION_RULES =
-  'Continue from precisely where it stopped. Do not repeat any of it, do not restate the question, and do not apologise — emit only the remaining output, so the two halves join seamlessly.';
+  'Continue from precisely where it stopped. Do not repeat any of it, do not restate the question, and do not apologise — emit only the remaining output, so the two halves join seamlessly. ' +
+  'Emit no <thinking>, <think> or <check_for_errors> tag and no commentary of any kind: your very next character is appended directly onto the cut-off text, so anything else lands in the middle of the file you were writing.';
 
 /**
  * Rebuilds the request so a stream cut off by a rate limit can be *finished*
@@ -202,6 +203,23 @@ export function withGeminiContinuation(contents: any, partial: string): any {
 /** How much of a resumed stream to inspect before letting it through. */
 const RESUME_SCAN_CHARS = 1200;
 
+/**
+ * A status tag emitted at the head of a resumed stream. The splice happens
+ * mid-token, so anything the model says before continuing is written straight
+ * into the middle of the file it was generating.
+ */
+const RESUME_PREAMBLE_RE = /^\s*<(thinking|think|check_for_errors)>[\s\S]*?<\/\1>\s*/i;
+
+export function stripResumePreamble(text: string): string {
+  let out = text;
+  let previous = '';
+  while (out !== previous) {
+    previous = out;
+    out = out.replace(RESUME_PREAMBLE_RE, '');
+  }
+  return out;
+}
+
 /** Longest suffix of what was sent that the continuation repeats as a prefix. */
 export function seamOverlap(sent: string, next: string): number {
   const max = Math.min(sent.length, next.length, RESUME_SCAN_CHARS);
@@ -249,7 +267,9 @@ class ResumeGate {
   flush(): string {
     if (this.open) return '';
     this.open = true;
-    const buffered = this.pending;
+    // Strip any status tag before the restart check, so a preamble does not
+    // hide the fact that the model began the answer again.
+    const buffered = stripResumePreamble(this.pending);
     this.pending = '';
     if (looksLikeRestart(this.alreadySent, buffered)) {
       this.restarted = true;

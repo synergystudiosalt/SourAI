@@ -376,6 +376,41 @@ describe('mid-stream rate limit', () => {
     )).rejects.toThrow(/ended before signalling completion/i);
   });
 
+  // Observed live on a Gemini route: the resume opened with
+  // "<thinking>Continuing game.js from the exact cut-off point ...</thinking>",
+  // which landed in the middle of the generated file.
+  it('strips a status tag the model emits at the head of a resume', async () => {
+    let calls = 0;
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      calls++;
+      if (calls === 1) {
+        return sseStream([
+          token('const CONFIG = { sunset: { skyTop: 0'),
+          `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'length' }] })}\n\n`,
+          'data: [DONE]\n\n',
+        ]);
+      }
+      return sseStream([
+        token('<thinking>Continuing from the cut-off point.</thinking>x101830 } };'),
+        'data: [DONE]\n\n',
+      ]);
+    }));
+
+    const out = await collect(
+      streamText({
+        geminiKeys: [],
+        groqKeys: KEYS,
+        contents: [],
+        plainMessages: [{ role: 'user', content: 'write' }],
+        systemInstruction: 'sys',
+        route: { provider: 'groq', model: 'm', prefill: 'openai' },
+      })
+    );
+
+    expect(out).toBe('const CONFIG = { sunset: { skyTop: 0x101830 } };');
+    expect(out).not.toContain('thinking');
+  });
+
   it('de-duplicates an overlapping seam when the model repeats its last words', async () => {
     let calls = 0;
     vi.stubGlobal('fetch', vi.fn(async () => {

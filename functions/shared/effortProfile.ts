@@ -88,7 +88,7 @@ export const EFFORT_PROFILES: Record<AgentReasoningEffort, EffortProfile> = {
     temperature: 0.2,
     maxOutputTokens: 6144,
     openAiEffort: 'high',
-    thinkingBudget: 8192,
+    thinkingBudget: 4096,
     context: {
       activeFileChars: 14000,
       mentionedFileChars: 10000,
@@ -107,7 +107,10 @@ export const EFFORT_PROFILES: Record<AgentReasoningEffort, EffortProfile> = {
     // stream continuation rather than by a bigger single cap.
     maxOutputTokens: 8192,
     openAiEffort: 'high',
-    thinkingBudget: 24576,
+    // Kept well below the output budget. A large thinking allowance is spent
+    // before the first token, so on a long code generation it burns the
+    // request window without producing any file content.
+    thinkingBudget: 8192,
     context: {
       activeFileChars: 24000,
       mentionedFileChars: 16000,
