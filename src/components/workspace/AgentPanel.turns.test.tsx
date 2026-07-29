@@ -1,8 +1,10 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { WorkspaceFileNode } from '../../types';
 import { AgentPanel } from './AgentPanel';
+import { PREVIEW_LOG_MESSAGE } from '../../security/previewIsolation';
+import { collectPreviewMessage, resetPreviewLogs } from './previewLogStore';
 
 function streamedTurn(text: string): Response {
   const body = new ReadableStream({
@@ -55,6 +57,8 @@ function sendPrompt(): void {
 const PROCESSING_ERROR = /invalid regular expression|unterminated character class/i;
 
 describe('AgentPanel completed-turn parity', () => {
+  afterEach(() => resetPreviewLogs());
+
   it('surfaces a first-turn SSE processing failure instead of discarding the turn', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(streamedTurn('@@glob: ['));
 
@@ -85,5 +89,65 @@ describe('AgentPanel completed-turn parity', () => {
     expect(await screen.findByText(PROCESSING_ERROR)).toBeInTheDocument();
     expect(screen.queryByText(/returned no final answer/i)).not.toBeInTheDocument();
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+  });
+
+  it('labels and sends a runtime-error follow-up after applied operations', async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        streamedTurn('Created the fix.\n\n```ts path="src/a.ts"\nexport const value = 2;\n```')
+      )
+      .mockResolvedValueOnce(streamedTurn('The runtime error is fixed.'));
+
+    const previewWindow = {} as Window;
+    const onApplyOps = vi.fn().mockImplementation(async () => {
+      collectPreviewMessage(
+        {
+          source: previewWindow,
+          data: {
+            type: PREVIEW_LOG_MESSAGE,
+            level: 'error',
+            text: 'THREE.BufferGeometry.computeBoundingSphere(): Computed radius is NaN',
+          },
+        },
+        previewWindow
+      );
+      return true;
+    });
+
+    render(
+      <AgentPanel
+        isDarkMode={false}
+        isCollapsed={false}
+        onToggleCollapse={vi.fn()}
+        projectId="runtime-follow-up-test"
+        projectName="Runtime follow-up test"
+        files={[
+          {
+            id: 'src/a.ts',
+            name: 'a.ts',
+            path: 'src/a.ts',
+            type: 'file',
+            content: 'export const value = 1;',
+          },
+        ]}
+        activeFile={null}
+        onApplyOps={onApplyOps}
+        onOpenFile={vi.fn()}
+      />
+    );
+    sendPrompt();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Apply changes' }));
+
+    await waitFor(() => expect(onApplyOps).toHaveBeenCalledOnce());
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2), { timeout: 4_000 });
+    expect(
+      screen.getByText((content) =>
+        content.includes('Automatic runtime repair · attempt 1/2')
+      )
+    ).toBeInTheDocument();
+
+    const payload = JSON.parse(String(vi.mocked(fetch).mock.calls[1][1]?.body));
+    expect(payload.messages.at(-1)?.content).toContain('Computed radius is NaN');
   });
 });

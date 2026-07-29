@@ -11,15 +11,18 @@ import {
   openSafePreviewInNewTab,
 } from './CodeWorkspace';
 import {
+  PREVIEW_LOG_MESSAGE,
   PREVIEW_RESPONSE_POLICY,
   PREVIEW_SCRIPT_SOURCES,
   stripUntrustedMetaElements,
 } from '../security/previewIsolation';
+import { getPreviewLogs, resetPreviewLogs } from './workspace/previewLogStore';
 
 describe('CodeWorkspace preview security', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.useRealTimers();
+    resetPreviewLogs();
     delete (URL as unknown as Record<string, unknown>).createObjectURL;
     delete (URL as unknown as Record<string, unknown>).revokeObjectURL;
   });
@@ -51,6 +54,24 @@ describe('CodeWorkspace preview security', () => {
     expect(document).toContain('img-src data: blob:');
     expect(document.indexOf('Content-Security-Policy')).toBeLessThan(document.indexOf(source));
     expect(document).toContain(source);
+  });
+
+  it('accepts messages only from its iframe and resets entries when source changes', () => {
+    vi.spyOn(HTMLFormElement.prototype, 'submit').mockImplementation(() => undefined);
+    const { rerender } = render(<SandboxedPreviewFrame source="first" title="runtime preview" />);
+    const frame = screen.getByTitle('runtime preview') as HTMLIFrameElement;
+    const data = { type: PREVIEW_LOG_MESSAGE, level: 'error', text: 'first failure' };
+
+    window.dispatchEvent(new MessageEvent('message', { data, source: window }));
+    expect(getPreviewLogs()).toEqual([]);
+
+    window.dispatchEvent(
+      new MessageEvent('message', { data, source: frame.contentWindow })
+    );
+    expect(getPreviewLogs()).toEqual([{ level: 'error', text: 'first failure' }]);
+
+    rerender(<SandboxedPreviewFrame source="second" title="runtime preview" />);
+    expect(getPreviewLogs()).toEqual([]);
   });
 
   it('allows the runtime CDNs the preview builders actually use', () => {

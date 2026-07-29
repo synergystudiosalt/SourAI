@@ -23,6 +23,7 @@ import {
 import { getLanguageName, isLikelyBinary, getFileIconMeta } from '../utils/languageMeta';
 import { buildPreviewDocument, getPreviewKind, buildReactPreview, isReactProject } from '../utils/webPreview';
 import { buildSandboxedPreviewDocument, PREVIEW_ENDPOINT } from '../security/previewIsolation';
+import { collectPreviewMessage, resetPreviewLogs } from './workspace/previewLogStore';
 import { useFlag } from '../features/flags';
 
 export { buildSandboxedPreviewDocument } from '../security/previewIsolation';
@@ -146,8 +147,18 @@ export const SandboxedPreviewFrame: React.FC<{
   const reactId = React.useId();
   // useId embeds ':' which is not valid in a browsing-context name.
   const frameName = React.useMemo(() => `preview-${reactId.replace(/[^a-zA-Z0-9_-]/g, '')}`, [reactId]);
+  const frameRef = React.useRef<HTMLIFrameElement>(null);
   const formRef = React.useRef<HTMLFormElement>(null);
   const fieldRef = React.useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    resetPreviewLogs();
+    const handleMessage = (event: MessageEvent) => {
+      collectPreviewMessage(event, frameRef.current?.contentWindow ?? null);
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [source]);
 
   // Navigating the frame to /api/preview is what gives the document its own
   // CSP; a srcdoc frame would inherit the app's strict script-src instead.
@@ -160,6 +171,7 @@ export const SandboxedPreviewFrame: React.FC<{
   return (
     <>
       <iframe
+        ref={frameRef}
         name={frameName}
         sandbox="allow-scripts"
         referrerPolicy="no-referrer"

@@ -33,6 +33,8 @@ import {
 import { splitThinkingAndText } from '../../../functions/shared/responseFormatting';
 import { ChatRunController } from '../../agent/runtime/chatRunController';
 import { migrateModelId, MODEL_IDS, MODEL_ROUTES } from '../../../functions/shared/ai';
+import { getPreviewLogs } from './previewLogStore';
+import { PREVIEW_RUNTIME_SETTLE_MS, PreviewAutoFixLoop } from './previewAutoFix';
 
 export { AgentMarkdownImage, MiniMarkdown } from '../agent/MarkdownContent';
 
@@ -110,6 +112,12 @@ interface AgentPanelProps {
 
 const genId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
+interface SendTurnOptions {
+  readonly automaticRuntimeRepair?: boolean;
+}
+
+type SendTurn = (overrideText?: string, options?: SendTurnOptions) => Promise<void>;
+
 const SLASH_COMMANDS: { cmd: string; label: string; prompt: string }[] = [
   { cmd: '/explain', label: 'Explain the active file', prompt: 'Explain what the active file does, in simple terms.' },
   { cmd: '/fix', label: 'Find and fix bugs', prompt: 'Find and fix any bugs in the active file.' },
@@ -139,8 +147,15 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   onOpenFile,
 }) => {
   const [messages, setMessages] = useState<AgentChatMessage[]>([]);
+  const messagesRef = useRef<AgentChatMessage[]>(messages);
+  messagesRef.current = messages;
+  const previewAutoFixRef = useRef(new PreviewAutoFixLoop());
+  const userTurnSequenceRef = useRef(0);
+  const handleSendRef = useRef<SendTurn>(async () => undefined);
   const [input, setInput] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const isSendingRef = useRef(isSending);
+  isSendingRef.current = isSending;
   const [mode, setMode] = useState<AgentMode>('write');
   const [selectedModel, setSelectedModel] = useState<AIModel>('sour-omni-flash');
   const [reasoningEffort, setReasoningEffort] = useState<AgentReasoningEffort>('standard');
@@ -370,6 +385,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   };
 
   const handleApplyAll = async (messageId: string, ops: AgentFileOp[]) => {
+    const previewBeforeApply = getPreviewLogs();
+    const userTurnSequence = userTurnSequenceRef.current;
     setMessages((prev) =>
       prev.map((message) =>
         message.id === messageId ? { ...message, approvalStatus: 'applying' } : message
@@ -377,6 +394,23 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     );
     if (await onApplyOps(ops)) {
       markApplied(messageId, ops.map((o) => o.path));
+      await new Promise<void>((resolve) => window.setTimeout(resolve, PREVIEW_RUNTIME_SETTLE_MS));
+      if (userTurnSequence !== userTurnSequenceRef.current) return;
+      const decision = previewAutoFixRef.current.afterApply(previewBeforeApply, getPreviewLogs());
+      if (decision.kind === 'follow-up') {
+        await handleSendRef.current(decision.prompt, { automaticRuntimeRepair: true });
+      } else if (decision.kind === 'limit-reached') {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: genId(),
+            role: 'assistant',
+            content: decision.message,
+            isError: true,
+            createdAt: Date.now(),
+          },
+        ]);
+      }
     } else {
       setMessages((prev) =>
         prev.map((message) =>
@@ -721,9 +755,13 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     return { toolCalls, ops, resultText: parts.join('\n\n') };
   };
 
-  const handleSend = async (overrideText?: string) => {
+  const handleSend: SendTurn = async (overrideText, options = {}) => {
     const text = (overrideText ?? input).trim();
-    if (!text || isSending) return;
+    if (!text || isSendingRef.current) return;
+    if (!options.automaticRuntimeRepair) {
+      userTurnSequenceRef.current += 1;
+      previewAutoFixRef.current.beginUserMessage();
+    }
     setInput('');
     setShowSlash(false);
     setMentionState(null);
@@ -735,8 +773,9 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     const promptToSend = text;
 
     const userMsg: AgentChatMessage = { id: genId(), role: 'user', content: text, createdAt: Date.now() };
-    const historyBase = [...messages, userMsg];
+    const historyBase = [...messagesRef.current, userMsg];
     setMessages(historyBase);
+    isSendingRef.current = true;
     setIsSending(true);
 
     // Effort decides how much of the project is worth sending, not just how
@@ -1131,6 +1170,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         ]);
       }
     } finally {
+      isSendingRef.current = false;
       setIsSending(false);
       setAgentAttachments([]);
       abortControllerRef.current = null;
@@ -1145,6 +1185,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       );
     }
   };
+  handleSendRef.current = handleSend;
 
   const handleAttachImage = (item: AttachmentItem) => {
     setAgentAttachments((prev) => [...prev, item]);
@@ -1253,6 +1294,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   };
 
   const handleNewThread = () => {
+    previewAutoFixRef.current.beginUserMessage();
     setMessages([]);
     setAgentAttachments([]);
     freshMessageIdsRef.current.clear();
