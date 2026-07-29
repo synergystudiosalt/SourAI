@@ -1,6 +1,7 @@
 import React from 'react';
 import { AIModel, ModelOption } from '../types';
 import { Check } from 'lucide-react';
+import { MODEL_IDS, MODEL_ROUTES } from '../../functions/shared/ai';
 
 interface ModelSelectorPopoverProps {
   selectedModel: AIModel;
@@ -10,32 +11,14 @@ interface ModelSelectorPopoverProps {
   positionClass?: string;
 }
 
-const MODELS: ModelOption[] = [
-  {
-    id: 'sour-omni-flash',
-    name: 'Sour Omni-Flash',
-    badge: 'Fast',
-    description: 'Everyday reasoning powered by Llama 3.1 8B.',
-  },
-  {
-    id: 'sour-intelligence',
-    name: 'Sour Intelligence',
-    badge: 'Smart',
-    description: 'Deep analytical reasoning powered by Llama 3.3 70B.',
-  },
-  {
-    id: 'sour-ultra',
-    name: 'Sour Ultra',
-    badge: 'Pro',
-    description: 'Advanced capabilities powered by Gemini 3.5 Flash Lite.',
-  },
-  {
-    id: 'sour-overclock',
-    name: 'Sour Overclock',
-    badge: 'Turbo',
-    description: 'Maximum speed powered by Cerebras zai-glm-4.7.',
-  },
-];
+const MODELS: ModelOption[] = MODEL_IDS.map((id) => {
+  const route = MODEL_ROUTES[id];
+  return {
+    id,
+    name: route.label,
+    description: `Powered by ${route.model}.`,
+  };
+});
 
 export const ModelSelectorPopover: React.FC<ModelSelectorPopoverProps> = ({
   selectedModel,

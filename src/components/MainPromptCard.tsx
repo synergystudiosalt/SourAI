@@ -9,6 +9,7 @@ import { LimitTimer } from './LimitTimer';
 import { parseUploadedFile } from '../utils/fileParser';
 import { MESSAGE_QUOTA } from '../utils/constants';
 import { VoiceRecognizer } from '../utils/voiceRecognition';
+import { MODEL_ROUTES } from '../../functions/shared/ai';
 
 interface MainPromptCardProps {
   promptInput: string;
@@ -127,14 +128,7 @@ export const MainPromptCard: React.FC<MainPromptCardProps> = ({
     }
   };
 
-  const MODEL_DISPLAY: Record<AIModel, string> = {
-    'sour-omni-flash': 'Omni-Flash',
-    'sour-intelligence': 'Intelligence',
-    'sour-ultra': 'Ultra',
-    'sour-overclock': 'Overclock',
-    'sour-overcode': 'OverCode',
-  };
-  const modelDisplayName = MODEL_DISPLAY[selectedModel] || selectedModel;
+  const modelDisplayName = MODEL_ROUTES[selectedModel].label;
 
   const toggleVoiceRecording = () => {
     if (!voiceRecognizerRef.current) return;

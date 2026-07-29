@@ -1,4 +1,6 @@
-export type AIModel = 'sour-omni-flash' | 'sour-intelligence' | 'sour-ultra' | 'sour-overclock' | 'sour-overcode';
+import type { ModelId } from '../functions/shared/ai';
+
+export type AIModel = ModelId;
 export type AgentReasoningEffort = 'light' | 'standard' | 'deep' | 'ultracode';
 
 export interface AttachmentItem {

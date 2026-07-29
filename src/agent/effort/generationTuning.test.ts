@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildOpenAICompatibleBody, MODEL_ROUTES, resolveModelRoute } from '@/functions/shared/ai';
+import { buildOpenAICompatibleBody, MODEL_ROUTES, resolveModelRoute, type ModelRoute } from '@/functions/shared/ai';
 import { EFFORT_PROFILES } from '@/functions/shared/effortProfile';
 
 const MESSAGES = [{ role: 'user', content: 'hi' }];
@@ -64,7 +64,7 @@ describe('buildOpenAICompatibleBody', () => {
 
 describe('model route reasoning capability', () => {
   it('declares a control only where the provider matches', () => {
-    for (const route of Object.values(MODEL_ROUTES)) {
+    for (const route of Object.values(MODEL_ROUTES) as ModelRoute[]) {
       if (route.reasoning === 'gemini_thinking') expect(route.provider).toBe('gemini');
       if (route.reasoning === 'openai_effort') expect(route.provider).not.toBe('gemini');
     }

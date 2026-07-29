@@ -33,6 +33,7 @@ import { ModelSelectorPopover } from './ModelSelectorPopover';
 import { AttachmentPopover } from './AttachmentPopover';
 import { AttachmentCard } from './AttachmentCard';
 import { parseUploadedFile } from '../utils/fileParser';
+import { MODEL_ROUTES } from '../../functions/shared/ai';
 import { ImagePreviewCard } from './ImagePreviewCard';
 import { QuestionBox, extractQuestionBlocks } from './QuestionBox';
 
@@ -131,7 +132,7 @@ const TypewriterMessage: React.FC<TypewriterMessageProps> = ({
   const { cleanText } = extractQuestionBlocks(displayedContent);
 
   // Speed and thinking duration based on model tier
-  const fastModels = ['sour-omni-flash', 'sour-overclock', 'sour-overcode'] as const;
+  const fastModels = ['sour-omni-flash', 'sour-velocity', 'sour-overdrive'] as const;
   const modelSpeed = (fastModels as readonly string[]).includes(selectedModel) ? 14 : 26;
   const thinkingDuration = (fastModels as readonly string[]).includes(selectedModel) ? 900 : 1800;
 
@@ -606,14 +607,7 @@ export const ChatStreamView: React.FC<ChatStreamViewProps> = ({
     }
   };
 
-  const MODEL_DISPLAY: Record<AIModel, string> = {
-    'sour-omni-flash': 'Omni-Flash',
-    'sour-intelligence': 'Intelligence',
-    'sour-ultra': 'Ultra',
-    'sour-overclock': 'Overclock',
-    'sour-overcode': 'OverCode',
-  };
-  const modelDisplayName = MODEL_DISPLAY[selectedModel] || selectedModel;
+  const modelDisplayName = MODEL_ROUTES[selectedModel].label;
 
   return (
     <motion.div

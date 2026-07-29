@@ -32,6 +32,7 @@ import {
 } from '../../agent/context/projectMemory';
 import { splitThinkingAndText } from '../../../functions/shared/responseFormatting';
 import { ChatRunController } from '../../agent/runtime/chatRunController';
+import { migrateModelId, MODEL_IDS, MODEL_ROUTES } from '../../../functions/shared/ai';
 
 export { AgentMarkdownImage, MiniMarkdown } from '../agent/MarkdownContent';
 
@@ -118,15 +119,7 @@ const SLASH_COMMANDS: { cmd: string; label: string; prompt: string }[] = [
   { cmd: '/readme', label: 'Generate a README', prompt: 'Generate a README.md for this project based on the files you can see.' },
 ];
 
-const MODEL_LABELS: Record<AIModel, string> = {
-  'sour-omni-flash': 'Omni-Flash',
-  'sour-intelligence': 'Intelligence',
-  'sour-ultra': 'Ultra',
-  'sour-overclock': 'Overclock',
-  'sour-overcode': 'OverCode',
-};
-
-const MODEL_OPTIONS: AIModel[] = ['sour-omni-flash', 'sour-intelligence', 'sour-ultra', 'sour-overclock', 'sour-overcode'];
+const MODEL_OPTIONS: readonly AIModel[] = MODEL_IDS;
 
 /**
  * Derived from the shared profiles rather than re-declared, so the slider can
@@ -267,9 +260,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         // Do not erase a prompt submitted while durable state was still loading.
         setMessages((current) => (current.length > 0 ? current : storedMessages));
         if (storedMode === 'write' || storedMode === 'plan') setMode(storedMode);
-        if (storedModel && MODEL_OPTIONS.includes(storedModel as AIModel)) {
-          setSelectedModel(storedModel as AIModel);
-        }
+        const migratedModel = migrateModelId(storedModel);
+        if (migratedModel) setSelectedModel(migratedModel);
         if (REASONING_OPTIONS.some((option) => option.id === storedReasoning)) {
           setReasoningEffort(storedReasoning as AgentReasoningEffort);
         }
@@ -1487,7 +1479,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
             </div>
             <div className="relative" ref={modelPopoverRef}>
               <button onClick={() => setShowModelPopover((v) => !v)} className="flex items-center justify-center p-1.5 sm:p-0 gap-0.5 sm:gap-1 hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth transition-colors text-[9px] sm:text-[11px] min-w-[44px] sm:min-w-auto h-[44px] sm:h-auto">
-                <span className="hidden sm:inline">{MODEL_LABELS[selectedModel] || (selectedModel.startsWith('custom_') ? 'API' : selectedModel)}</span>
+                <span className="hidden sm:inline">{MODEL_ROUTES[selectedModel]?.label || (selectedModel.startsWith('custom_') ? 'API' : selectedModel)}</span>
                 <span className="sm:hidden">M</span>
               </button>
               {showModelPopover && (
@@ -1506,7 +1498,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                           : 'text-[#3d3a33] dark:text-[#dedcd6] hover:bg-[#f5f3ec] dark:hover:bg-[#282826]'
                       }`}
                     >
-                      <span>{MODEL_LABELS[m]}</span>
+                      <span>{MODEL_ROUTES[m].label}</span>
                       {m === selectedModel && <Check className="w-3 h-3 shrink-0" />}
                     </button>
                   ))}

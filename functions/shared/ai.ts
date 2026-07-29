@@ -751,6 +751,8 @@ export async function generateWithMistral(
 }
 
 export interface ModelRoute {
+  /** User-facing product name. Keep UI labels sourced from this catalogue. */
+  label?: string;
   provider: Provider;
   model: string;
   /**
@@ -768,21 +770,43 @@ export interface ModelRoute {
   prefill?: PrefillMode;
 }
 
-export const MODEL_ROUTES: Record<string, ModelRoute> = {
-  'sour-omni-flash': { provider: 'mistral', model: 'mistral-small-latest', reasoning: null, prefill: 'mistral' },
-  'sour-intelligence': { provider: 'groq', model: 'qwen/qwen3.6-27b', reasoning: null, prefill: 'openai' },
-  'sour-overclock': { provider: 'cerebras', model: 'zai-glm-4.7', reasoning: null, prefill: 'openai' },
+export const MODEL_ROUTES = {
+  'sour-omni-flash': { label: 'Omni-Flash 3.0', provider: 'mistral', model: 'mistral-small-latest', reasoning: null, prefill: 'mistral' },
+  'sour-intelligence': { label: 'Intelligence 3.0', provider: 'groq', model: 'qwen/qwen3.6-27b', reasoning: null, prefill: 'openai' },
+  'sour-velocity': { label: 'Velocity 2.0', provider: 'cerebras', model: 'zai-glm-4.7', reasoning: null, prefill: 'openai' },
   // Neither Gemini route continues a trailing model turn, so both resume by
   // written instruction instead.
-  'sour-ultra': { provider: 'gemini', model: 'gemini-3.5-flash-lite', reasoning: 'gemini_thinking', prefill: null },
-  'sour-overcode': { provider: 'gemini', model: 'gemini-3.6-flash', reasoning: 'gemini_thinking', prefill: null },
-};
+  'sour-lumen': { label: 'Lumen 1.5', provider: 'gemini', model: 'gemini-3.5-flash-lite', reasoning: 'gemini_thinking', prefill: null },
+  'sour-overdrive': { label: 'Overdrive 4.0', provider: 'gemini', model: 'gemini-3.6-flash', reasoning: 'gemini_thinking', prefill: null },
+} as const satisfies Record<string, ModelRoute>;
 
-const DEFAULT_ROUTE: ModelRoute = MODEL_ROUTES['sour-omni-flash'];
+export type ModelId = keyof typeof MODEL_ROUTES;
+
+/** Selectable IDs in catalogue order, from fastest/cheapest to most capable. */
+export const MODEL_IDS: readonly ModelId[] = Object.freeze(Object.keys(MODEL_ROUTES) as ModelId[]);
+
+export const LEGACY_MODEL_IDS = {
+  'sour-overclock': 'sour-velocity',
+  'sour-ultra': 'sour-lumen',
+  'sour-overcode': 'sour-overdrive',
+} as const satisfies Record<string, ModelId>;
+
+export const DEFAULT_ROUTE: ModelRoute = MODEL_ROUTES['sour-omni-flash'];
+
+/** Converts current or legacy persisted values to a selectable model ID. */
+export function migrateModelId(model: unknown): ModelId | null {
+  if (typeof model !== 'string') return null;
+  const migrated = Object.prototype.hasOwnProperty.call(LEGACY_MODEL_IDS, model)
+    ? LEGACY_MODEL_IDS[model as keyof typeof LEGACY_MODEL_IDS]
+    : model;
+  return Object.prototype.hasOwnProperty.call(MODEL_ROUTES, migrated)
+    ? migrated as ModelId
+    : null;
+}
 
 export function resolveModelRoute(model: unknown): ModelRoute {
-  if (typeof model === 'string' && MODEL_ROUTES[model]) return MODEL_ROUTES[model];
-  return DEFAULT_ROUTE;
+  const modelId = migrateModelId(model);
+  return modelId ? MODEL_ROUTES[modelId] : DEFAULT_ROUTE;
 }
 
 export async function generateText(opts: {

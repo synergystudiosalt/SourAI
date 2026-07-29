@@ -77,7 +77,7 @@ describe('legacy localStorage migration', () => {
       ]),
       'sourbot_context::Project One': JSON.stringify({ framework: 'React', owner: 'Local' }),
       sourbot_agent_mode: 'plan',
-      sourbot_agent_model: 'sour-overcode',
+      sourbot_agent_model: 'sour-overdrive',
       sour_msg_units: '42',
       sour_limit_reset_time: '9000',
       sour_dark_mode: 'true',

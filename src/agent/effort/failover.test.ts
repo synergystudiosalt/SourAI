@@ -146,10 +146,10 @@ describe('route prefill capability', () => {
   it('matches the modes each provider actually accepts', () => {
     expect(MODEL_ROUTES['sour-omni-flash'].prefill).toBe('mistral');
     expect(MODEL_ROUTES['sour-intelligence'].prefill).toBe('openai');
-    expect(MODEL_ROUTES['sour-overclock'].prefill).toBe('openai');
+    expect(MODEL_ROUTES['sour-velocity'].prefill).toBe('openai');
     // Gemini dropped assistant prefill; both routes resume by instruction.
-    expect(MODEL_ROUTES['sour-ultra'].prefill).toBeNull();
-    expect(MODEL_ROUTES['sour-overcode'].prefill).toBeNull();
+    expect(MODEL_ROUTES['sour-lumen'].prefill).toBeNull();
+    expect(MODEL_ROUTES['sour-overdrive'].prefill).toBeNull();
   });
 
   it('only marks Mistral routes with the mistral mode', () => {
