@@ -3,6 +3,7 @@ import {
   buildOpenAICompatibleBody,
   continueChatMessages,
   continueGeminiContents,
+  createKeyPicker,
   generateWithGroq,
   isRetryableError,
   MODEL_ROUTES,
@@ -154,6 +155,34 @@ describe('route prefill capability', () => {
       if (route.prefill === 'mistral') expect(route.provider).toBe('mistral');
       if (route.provider === 'gemini') expect(route.prefill ?? null).toBeNull();
     }
+  });
+});
+
+// Pages gives each request a Worker isolate and module state is per-isolate,
+// so a cold isolate re-runs this initialiser. A fixed start of 0 meant every
+// isolate began at keys[0] and a 37-key list behaved like a 1-key list.
+describe('key picker start offset', () => {
+  const KEY_LIST = Array.from({ length: 8 }, (_, i) => `k${i}`);
+
+  it('does not start every isolate on the same key', () => {
+    const firstKeys = new Set<string>();
+    for (let isolate = 0; isolate < KEY_LIST.length; isolate++) {
+      // Each iteration stands in for a fresh isolate importing the module.
+      vi.spyOn(Math, 'random').mockReturnValue(isolate / KEY_LIST.length);
+      firstKeys.add(createKeyPicker()(KEY_LIST)!);
+    }
+    expect(firstKeys.size).toBe(KEY_LIST.length);
+  });
+
+  it('still rotates through the whole list from wherever it starts', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    const pick = createKeyPicker();
+    const seen = KEY_LIST.map(() => pick(KEY_LIST));
+    expect(new Set(seen).size).toBe(KEY_LIST.length);
+  });
+
+  it('returns null when no keys are configured', () => {
+    expect(createKeyPicker()([])).toBeNull();
   });
 });
 

@@ -13,38 +13,36 @@ export function getApiKeys(env: Record<string, string>) {
   return { geminiKeys, groqKeys, cerebrasKeys, mistralKeys };
 }
 
-let geminiKeyCursor = 0;
-let groqKeyCursor = 0;
-let cerebrasKeyCursor = 0;
-let mistralKeyCursor = 0;
-
-export function takeGeminiKey(keys: string[]): string | null {
-  if (keys.length === 0) return null;
-  const key = keys[geminiKeyCursor % keys.length];
-  geminiKeyCursor++;
-  return key;
+/**
+ * Round-robin key picker, starting from a random offset.
+ *
+ * The starting offset is the important part. Pages runs each request in a
+ * Worker isolate and module state is per-isolate, so a cold isolate starts
+ * this counter from scratch. Starting at a fixed 0 meant every new isolate
+ * began at `keys[0]`; under the many short-lived isolates Pages actually
+ * creates, the first key absorbed nearly all the traffic and the rest of the
+ * list was barely touched. A long key list then behaves like a list of one,
+ * and rate limits appear immediately no matter how many keys are configured.
+ */
+export function createKeyPicker(): (keys: string[]) => string | null {
+  let cursor: number | null = null;
+  return (keys: string[]): string | null => {
+    if (keys.length === 0) return null;
+    // Drawn against the real key count on first use. Seeding from a large
+    // constant instead would reintroduce modulo bias: any fixed multiplier
+    // sharing factors with the list length collapses many seeds onto the
+    // same starting key.
+    if (cursor === null) cursor = Math.floor(Math.random() * keys.length);
+    const key = keys[cursor % keys.length];
+    cursor++;
+    return key;
+  };
 }
 
-export function takeGroqKey(keys: string[]): string | null {
-  if (keys.length === 0) return null;
-  const key = keys[groqKeyCursor % keys.length];
-  groqKeyCursor++;
-  return key;
-}
-
-export function takeCerebrasKey(keys: string[]): string | null {
-  if (keys.length === 0) return null;
-  const key = keys[cerebrasKeyCursor % keys.length];
-  cerebrasKeyCursor++;
-  return key;
-}
-
-export function takeMistralKey(keys: string[]): string | null {
-  if (keys.length === 0) return null;
-  const key = keys[mistralKeyCursor % keys.length];
-  mistralKeyCursor++;
-  return key;
-}
+export const takeGeminiKey = createKeyPicker();
+export const takeGroqKey = createKeyPicker();
+export const takeCerebrasKey = createKeyPicker();
+export const takeMistralKey = createKeyPicker();
 
 /**
  * Per-request generation knobs. Every field is optional so existing callers
