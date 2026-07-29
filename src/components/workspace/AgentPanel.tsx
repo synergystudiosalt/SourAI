@@ -772,6 +772,19 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         if (!next || accumulatedThinking.includes(next)) return;
         accumulatedThinking = accumulatedThinking ? `${accumulatedThinking}\n\n${next}` : next;
       };
+      /**
+       * Thinking for the turn currently streaming, held apart from the
+       * completed turns above.
+       *
+       * It is re-derived from the whole stream buffer on every token, so each
+       * reading supersedes the last rather than adding to it. Appending them
+       * turned one sentence into every one of its prefixes — "The", "The user",
+       * "The user wants" — because the dedupe guard only catches a repeat, and
+       * each reading is longer than the one before it.
+       */
+      let streamThinking = '';
+      const composeThinking = () =>
+        [accumulatedThinking, streamThinking].filter(Boolean).join('\n\n');
 
       // Create the message placeholder immediately
       const assistantMsg: AgentChatMessage = {
@@ -834,12 +847,11 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                 try {
                   if (event.token) {
                     streamText += event.token;
-                    const { thinking: liveThinking } = splitThinkingAndText(streamText);
-                    appendThinking(liveThinking);
+                    streamThinking = splitThinkingAndText(streamText).thinking?.trim() || '';
                     setMessages((prev) =>
                       prev.map((m) =>
                         m.id === msgId
-                          ? { ...m, content: '', thinking: accumulatedThinking }
+                          ? { ...m, content: '', thinking: composeThinking() }
                           : m
                       )
                     );
@@ -847,6 +859,10 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                   if (event.done) {
                     const responseText = event.text || streamText;
                     const separatedResponse = splitThinkingAndText(responseText);
+                    // The turn is finished: fold its thinking into the record
+                    // once, and release the live slot so the next turn starts
+                    // from empty.
+                    streamThinking = '';
                     appendThinking(event.thinking);
                     appendThinking(separatedResponse.thinking);
                     accumulatedThinkingLabel = event.thinkingLabel || accumulatedThinkingLabel;
@@ -920,7 +936,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                       setMessages((prev) =>
                         prev.map((m) =>
                           m.id === msgId
-                            ? { ...m, toolCalls: allToolCalls, thinking: accumulatedThinking, thinkingLabel: accumulatedThinkingLabel }
+                            ? { ...m, toolCalls: allToolCalls, thinking: composeThinking(), thinkingLabel: accumulatedThinkingLabel }
                             : m
                         )
                       );
@@ -1060,7 +1076,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
             setMessages((prev) =>
               prev.map((m) =>
                 m.id === msgId
-                  ? { ...m, toolCalls: allToolCalls, thinking: accumulatedThinking, thinkingLabel: accumulatedThinkingLabel }
+                  ? { ...m, toolCalls: allToolCalls, thinking: composeThinking(), thinkingLabel: accumulatedThinkingLabel }
                   : m
               )
             );
@@ -1145,7 +1161,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                 ops: enrichedOps,
                 codingPaths: [],
                 approvalStatus: enrichedOps.length > 0 ? 'pending' : undefined,
-                thinking: accumulatedThinking,
+                thinking: composeThinking(),
                 thinkingLabel: accumulatedThinkingLabel,
                 toolCalls: allToolCalls,
                 isReadingFiles: false,
