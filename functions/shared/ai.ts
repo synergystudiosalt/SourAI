@@ -105,8 +105,29 @@ export function isRetryableError(err: unknown): boolean {
 
 /** Waiting stalls the user's response, so cap it hard and prefer rotating keys. */
 const MAX_BACKOFF_MS = 4000;
-/** How many times to cycle the whole key list before giving up. */
+/** How many times to cycle the tried keys before giving up. */
 const FAILOVER_ROUNDS = 2;
+
+/**
+ * Upper bound on keys tried for a single request, regardless of how many are
+ * configured.
+ *
+ * The budget used to be `keys.length * FAILOVER_ROUNDS`, so a 37-key list meant
+ * 74 sequential provider calls for one request — far past the Worker's
+ * wall-clock budget, so a bad request timed out with no error rather than
+ * failing cleanly. It also fires 37 calls with no delay between them, which is
+ * itself reported back as too many requests.
+ *
+ * Exhausting this is not the end of the road: generateText/streamText then fall
+ * through to a different provider entirely, which is worth more than trying
+ * another thirty keys on the one that is already refusing.
+ */
+const MAX_KEYS_PER_REQUEST = 8;
+
+function attemptBudget(keyCount: number): { perRound: number; total: number } {
+  const perRound = Math.max(1, Math.min(keyCount, MAX_KEYS_PER_REQUEST));
+  return { perRound, total: perRound * FAILOVER_ROUNDS };
+}
 /**
  * Extra rounds allowed purely for resuming past the output cap. Whole-file
  * code generation routinely exceeds it, and the provider reports that as a
@@ -310,7 +331,7 @@ export async function generateWithGemini(
 ): Promise<string> {
   if (keys.length === 0) throw new Error('No Gemini API keys configured');
   let lastErr: unknown;
-  const attempts = keys.length * FAILOVER_ROUNDS;
+  const { perRound, total: attempts } = attemptBudget(keys.length);
   for (let attempt = 0; attempt < attempts; attempt++) {
     const key = takeGeminiKey(keys)!;
     try {
@@ -341,7 +362,7 @@ export async function generateWithGemini(
       lastErr = err;
       if (!isRetryableError(err)) throw err;
       console.warn(`Gemini attempt ${attempt + 1}/${attempts} failed on ${model}:`, err?.message || err);
-      await pauseBeforeRetry(err, (attempt + 1) % keys.length === 0);
+      await pauseBeforeRetry(err, (attempt + 1) % perRound === 0);
     }
   }
   throw lastErr instanceof Error ? lastErr : new Error('All Gemini API keys failed');
@@ -427,7 +448,7 @@ async function generateWithOpenAICompatible(
   if (keys.length === 0) throw new Error(`No API keys configured for ${baseUrl}`);
   const body = buildOpenAICompatibleBody(model, messages, systemInstruction, tuning, reasoning);
   let lastErr: unknown;
-  const attempts = keys.length * FAILOVER_ROUNDS;
+  const { perRound, total: attempts } = attemptBudget(keys.length);
   for (let attempt = 0; attempt < attempts; attempt++) {
     const key = takeKey(keys)!;
     try {
@@ -442,7 +463,7 @@ async function generateWithOpenAICompatible(
       lastErr = err;
       if (!isRetryableError(err)) throw err;
       console.warn(`Attempt ${attempt + 1}/${attempts} failed for ${model} at ${baseUrl}:`, err?.message || err);
-      await pauseBeforeRetry(err, (attempt + 1) % keys.length === 0);
+      await pauseBeforeRetry(err, (attempt + 1) % perRound === 0);
     }
   }
   throw lastErr instanceof Error ? lastErr : new Error(`All API keys failed for ${baseUrl}`);
@@ -583,7 +604,8 @@ async function* streamWithOpenAICompatible(
   let emitted = '';
   let continuations = 0;
   let lastErr: unknown;
-  const attempts = keys.length * FAILOVER_ROUNDS + MAX_OUTPUT_CONTINUATIONS;
+  const { perRound, total } = attemptBudget(keys.length);
+  const attempts = total + MAX_OUTPUT_CONTINUATIONS;
 
   for (let attempt = 0; attempt < attempts; attempt++) {
     const key = takeKey(keys)!;
@@ -677,7 +699,7 @@ async function* streamWithOpenAICompatible(
         `Stream attempt ${attempt + 1}/${attempts} failed for ${model} at ${baseUrl} (${stage}):`,
         err?.message || err
       );
-      await pauseBeforeRetry(err, (attempt + 1) % keys.length === 0);
+      await pauseBeforeRetry(err, (attempt + 1) % perRound === 0);
     }
   }
   throw lastErr instanceof Error ? lastErr : new Error(`All API keys failed for ${baseUrl}`);
@@ -696,7 +718,8 @@ async function* streamWithGemini(
   let emitted = '';
   let continuations = 0;
   let lastErr: unknown;
-  const attempts = keys.length * FAILOVER_ROUNDS + MAX_OUTPUT_CONTINUATIONS;
+  const { perRound, total } = attemptBudget(keys.length);
+  const attempts = total + MAX_OUTPUT_CONTINUATIONS;
 
   for (let attempt = 0; attempt < attempts; attempt++) {
     const key = takeGeminiKey(keys)!;
@@ -784,7 +807,7 @@ async function* streamWithGemini(
         `Gemini stream attempt ${attempt + 1}/${attempts} failed on ${model} (${stage}):`,
         err?.message || err
       );
-      await pauseBeforeRetry(err, (attempt + 1) % keys.length === 0);
+      await pauseBeforeRetry(err, (attempt + 1) % perRound === 0);
     }
   }
   throw lastErr instanceof Error ? lastErr : new Error('All Gemini API keys failed');

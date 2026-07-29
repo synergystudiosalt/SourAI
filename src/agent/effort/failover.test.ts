@@ -186,6 +186,34 @@ describe('key picker start offset', () => {
   });
 });
 
+describe('retry budget', () => {
+  // 37 Gemini keys previously meant 74 sequential calls for one request, which
+  // outruns the Worker wall clock and reads as a timeout rather than an error.
+  it('caps keys tried per request however many are configured', async () => {
+    const many = Array.from({ length: 37 }, (_, i) => `k${i}`);
+    const fetchMock = vi.fn(async () => rateLimited());
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      generateWithGroq(many, [{ role: 'user', content: 'hi' }], 'sys', 'm')
+    ).rejects.toThrow(/429/);
+
+    // 8 keys per round, 2 rounds — not 37 x 2.
+    expect(fetchMock).toHaveBeenCalledTimes(16);
+  });
+
+  it('still uses every key when the list is short', async () => {
+    const fetchMock = vi.fn(async () => rateLimited());
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      generateWithGroq(KEYS, [{ role: 'user', content: 'hi' }], 'sys', 'm')
+    ).rejects.toThrow(/429/);
+
+    expect(fetchMock).toHaveBeenCalledTimes(KEYS.length * 2);
+  });
+});
+
 describe('key failover', () => {
   it('moves to the next key when the first is rate limited', async () => {
     const seen: string[] = [];
