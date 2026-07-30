@@ -297,9 +297,14 @@ const ExpandableTag: React.FC<ExpandableTagProps> = ({
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.15 }}
             className={
+              // Reasoning can run to thousands of words and often contains
+              // long unbroken tokens — identifiers, URLs, inline code. Without
+              // a height cap it grew until it filled the transcript, and
+              // without a wrap rule those tokens pushed out past the panel.
+              // Capped and scrollable keeps it readable and the layout intact.
               isThinkTag
-                ? 'mt-1.5 pl-2 border-l border-[#e2dec0] dark:border-[#383836] text-[10.5px] text-[#706c62] dark:text-[#a09d98] leading-relaxed overflow-hidden'
-                : `mt-1.5 pl-2 border-l ${border} text-[10.5px] ${color} space-y-1 leading-relaxed overflow-hidden`
+                ? 'mt-1.5 pl-2 border-l border-[#e2dec0] dark:border-[#383836] text-[10.5px] text-[#706c62] dark:text-[#a09d98] leading-relaxed max-h-64 overflow-y-auto overflow-x-hidden [overflow-wrap:anywhere] thin-scrollbar'
+                : `mt-1.5 pl-2 border-l ${border} text-[10.5px] ${color} space-y-1 leading-relaxed max-h-64 overflow-y-auto overflow-x-hidden [overflow-wrap:anywhere] thin-scrollbar`
             }
           >
             {isThinkTag
