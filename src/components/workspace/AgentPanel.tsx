@@ -35,6 +35,13 @@ import { ChatRunController } from '../../agent/runtime/chatRunController';
 import { migrateModelId, MODEL_IDS, MODEL_ROUTES } from '../../../functions/shared/ai';
 import { getPreviewLogs } from './previewLogStore';
 import { PREVIEW_RUNTIME_SETTLE_MS, PreviewAutoFixLoop } from './previewAutoFix';
+import {
+  applyCompaction,
+  buildCompactionRequest,
+  estimateTokens,
+  planCompaction,
+  type CompactableMessage,
+} from '../../agent/context/compaction';
 
 export { AgentMarkdownImage, MiniMarkdown } from '../agent/MarkdownContent';
 
@@ -129,6 +136,19 @@ const SLASH_COMMANDS: { cmd: string; label: string; prompt: string }[] = [
 
 const MODEL_OPTIONS: readonly AIModel[] = MODEL_IDS;
 
+// The server assembles its system prompt after this request leaves the client.
+// This is intentionally an approximate flat reserve rather than false precision.
+const SYSTEM_PROMPT_TOKEN_ALLOWANCE = 1_200;
+const COMPACTION_TIMEOUT_MS = 8_000;
+
+interface CachedCompaction {
+  readonly summary: string;
+  /** Absolute number of UI-thread messages represented by the summary. */
+  readonly coveredMessageCount: number;
+  /** Stable IDs prove the covered prefix has not changed since it was summarised. */
+  readonly prefixKey: string;
+}
+
 /**
  * Derived from the shared profiles rather than re-declared, so the slider can
  * never advertise an effort level the request layer doesn't actually apply.
@@ -152,6 +172,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   const previewAutoFixRef = useRef(new PreviewAutoFixLoop());
   const userTurnSequenceRef = useRef(0);
   const handleSendRef = useRef<SendTurn>(async () => undefined);
+  // Entries are keyed by the absolute number of thread messages they cover.
+  const compactionCacheRef = useRef<Map<number, CachedCompaction>>(new Map());
   const [input, setInput] = useState('');
   const [isSending, setIsSending] = useState(false);
   const isSendingRef = useRef(isSending);
@@ -261,6 +283,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     setHydratedProjectId(null);
     setMessages([]);
     contextRef.current = {};
+    compactionCacheRef.current.clear();
     void getClientPersistence()
       .then(async (persistence) => {
         persistenceRef.current = persistence;
@@ -808,14 +831,115 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
 
       // ── Agent loop: send prompt, resolve tools, repeat until no more tool calls ──
       // History depth scales with effort so higher tiers keep more of the thread.
-      let conversationHistory: { role: 'user' | 'assistant'; content: string }[] =
-        historyBase.slice(-effort.context.historyMessages).map((m) => ({
-          role: m.role,
-          content: m.role === 'assistant' ? summarizeForHistory(m.content, m.ops) : m.content,
-        }));
+      const historyStartIndex = Math.max(0, historyBase.length - effort.context.historyMessages);
+      const toCompactableMessage = (message: AgentChatMessage): CompactableMessage => ({
+        role: message.role,
+        content:
+          message.role === 'assistant'
+            ? summarizeForHistory(message.content, message.ops)
+            : message.content,
+      });
+      const uncompactedHistory = historyBase
+        .slice(historyStartIndex)
+        .map(toCompactableMessage);
+      let conversationHistory: CompactableMessage[] = uncompactedHistory;
+      const activeFileContext = basePayload.activeFile
+        ? `${basePayload.activeFile.path}\n${basePayload.activeFile.content}`
+        : '';
+      const mentionedFileContext = basePayload.mentionedFiles
+        .map((file) => `${file.path}\n${file.content}`)
+        .join('\n');
+      const projectPathContext = basePayload.projectFiles.join('\n');
+      const fixedOverheadTokens =
+        SYSTEM_PROMPT_TOKEN_ALLOWANCE +
+        estimateTokens(activeFileContext) +
+        estimateTokens(mentionedFileContext) +
+        estimateTokens(projectPathContext);
+      const compactionOptions = { fixedOverheadTokens };
+      const prefixKey = (count: number) =>
+        historyBase.slice(0, count).map((message) => message.id).join('\u001f');
+
+      if (messagesRef.current.length > 0) {
+        const reusableCache = [...compactionCacheRef.current.values()]
+          .filter(
+            (entry) =>
+              entry.coveredMessageCount <= historyBase.length &&
+              entry.prefixKey === prefixKey(entry.coveredMessageCount)
+          )
+          .sort((a, b) => b.coveredMessageCount - a.coveredMessageCount)[0];
+
+        let historyToPlan = uncompactedHistory;
+        let coveredBeforePlan = historyStartIndex;
+        let cachedSummaryMessageCount = 0;
+        if (reusableCache && reusableCache.coveredMessageCount >= historyStartIndex) {
+          historyToPlan = applyCompaction(
+            reusableCache.summary,
+            historyBase
+              .slice(reusableCache.coveredMessageCount)
+              .map(toCompactableMessage)
+          );
+          coveredBeforePlan = reusableCache.coveredMessageCount;
+          cachedSummaryMessageCount = 1;
+        }
+
+        const plan = planCompaction(historyToPlan, compactionOptions);
+        if (!plan.needed) {
+          conversationHistory = historyToPlan;
+        } else {
+          const summaryController = new AbortController();
+          const forwardAbort = () => summaryController.abort();
+          controller.signal.addEventListener('abort', forwardAbort, { once: true });
+          const timeout = window.setTimeout(
+            () => summaryController.abort(),
+            COMPACTION_TIMEOUT_MS
+          );
+          try {
+            const summaryResponse = await fetch('/api/chat', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                messages: buildCompactionRequest(plan.summarise),
+                model: 'sour-omni-flash',
+              }),
+              signal: summaryController.signal,
+            });
+            const summaryData = await summaryResponse.json().catch(() => ({}));
+            if (!summaryResponse.ok) {
+              throw new Error(`Compaction request failed with HTTP ${summaryResponse.status}`);
+            }
+            const summary =
+              typeof summaryData.text === 'string' ? summaryData.text.trim() : '';
+            if (!summary) throw new Error('Compaction request returned an empty summary');
+
+            conversationHistory = applyCompaction(summary, plan.keep);
+            const newlyCovered = Math.max(
+              0,
+              plan.summarise.length - cachedSummaryMessageCount
+            );
+            const coveredMessageCount = coveredBeforePlan + newlyCovered;
+            compactionCacheRef.current.set(coveredMessageCount, {
+              summary,
+              coveredMessageCount,
+              prefixKey: prefixKey(coveredMessageCount),
+            });
+          } catch (error) {
+            // Compaction is an optimisation. The user's actual turn must still
+            // run even if the cheap summary model is unavailable or too slow.
+            console.warn('[sour.ai] Conversation compaction skipped', error);
+            conversationHistory = uncompactedHistory;
+          } finally {
+            window.clearTimeout(timeout);
+            controller.signal.removeEventListener('abort', forwardAbort);
+          }
+        }
+      }
       // Update the last user message with auto-called functions
       if (conversationHistory.length > 0 && conversationHistory[conversationHistory.length - 1].role === 'user') {
-        conversationHistory[conversationHistory.length - 1].content = promptToSend;
+        conversationHistory = conversationHistory.map((message, index) =>
+          index === conversationHistory.length - 1
+            ? { ...message, content: promptToSend }
+            : message
+        );
       }
 
       const msgId = genId();
@@ -1298,6 +1422,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     setMessages([]);
     setAgentAttachments([]);
     freshMessageIdsRef.current.clear();
+    compactionCacheRef.current.clear();
   };
 
   return (
