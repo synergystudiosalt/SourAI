@@ -59,6 +59,36 @@ const PROCESSING_ERROR = /invalid regular expression|unterminated character clas
 describe('AgentPanel completed-turn parity', () => {
   afterEach(() => resetPreviewLogs());
 
+  it('shows an unresolved-workspace terminal result with an example path', async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        streamedTurn('@@readfile: missing.ts qualification="inspect file"')
+      )
+      .mockResolvedValueOnce(jsonTurn(''));
+
+    renderPanel();
+    sendPrompt();
+
+    expect(
+      await screen.findByText(/workspace requests could not be resolved/i)
+    ).toHaveTextContent('missing.ts');
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+  });
+
+  it('keeps the genuinely silent terminal result when no request was issued', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(streamedTurn(''));
+
+    renderPanel();
+    sendPrompt();
+
+    expect(
+      await screen.findByText(
+        'The model returned no final answer after completing its workspace checks.'
+      )
+    ).toBeInTheDocument();
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+  });
+
   it('surfaces a first-turn SSE processing failure instead of discarding the turn', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(streamedTurn('@@glob: ['));
 

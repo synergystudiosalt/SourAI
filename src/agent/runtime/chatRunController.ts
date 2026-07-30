@@ -8,6 +8,10 @@ export const FINISH_WITH_EXISTING_RESULTS =
   '[Runtime: those workspace requests were already completed. Do not call another tool. Finish the requested work now using the results already present in this conversation.]';
 export const CONTINUE_AFTER_REASONING =
   '[Runtime: your previous turn ended after reasoning without a final answer or workspace change. Continue now and complete the requested work. Use workspace tools if needed, then return a concrete final result.]';
+export const UNRESOLVED_WORKSPACE_REQUEST = (examplePath: string) =>
+  `The model returned no final answer because its workspace requests could not be resolved. One unresolved path was "${examplePath}".`;
+export const SILENT_MODEL_RESPONSE =
+  'The model returned no final answer after completing its workspace checks.';
 
 /**
  * Owns progress and terminal-state policy for the chat agent. Provider output
@@ -18,9 +22,21 @@ export class ChatRunController {
   private readonly seenRequests = new Set<string>();
   private recoveryUsed = false;
   private incompleteRecoveryUsed = false;
+  private workspaceRequestCount = 0;
+  private resolvedWorkspaceRequestCount = 0;
+  private unresolvedExamplePath = '';
 
   filter(response: ParsedAgentResponse): FilteredAgentRequests {
     return filterRepeatedAgentRequests(response, this.seenRequests);
+  }
+
+  recordWorkspaceRequest(path: string, resolved: boolean): void {
+    this.workspaceRequestCount += 1;
+    if (resolved) {
+      this.resolvedWorkspaceRequestCount += 1;
+    } else if (!this.unresolvedExamplePath) {
+      this.unresolvedExamplePath = path;
+    }
   }
 
   consumeRecovery(
@@ -57,8 +73,15 @@ export class ChatRunController {
     const answer = displayText.trim();
     if (answer) return answer;
     if (operationCount > 0) return 'Changes are ready for review.';
+    if (
+      this.workspaceRequestCount > 0 &&
+      this.resolvedWorkspaceRequestCount === 0 &&
+      this.unresolvedExamplePath
+    ) {
+      return UNRESOLVED_WORKSPACE_REQUEST(this.unresolvedExamplePath);
+    }
     return exhausted
       ? 'The model exhausted its workspace-tool budget without returning a final answer.'
-      : 'The model returned no final answer after completing its workspace checks.';
+      : SILENT_MODEL_RESPONSE;
   }
 }

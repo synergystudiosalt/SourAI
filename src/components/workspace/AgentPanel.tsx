@@ -1013,7 +1013,10 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       ) => {
         const separatedResponse = splitThinkingAndText(responseText);
         const filteredRequests = runController.filter(
-          parseAgentResponse(separatedResponse.text)
+          parseAgentResponse(
+            separatedResponse.text,
+            files.map((file) => file.path)
+          )
         );
         const parsed = filteredRequests.response;
         hadIncompleteFileBlock ||= parsed.incompleteFileBlock;
@@ -1075,6 +1078,56 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
             ? resolveRenameRequests(parsed.renameRequests) : { toolCalls: [], ops: [], resultText: '' };
           turnToolCalls.push(...replaceResult.toolCalls, ...importsResult.toolCalls, ...renameResult.toolCalls);
           allOps = [...allOps, ...replaceResult.ops, ...renameResult.ops];
+
+          for (const call of turnToolCalls) {
+            switch (call.type) {
+              case 'readfile':
+                runController.recordWorkspaceRequest(call.path, call.found);
+                break;
+              case 'listdir': {
+                const normalized = call.path
+                  .trim()
+                  .replace(/^\.$/, '')
+                  .replace(/^\.\//, '')
+                  .replace(/^\/+/, '')
+                  .replace(/\/$/, '');
+                const resolved =
+                  !normalized ||
+                  files.some((file) => file.path === normalized && file.type === 'folder') ||
+                  files.some((file) => file.path.startsWith(`${normalized}/`));
+                runController.recordWorkspaceRequest(call.path, resolved);
+                break;
+              }
+              case 'replace':
+                runController.recordWorkspaceRequest(call.path, call.found);
+                break;
+              case 'rename':
+                runController.recordWorkspaceRequest(
+                  call.oldPath,
+                  files.some(
+                    (file) => file.path === call.oldPath && file.content !== undefined
+                  )
+                );
+                break;
+              case 'findall':
+                runController.recordWorkspaceRequest(call.query, true);
+                break;
+              case 'glob':
+                runController.recordWorkspaceRequest(call.pattern, true);
+                break;
+              case 'search_imports':
+                runController.recordWorkspaceRequest(call.symbol, true);
+                break;
+            }
+          }
+          for (const requestedPath of parsed.fileInfoRequests) {
+            runController.recordWorkspaceRequest(
+              requestedPath,
+              files.some(
+                (file) => file.path === requestedPath && file.content !== undefined
+              )
+            );
+          }
 
           const duplicateNotice = filteredRequests.repeatedRequestCount > 0
             ? `[Runtime: skipped ${filteredRequests.repeatedRequestCount} duplicate tool request(s). Do not request them again; continue from the results already provided.]`

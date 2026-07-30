@@ -60,6 +60,63 @@ describe('parseAgentResponse — current behaviour', () => {
     expect(parsed.displayText).toBe('');
   });
 
+  it('splits adjacent tool calls with no separator and cleans captured attributes', () => {
+    const parsed = parseAgentResponse(
+      '@@readfile: index.html qualification="check html entrypoint"' +
+        '@@readfile: src/main.js qualification="check main JS logic"' +
+        '@@readfile: style.css qualification="check CSS file"'
+    );
+
+    expect(parsed.fileRequests).toEqual(['index.html', 'src/main.js', 'style.css']);
+    expect(parsed.displayText).toBe('');
+  });
+
+  it('recovers a leading path from prose between adjacent read directives', () => {
+    const parsed = parseAgentResponse(
+      '@@readfile: index.html space context evaluation context.Key information retrieved. ' +
+        "Let's read `index.html` properly." +
+        '@@readfile: index.html block index context.'
+    );
+
+    expect(parsed.fileRequests).toEqual(['index.html']);
+    expect(parsed.displayText).toBe('');
+  });
+
+  it('preserves an exact known workspace path containing a space', () => {
+    const parsed = parseAgentResponse(
+      '@@readfile: docs/My File.md',
+      ['docs/My File.md']
+    );
+
+    expect(parsed.fileRequests).toEqual(['docs/My File.md']);
+  });
+
+  it('cleans every path-like single-argument directive', () => {
+    const parsed = parseAgentResponse([
+      '@@delete: src/old.ts qualification="delete stale file"',
+      '@@readfile: src/App.tsx qualification="read component"',
+      '@@listdir: src qualification="list source"',
+      '@@glob: src/*.ts qualification="find sources"',
+      '@@fileinfo: package.json qualification="inspect manifest"',
+      '@@search_imports: src/model.ts qualification="find imports"',
+    ].join('\n'));
+
+    expect(parsed.ops).toEqual([{ type: 'delete', path: 'src/old.ts' }]);
+    expect(parsed.fileRequests).toEqual(['src/App.tsx']);
+    expect(parsed.listDirRequests).toEqual(['src']);
+    expect(parsed.globRequests).toEqual(['src/*.ts']);
+    expect(parsed.fileInfoRequests).toEqual(['package.json']);
+    expect(parsed.searchImportsRequests).toEqual(['src/model.ts']);
+  });
+
+  it('leaves ordinary prose containing @@ untouched', () => {
+    const prose = 'Mention @@readfile: index.html in documentation, but do not run it.';
+    const parsed = parseAgentResponse(prose);
+
+    expect(parsed.fileRequests).toEqual([]);
+    expect(parsed.displayText).toBe(prose);
+  });
+
   it('blocks tool requests already executed in an earlier agent turn', () => {
     const seen = new Set<string>();
     const first = filterRepeatedAgentRequests(

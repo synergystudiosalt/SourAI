@@ -5,6 +5,8 @@ import {
   ChatRunController,
   CONTINUE_AFTER_REASONING,
   FINISH_WITH_EXISTING_RESULTS,
+  SILENT_MODEL_RESPONSE,
+  UNRESOLVED_WORKSPACE_REQUEST,
 } from './chatRunController';
 
 describe('ChatRunController', () => {
@@ -22,6 +24,30 @@ describe('ChatRunController', () => {
     expect(controller.finalText('', 2, false)).toBe('Changes are ready for review.');
     expect(controller.finalText('', 0, true)).toMatch(/exhausted/i);
     expect(controller.finalText('Done.', 0, false)).toBe('Done.');
+  });
+
+  it('reports when every workspace request failed to resolve', () => {
+    const controller = new ChatRunController();
+    controller.recordWorkspaceRequest('index.html', false);
+    controller.recordWorkspaceRequest('src/main.js', false);
+
+    expect(controller.finalText('', 0, false)).toBe(
+      UNRESOLVED_WORKSPACE_REQUEST('index.html')
+    );
+  });
+
+  it('keeps the genuinely silent terminal message when no request was issued', () => {
+    expect(new ChatRunController().finalText('', 0, false)).toBe(
+      SILENT_MODEL_RESPONSE
+    );
+  });
+
+  it('does not call the whole run unresolved when any workspace request succeeds', () => {
+    const controller = new ChatRunController();
+    controller.recordWorkspaceRequest('missing.ts', false);
+    controller.recordWorkspaceRequest('src/App.tsx', true);
+
+    expect(controller.finalText('', 0, false)).toBe(SILENT_MODEL_RESPONSE);
   });
 
   it('grants one bounded continuation when a turn ends after reasoning only', () => {

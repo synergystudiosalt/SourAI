@@ -90,7 +90,7 @@ const SEARCH_IMPORTS_RE = /^@@search_imports:\s*(.+?)\s*$/gm;
 const RENAME_RE = /^@@rename:\s*(.+?)\s*\|\|\|\s*(.+?)\s*$/gm;
 const TODO_RE = /^@@todo:\s*\[(\w+)\]\s*(.+?)\s*$/gm;
 const INLINE_TOOL_SEQUENCE_RE =
-  /^(@@(?:delete|readfile|findall|listdir|glob|fileinfo|context_store|context_get|context_list|context_clear|replace|search_imports|rename|todo)(?::|\b)[^\r\n]*?)[ \t]+(?=@@(?:delete|readfile|findall|listdir|glob|fileinfo|context_store|context_get|context_list|context_clear|replace|search_imports|rename|todo)(?::|\b))/gim;
+  /^(@@(?:delete|readfile|findall|listdir|glob|fileinfo|context_store|context_get|context_list|context_clear|replace|search_imports|rename|todo)(?::|\b)[^\r\n]*?)(?=@@(?:delete|readfile|findall|listdir|glob|fileinfo|context_store|context_get|context_list|context_clear|replace|search_imports|rename|todo)(?::|\b))/gim;
 
 function splitInlineToolSequences(raw: string): string {
   let result = raw;
@@ -104,6 +104,30 @@ function splitInlineToolSequences(raw: string): string {
 
 function normalizePath(raw: string): string {
   return raw.trim().replace(/^\.\/+/, '').replace(/^\/+/, '');
+}
+
+/**
+ * Normalizes a path-like single-argument directive without sacrificing real
+ * workspace paths that contain spaces.
+ *
+ * The raw operand wins when it exactly names a known workspace entry. Otherwise
+ * provider-added prose is discarded at a second directive, a trailing
+ * key="value" attribute, or (as a final fallback) the first whitespace.
+ */
+function normalizeDirectivePath(raw: string, knownPaths: readonly string[]): string {
+  const normalizedRaw = normalizePath(raw);
+  const exact = knownPaths.find(
+    (knownPath) => knownPath.toLocaleLowerCase() === normalizedRaw.toLocaleLowerCase()
+  );
+  if (exact) return exact;
+
+  const beforeNextDirective = raw.split('@@', 1)[0];
+  const withoutAttribute = beforeNextDirective.replace(
+    /\s+[A-Za-z_][\w-]*\s*=\s*(?:"[^"]*"|'[^']*'|\S+)\s*.*$/,
+    ''
+  );
+  const leadingToken = withoutAttribute.trim().split(/\s+/, 1)[0] || '';
+  return normalizePath(leadingToken);
 }
 
 /**
@@ -128,12 +152,22 @@ export function collapseAgentFileOps(operations: readonly AgentFileOp[]): AgentF
 /** Resolves optional model-added line ranges without accepting guessed paths. */
 export function resolveKnownFileRequest(raw: string, knownPaths: string[]): string | null {
   const normalized = normalizePath(raw);
+  const exact = knownPaths.find(
+    (path) => path.toLocaleLowerCase() === normalized.toLocaleLowerCase()
+  );
+  if (exact) return exact;
+
   const withoutRange = normalized
     .replace(/\s*\|\s*\d+(?:\s*\|\s*\d+)?\s*$/, '')
     .replace(/:\d+(?::\d+)?\s*$/, '')
     .trim();
   return (
     knownPaths.find((path) => path.toLocaleLowerCase() === withoutRange.toLocaleLowerCase()) ??
+    knownPaths.find(
+      (path) =>
+        path.toLocaleLowerCase() ===
+        normalizeDirectivePath(raw, knownPaths).toLocaleLowerCase()
+    ) ??
     null
   );
 }
@@ -250,7 +284,10 @@ export function filterRepeatedAgentRequests(
   };
 }
 
-export function parseAgentResponse(raw: string): ParsedAgentResponse {
+export function parseAgentResponse(
+  raw: string,
+  knownWorkspacePaths: readonly string[] = []
+): ParsedAgentResponse {
   const ops: AgentFileOp[] = [];
 
   // Don't strip <think> or <check_for_errors> tags — they are visible to the user.
@@ -270,14 +307,14 @@ export function parseAgentResponse(raw: string): ParsedAgentResponse {
   const incompleteFileBlock = FILE_BLOCK_OPEN_RE.test(text);
 
   text = text.replace(DELETE_RE, (_match, rawPath: string) => {
-    const path = normalizePath(rawPath);
+    const path = normalizeDirectivePath(rawPath, knownWorkspacePaths);
     if (path) ops.push({ type: 'delete', path });
     return '';
   });
 
   const fileRequests: string[] = [];
   text = text.replace(READFILE_RE, (_match, rawPath: string) => {
-    const p = normalizePath(rawPath);
+    const p = normalizeDirectivePath(rawPath, knownWorkspacePaths);
     if (p && !fileRequests.includes(p)) fileRequests.push(p);
     return '';
   });
@@ -298,21 +335,21 @@ export function parseAgentResponse(raw: string): ParsedAgentResponse {
 
   const listDirRequests: string[] = [];
   text = text.replace(LISTDIR_RE, (_match, rawPath: string) => {
-    const p = normalizePath(rawPath);
+    const p = normalizeDirectivePath(rawPath, knownWorkspacePaths);
     if (p && !listDirRequests.includes(p)) listDirRequests.push(p);
     return '';
   });
 
   const globRequests: string[] = [];
-  text = text.replace(GLOB_RE, (_match, pattern: string) => {
-    const q = pattern.trim();
+  text = text.replace(GLOB_RE, (_match, rawPattern: string) => {
+    const q = normalizeDirectivePath(rawPattern, knownWorkspacePaths);
     if (q && !globRequests.includes(q)) globRequests.push(q);
     return '';
   });
 
   const fileInfoRequests: string[] = [];
   text = text.replace(FILEINFO_RE, (_match, rawPath: string) => {
-    const p = normalizePath(rawPath);
+    const p = normalizeDirectivePath(rawPath, knownWorkspacePaths);
     if (p && !fileInfoRequests.includes(p)) fileInfoRequests.push(p);
     return '';
   });
@@ -352,8 +389,8 @@ export function parseAgentResponse(raw: string): ParsedAgentResponse {
   text = extractedReplaces.text;
 
   const searchImportsRequests: string[] = [];
-  text = text.replace(SEARCH_IMPORTS_RE, (_match, symbol: string) => {
-    const s = symbol.trim();
+  text = text.replace(SEARCH_IMPORTS_RE, (_match, rawPath: string) => {
+    const s = normalizeDirectivePath(rawPath, knownWorkspacePaths);
     if (s && !searchImportsRequests.includes(s)) searchImportsRequests.push(s);
     return '';
   });
