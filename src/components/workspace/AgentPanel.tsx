@@ -219,6 +219,14 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  /**
+   * Whether the reader is following the bottom of the transcript.
+   *
+   * A ref rather than state: it changes on every scroll event and nothing
+   * renders from it, so putting it in state would re-render the whole panel
+   * mid-stream for no visible benefit.
+   */
+  const pinnedToBottomRef = useRef(true);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const modelPopoverRef = useRef<HTMLDivElement>(null);
   const reasoningPopoverRef = useRef<HTMLDivElement>(null);
@@ -344,9 +352,24 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     void persistenceRef.current?.settings.set('agent.reasoningEffort', 'agent', reasoningEffort);
   }, [hydratedProjectId, reasoningEffort]);
 
+  /**
+   * Scrolling away pauses auto-follow; returning to the bottom resumes it.
+   * The threshold absorbs sub-pixel rounding and the last line's leading, so
+   * "close enough to the bottom" still counts as following.
+   */
+  const handleTranscriptScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    pinnedToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight <= 48;
+  };
+
   useEffect(() => {
     const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    // Follow the stream only while the reader is already at the bottom.
+    // `messages` changes on every streamed token, so scrolling unconditionally
+    // dragged the view back down on each one and made it impossible to read
+    // anything further up while the agent was still writing.
+    if (el && pinnedToBottomRef.current) el.scrollTop = el.scrollHeight;
   }, [messages, isSending]);
 
   useEffect(() => {
@@ -798,6 +821,9 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     const userMsg: AgentChatMessage = { id: genId(), role: 'user', content: text, createdAt: Date.now() };
     const historyBase = [...messagesRef.current, userMsg];
     setMessages(historyBase);
+    // Sending is an explicit request to see the result, so resume following
+    // even if the reader had scrolled up while reading the previous answer.
+    pinnedToBottomRef.current = true;
     isSendingRef.current = true;
     setIsSending(true);
 
@@ -1451,7 +1477,11 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         </div>
       </div>
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-2 sm:px-3 py-2 sm:py-3 space-y-2 sm:space-y-3">
+      <div
+        ref={scrollRef}
+        onScroll={handleTranscriptScroll}
+        className="flex-1 overflow-y-auto px-2 sm:px-3 py-2 sm:py-3 space-y-2 sm:space-y-3"
+      >
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center gap-2 sm:gap-3 text-center py-6 sm:py-10">
             <PixelBowlIcon size={28} className="sm:size-10 opacity-80" />
