@@ -87,6 +87,13 @@ const BARE_IMPORT_MAP: Record<string, string> = {
   'zustand': 'https://esm.sh/zustand@5.0.2',
 };
 
+const BARE_IMPORT_GLOBALS: Record<string, string> = {
+  'react': 'React',
+  'react-dom': 'ReactDOM',
+  'react-dom/client': 'ReactDOM',
+  'three': 'THREE',
+};
+
 /** Detect if the project is a React app based on file extensions and content. */
 export function isReactProject(files: WorkspaceFileNode[]): boolean {
   const hasJsxTsx = files.some((f) => /\.(jsx|tsx)$/i.test(f.path));
@@ -100,6 +107,37 @@ export function isReactProject(files: WorkspaceFileNode[]): boolean {
     if (f.content && /from\s+['"]react['"]/.test(f.content)) return true;
   }
   return false;
+}
+
+function hasTopLevelModuleSyntax(source: string): boolean {
+  return /(?:^|\n)\s*(?:import\s+|export\s+)/m.test(source);
+}
+
+/** Detect module scripts declared by the HTML or used by one of its local entry scripts. */
+export function usesEsModules(files: WorkspaceFileNode[], entryFile: WorkspaceFileNode): boolean {
+  if (!/\.html?$/i.test(entryFile.path)) {
+    return hasTopLevelModuleSyntax(entryFile.content || '');
+  }
+
+  let doc: Document;
+  try {
+    doc = new DOMParser().parseFromString(entryFile.content || '', 'text/html');
+  } catch {
+    return /<script\b[^>]*\btype\s*=\s*(['"])module\1/i.test(entryFile.content || '');
+  }
+
+  return Array.from(doc.querySelectorAll('script')).some((script) => {
+    if (script.getAttribute('type')?.toLowerCase() === 'module') return true;
+
+    const src = script.getAttribute('src');
+    if (!src || isExternalRef(src)) {
+      return !src && hasTopLevelModuleSyntax(script.textContent || '');
+    }
+
+    const resolvedPath = resolveRelativePath(src.startsWith('/') ? '' : entryFile.path, src);
+    const scriptFile = resolveFileExtension(files, resolvedPath);
+    return hasTopLevelModuleSyntax(scriptFile?.content || '');
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -131,8 +169,6 @@ function collectModules(
   const file = files.find((f) => f.path === entryPath);
   if (!file || !file.content) return modules;
 
-  modules.push(file);
-
   // Find all import specifiers
   const importSpecifiers: string[] = [];
   let m: RegExpExecArray | null;
@@ -155,6 +191,7 @@ function collectModules(
     }
   }
 
+  modules.push(file);
   return modules;
 }
 
@@ -172,22 +209,24 @@ function transformModuleSource(source: string): string {
   //   import * as R from 'react'            → const R = window.React;
   const bareImportRe = /(?:^|\n)\s*import\s+(?:(\w+(?:\s*,\s*\{[^}]*\})?|\{[^}]*\}|\*\s+as\s+\w+)\s+from\s+)?['"]([^'"]+)['"];?/gm;
   out = out.replace(bareImportRe, (_match: string, bindings: string | undefined, specifier: string) => {
-    if (!specifier.startsWith('.') && BARE_IMPORT_MAP[specifier]) {
+    if (!specifier.startsWith('.') && (BARE_IMPORT_MAP[specifier] || BARE_IMPORT_GLOBALS[specifier])) {
       if (!bindings) return '\n'; // side-effect import like `import 'react'`
-      const globalName = specifier === 'react' ? 'React'
-        : (specifier === 'react-dom/client' || specifier === 'react-dom') ? 'ReactDOM'
-        : specifier;
+      const globalName = BARE_IMPORT_GLOBALS[specifier] || specifier;
+      const globalRef = /^[A-Za-z_$][\w$]*$/.test(globalName)
+        ? `window.${globalName}`
+        : `window[${JSON.stringify(globalName)}]`;
       // Named imports: { useState, useEffect }
       if (bindings.startsWith('{')) {
-        return `\nconst ${bindings} = window.${globalName};\n`;
+        const destructuring = bindings.replace(/\s+as\s+/g, ': ');
+        return `\nvar ${destructuring} = ${globalRef};\n`;
       }
       // Namespace: * as R
       if (bindings.startsWith('*')) {
         const name = bindings.replace('* as ', '').trim();
-        return `\nconst ${name} = window.${globalName};\n`;
+        return `\nvar ${name} = ${globalRef};\n`;
       }
       // Default: React
-      return `\nconst ${bindings} = window.${globalName};\n`;
+      return `\nvar ${bindings} = ${globalRef};\n`;
     }
     return '\n'; // strip ALL other imports (relative, CSS, unknown)
   });
@@ -197,7 +236,7 @@ function transformModuleSource(source: string): string {
 
   // Strip: export ...
   out = out.replace(/export\s+default\s+/g, 'var __default__ = ');
-  out = out.replace(/export\s+(?:const|let|var|function|class)\s+/g, '$1 ');
+  out = out.replace(/export\s+(const|let|var|function|class)\s+/g, '$1 ');
   out = out.replace(/export\s+\{[^}]*\};?\s*/g, '');
   out = out.replace(/export\s+/g, '');
 
@@ -360,6 +399,8 @@ export function buildPreviewDocument(tree: WorkspaceFileNode[], entry: Workspace
   const files = listFiles(tree);
   const findByPath = (p: string) => files.find((f) => f.path === p);
   const inlinedPaths = new Set<string>();
+  const bundledModulePaths = new Set<string>();
+  const modulesInUse = usesEsModules(files, entry);
 
   const missingComment = (path: string) => `<!-- Missing local file: ${path} -->`;
   const resolveLocalPath = (fromPath: string, ref: string) =>
@@ -427,10 +468,30 @@ export function buildPreviewDocument(tree: WorkspaceFileNode[], entry: Workspace
     const src = script.getAttribute('src');
     if (!src || isExternalRef(src)) return;
     const resolvedPath = resolveLocalPath(entry.path, src);
-    if (!findByPath(resolvedPath)) {
+    const exactScriptFile = findByPath(resolvedPath);
+    const moduleEntryFile = resolveFileExtension(files, resolvedPath);
+    const isModuleEntry = modulesInUse && Boolean(moduleEntryFile) && (
+      script.getAttribute('type')?.toLowerCase() === 'module'
+      || hasTopLevelModuleSyntax(moduleEntryFile?.content || '')
+    );
+    if (isModuleEntry && moduleEntryFile) {
+      const modules = collectModules(files, moduleEntryFile.path, bundledModulePaths);
+      const bundledJs = modules.map((mod) => {
+        const isEntry = mod.path === moduleEntryFile.path;
+        return `// ── ${mod.path} ${isEntry ? '(entry)' : ''} ──\n${transformModuleSource(mod.content || '')}`;
+      }).join('\n\n');
+
+      script.removeAttribute('src');
+      script.removeAttribute('type');
+      script.textContent = bundledJs;
+      return;
+    }
+
+    if (!exactScriptFile) {
       script.replaceWith(doc.createComment(` Missing local file: ${resolvedPath} `));
       return;
     }
+
     script.removeAttribute('src');
     script.textContent = inlineLocalFile(src, entry.path, 'script');
   });

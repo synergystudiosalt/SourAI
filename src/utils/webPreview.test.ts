@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { WorkspaceFileNode } from '../types';
-import { buildPreviewDocument } from './webPreview';
+import { buildPreviewDocument, usesEsModules } from './webPreview';
 
 const file = (path: string, content: string): WorkspaceFileNode => ({
   id: path,
@@ -84,4 +84,94 @@ describe('buildPreviewDocument plain HTML inlining', () => {
     expect(output).toContain('<!-- Missing local file: missing.js -->');
     expect(output).not.toContain('src="./missing.js"');
   });
+
+  it('bundles ES modules in dependency order at the original module script position', () => {
+    const entry = file(
+      'index.html',
+      [
+        '<script src="https://cdn.example.com/three.min.js"></script>',
+        '<script type="importmap">{"imports":{"three":"https://cdn.example.com/three.module.js"}}</script>',
+        '<script type="module" src="src/main.js"></script>',
+      ].join('')
+    );
+    const output = buildPreviewDocument(
+      [
+        entry,
+        file(
+          'src/main.js',
+          [
+            "import * as THREE_MODULE from 'three';",
+            "import { Ground } from './world/ground.js';",
+            'window.moduleResult = new Ground().value() + (THREE_MODULE === window.THREE ? 0 : 100);',
+          ].join('\n')
+        ),
+        file(
+          'src/world/ground.js',
+          [
+            "import * as THREE from 'three';",
+            "import { BaseGround } from './base-ground.js';",
+            'export class Ground extends BaseGround { value() { return super.value() + (THREE === window.THREE ? 1 : 100); } }',
+          ].join('\n')
+        ),
+        file('src/world/base-ground.js', 'export class BaseGround { value() { return 41; } }'),
+      ],
+      entry
+    );
+
+    const doc = new DOMParser().parseFromString(output, 'text/html');
+    const scripts = Array.from(doc.querySelectorAll('script'));
+    const bundle = scripts.find((script) => script.textContent?.includes('src/main.js (entry)'));
+
+    expect(bundle).toBeDefined();
+    expect(bundle?.hasAttribute('src')).toBe(false);
+    expect(bundle?.hasAttribute('type')).toBe(false);
+    expect(bundle?.textContent).not.toMatch(/(^|\n)\s*(?:import|export)\s/m);
+    expect(bundle?.textContent).toContain('class Ground extends BaseGround');
+    expect(bundle?.textContent).toContain('var THREE_MODULE = window.THREE;');
+    expect(bundle?.textContent?.indexOf('src/world/base-ground.js')).toBeLessThan(
+      bundle?.textContent?.indexOf('src/world/ground.js') ?? -1
+    );
+    expect(bundle?.textContent?.indexOf('src/world/ground.js')).toBeLessThan(
+      bundle?.textContent?.indexOf('src/main.js') ?? -1
+    );
+
+    const cdnScript = scripts.find((script) => script.src.includes('three.min.js'));
+    const importMap = scripts.find((script) => script.type === 'importmap');
+    expect(cdnScript?.getAttribute('src')).toBe('https://cdn.example.com/three.min.js');
+    expect(importMap?.textContent).toContain('three.module.js');
+    expect(output.indexOf('three.min.js')).toBeLessThan(output.indexOf('src/main.js (entry)'));
+    expect(output.indexOf('three.module.js')).toBeLessThan(output.indexOf('src/main.js (entry)'));
+
+    const previewWindow = { THREE: { name: 'classic global' }, moduleResult: 0 };
+    new Function('window', bundle?.textContent || '')(previewWindow);
+    expect(previewWindow.moduleResult).toBe(42);
+  });
+
+  it('detects module syntax in a JavaScript entry even without type="module"', () => {
+    const entry = file('index.html', '<script src="main.js"></script>');
+    const main = file('main.js', 'export const answer = 42;\nwindow.answer = answer;');
+
+    expect(usesEsModules([entry, main], entry)).toBe(true);
+
+    const output = buildPreviewDocument([entry, main], entry);
+    const doc = new DOMParser().parseFromString(output, 'text/html');
+    const bundle = doc.querySelector('script');
+    const previewWindow = { answer: 0 };
+
+    expect(bundle?.textContent).toContain('const answer = 42;');
+    expect(bundle?.textContent).not.toContain('export const');
+    new Function('window', bundle?.textContent || '')(previewWindow);
+    expect(previewWindow.answer).toBe(42);
+  });
+
+  it('keeps the classic-script path unchanged when no modules are present', () => {
+    const entry = file('index.html', '<script src="main.js"></script>');
+    const source = 'window.classicRuns = (window.classicRuns || 0) + 1;';
+    const output = buildPreviewDocument([entry, file('main.js', source)], entry);
+
+    expect(usesEsModules([entry, file('main.js', source)], entry)).toBe(false);
+    expect(output).toContain(source);
+    expect(output).not.toContain('main.js (entry)');
+  });
+
 });
