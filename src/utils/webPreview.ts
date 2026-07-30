@@ -243,6 +243,207 @@ function transformModuleSource(source: string): string {
   return out;
 }
 
+
+type PlainModuleAlias = { localName: string; globalRef: string };
+type PlainModuleExport = { exportedName: string; localName: string };
+
+function uniqueBundleName(base: string, sources: string): string {
+  let name = base;
+  while (new RegExp('\\b' + name + '\\b').test(sources)) name += '_';
+  return name;
+}
+
+function parseImportBindings(bindings: string): Array<{ importedName: string; localName: string }> {
+  return bindings
+    .replace(/^\{|\}$/g, '')
+    .split(',')
+    .map((binding) => binding.trim())
+    .filter(Boolean)
+    .map((binding) => {
+      const parts = binding.split(/\s+as\s+/);
+      return { importedName: parts[0].trim(), localName: (parts[1] || parts[0]).trim() };
+    });
+}
+
+function transformPlainModule(
+  source: string,
+  modulePath: string,
+  files: WorkspaceFileNode[],
+  registryName: string,
+): { source: string; aliases: PlainModuleAlias[]; exports: PlainModuleExport[] } {
+  const aliases: PlainModuleAlias[] = [];
+  const moduleExports: PlainModuleExport[] = [];
+  const addExport = (exportedName: string, localName: string) => {
+    if (!moduleExports.some((item) => item.exportedName === exportedName)) {
+      moduleExports.push({ exportedName, localName });
+    }
+  };
+
+  // Treat hand-written top-level window aliases exactly like aliases generated
+  // from bare imports. Requiring the declaration at column zero avoids lifting
+  // a declaration out of a nested block.
+  //
+  // The trailing lookahead requires the statement to END at the global
+  // reference. Without it the pattern matched a prefix: given
+  // `const THREE = window.THREE || THREE_MODULE;` it lifted
+  // `const THREE = window.THREE` and left `|| THREE_MODULE;` behind, a
+  // SyntaxError that killed the entire bundle. A guarded fallback like that is
+  // a plain declaration, not an alias, and belongs inside the module closure
+  // where it cannot collide with another module's.
+  let out = source.replace(
+    /(^|\n)const\s+([A-Za-z_$][\w$]*)\s*=\s*(window(?:\.[A-Za-z_$][\w$]*|\[(?:'[^']*'|"[^"]*")\]))[ \t]*;?[ \t]*(?=\r?\n|$)/g,
+    (_match, lineStart: string, localName: string, globalRef: string) => {
+      aliases.push({ localName, globalRef });
+      return lineStart;
+    }
+  );
+  out = out.replace(CSS_IMPORT_RE, '\n');
+
+  const importRe = /(^|\n)\s*import\s+(?:(.*?)\s+from\s+)?['"]([^'"]+)['"]\s*;?/gm;
+  out = out.replace(importRe, (_match, lineStart: string, rawBindings: string | undefined, specifier: string) => {
+    const bindings = rawBindings?.trim();
+    if (!bindings || specifier.endsWith('.css')) return lineStart;
+
+    if (!specifier.startsWith('.')) {
+      if (!BARE_IMPORT_MAP[specifier] && !BARE_IMPORT_GLOBALS[specifier]) return lineStart;
+      const globalName = BARE_IMPORT_GLOBALS[specifier] || specifier;
+      const globalRef = /^[A-Za-z_$][\w$]*$/.test(globalName)
+        ? 'window.' + globalName
+        : 'window[' + JSON.stringify(globalName) + ']';
+      if (bindings.startsWith('{')) {
+        for (const binding of parseImportBindings(bindings)) {
+          aliases.push({ localName: binding.localName, globalRef: globalRef + '.' + binding.importedName });
+        }
+      } else if (bindings.startsWith('*')) {
+        aliases.push({ localName: bindings.replace(/^\*\s+as\s+/, '').trim(), globalRef });
+      } else {
+        const combined = bindings.match(/^([A-Za-z_$][\w$]*)\s*,\s*(\{[\s\S]*\})$/);
+        if (combined) {
+          aliases.push({ localName: combined[1], globalRef });
+          for (const binding of parseImportBindings(combined[2])) {
+            aliases.push({ localName: binding.localName, globalRef: globalRef + '.' + binding.importedName });
+          }
+        } else {
+          aliases.push({ localName: bindings, globalRef });
+        }
+      }
+      return lineStart;
+    }
+
+    const resolved = resolveFileExtension(files, resolveRelativePath(modulePath, specifier));
+    if (!resolved) return lineStart;
+    const dependency = registryName + '[' + JSON.stringify(resolved.path) + ']';
+    if (bindings.startsWith('{')) {
+      const properties = parseImportBindings(bindings)
+        .map((binding) => binding.importedName === binding.localName
+          ? binding.importedName
+          : binding.importedName + ': ' + binding.localName)
+        .join(', ');
+      return lineStart + 'const { ' + properties + ' } = ' + dependency + ';';
+    }
+    if (bindings.startsWith('*')) {
+      return lineStart + 'const ' + bindings.replace(/^\*\s+as\s+/, '').trim() + ' = ' + dependency + ';';
+    }
+    const combined = bindings.match(/^([A-Za-z_$][\w$]*)\s*,\s*(\{[\s\S]*\})$/);
+    if (combined) {
+      const properties = parseImportBindings(combined[2])
+        .map((binding) => binding.importedName === binding.localName
+          ? binding.importedName
+          : binding.importedName + ': ' + binding.localName)
+        .join(', ');
+      return lineStart + 'const ' + combined[1] + ' = ' + dependency + '.default;\nconst { '
+        + properties + ' } = ' + dependency + ';';
+    }
+    return lineStart + 'const ' + bindings + ' = ' + dependency + '.default;';
+  });
+
+  const defaultName = uniqueBundleName('__sourPreviewDefault', out);
+  out = out.replace(/export\s+default\s+(async\s+)?function\s+([A-Za-z_$][\w$]*)/g,
+    (_match, asyncKeyword: string | undefined, localName: string) => {
+      addExport('default', localName);
+      return (asyncKeyword || '') + 'function ' + localName;
+    });
+  out = out.replace(/export\s+default\s+class\s+([A-Za-z_$][\w$]*)/g, (_match, localName: string) => {
+    addExport('default', localName);
+    return 'class ' + localName;
+  });
+  out = out.replace(/export\s+default\s+/g, () => {
+    addExport('default', defaultName);
+    return 'const ' + defaultName + ' = ';
+  });
+  out = out.replace(/export\s+(const|let|var|function|class)\s+([A-Za-z_$][\w$]*)/g,
+    (_match, declaration: string, localName: string) => {
+      addExport(localName, localName);
+      return declaration + ' ' + localName;
+    });
+  out = out.replace(/export\s*\{([^}]*)\}\s*;?/g, (_match, bindings: string) => {
+    for (const binding of bindings.split(',').map((item: string) => item.trim()).filter(Boolean)) {
+      const parts = binding.split(/\s+as\s+/);
+      addExport((parts[1] || parts[0]).trim(), parts[0].trim());
+    }
+    return '';
+  });
+  out = out.replace(/export\s+/g, '');
+
+  return { source: out, aliases, exports: moduleExports };
+}
+
+function bundlePlainEsModules(
+  modules: WorkspaceFileNode[],
+  files: WorkspaceFileNode[],
+  entryPath: string,
+): string {
+  const registryName = uniqueBundleName(
+    '__sourPreviewModules',
+    modules.map((module) => module.content || '').join('\n')
+  );
+  const transformed = modules.map((module) => ({
+    module,
+    result: transformPlainModule(module.content || '', module.path, files, registryName),
+  }));
+  const refsByAlias = new Map<string, Set<string>>();
+  for (const item of transformed) {
+    for (const alias of item.result.aliases) {
+      const refs = refsByAlias.get(alias.localName) || new Set<string>();
+      refs.add(alias.globalRef);
+      refsByAlias.set(alias.localName, refs);
+    }
+  }
+  const hoisted = new Map<string, string>();
+  for (const [localName, refs] of refsByAlias) {
+    if (refs.size === 1) hoisted.set(localName, Array.from(refs)[0]);
+  }
+
+  const lines = [
+    '(function(' + registryName + ') {',
+    ...Array.from(hoisted, ([localName, globalRef]) => 'const ' + localName + ' = ' + globalRef + ';'),
+  ];
+  for (const item of transformed) {
+    const localAliases = item.result.aliases
+      .filter((alias) => !hoisted.has(alias.localName))
+      .filter((alias, index, all) => all.findIndex((candidate) =>
+        candidate.localName === alias.localName && candidate.globalRef === alias.globalRef) === index)
+      .map((alias) => 'const ' + alias.localName + ' = ' + alias.globalRef + ';')
+      .join('\n');
+    const exported = item.result.exports
+      .map((binding) => JSON.stringify(binding.exportedName) + ': ' + binding.localName)
+      .join(', ');
+    lines.push(
+      '// ── ' + item.module.path + (item.module.path === entryPath ? ' (entry)' : '') + ' ──',
+      registryName + '[' + JSON.stringify(item.module.path) + '] = (function() {',
+      localAliases,
+      item.result.source,
+      'return { ' + exported + ' };',
+      '})();'
+    );
+  }
+  lines.push(
+    "})(window[Symbol.for('sour.webPreview.modules')] || "
+      + "(window[Symbol.for('sour.webPreview.modules')] = Object.create(null)));"
+  );
+  return lines.join('\n');
+}
+
 /** Resolve a CSS @import or link to an inline <style> block. */
 function resolveCssImports(
   source: string,
@@ -476,10 +677,7 @@ export function buildPreviewDocument(tree: WorkspaceFileNode[], entry: Workspace
     );
     if (isModuleEntry && moduleEntryFile) {
       const modules = collectModules(files, moduleEntryFile.path, bundledModulePaths);
-      const bundledJs = modules.map((mod) => {
-        const isEntry = mod.path === moduleEntryFile.path;
-        return `// ── ${mod.path} ${isEntry ? '(entry)' : ''} ──\n${transformModuleSource(mod.content || '')}`;
-      }).join('\n\n');
+      const bundledJs = bundlePlainEsModules(modules, files, moduleEntryFile.path);
 
       script.removeAttribute('src');
       script.removeAttribute('type');
