@@ -30,15 +30,26 @@ export function normalizeChatProviderError(
   });
 }
 
-async function runClientOnlyChat(message: string, signal: AbortSignal): Promise<Response> {
-  await Promise.resolve();
-  if (signal.aborted) throw new DOMException('The chat run was stopped.', 'AbortError');
-  return new Response(
-    JSON.stringify({
-      text: `Local client runtime received: ${message}`,
-    }),
-    { status: 200, headers: { 'Content-Type': 'application/json' } }
-  );
+/**
+ * Sends a chat turn to the provider.
+ *
+ * This previously returned a local stub that echoed the prompt back
+ * ("Local client runtime received: ..."), so the chat never reached a model at
+ * all while /api/chat sat there working. The endpoint takes the conversation
+ * so far, not just the latest message, or every turn would arrive with no
+ * memory of the one before it.
+ */
+async function runChat(
+  messages: readonly { role: string; content: string; attachments?: unknown }[],
+  model: AIModel,
+  signal: AbortSignal
+): Promise<Response> {
+  return fetch('/api/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messages, model }),
+    signal,
+  });
 }
 
 export default function App() {
@@ -293,7 +304,15 @@ export default function App() {
     abortControllerRef.current = new AbortController();
 
     try {
-      const response = await runClientOnlyChat(text, abortControllerRef.current.signal);
+      const response = await runChat(
+        [{ role: userMsg.role, content: userMsg.content, attachments: userMsg.attachments }],
+        selectedModel,
+        abortControllerRef.current.signal
+      );
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw normalizeChatProviderError(errData?.error, 'The chat provider failed to respond.');
+      }
 
       let data: any = {};
       const contentType = response.headers.get('content-type') || '';
@@ -425,8 +444,15 @@ export default function App() {
         };
       });
 
-      void sanitizedMessages;
-      const response = await runClientOnlyChat(text, abortControllerRef.current.signal);
+      const response = await runChat(
+        sanitizedMessages,
+        selectedModel,
+        abortControllerRef.current.signal
+      );
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw normalizeChatProviderError(errData?.error, 'The chat provider failed to respond.');
+      }
 
       let data: any = {};
       const contentType2 = response.headers.get('content-type') || '';

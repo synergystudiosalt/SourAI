@@ -99,14 +99,18 @@ describe('application shell', () => {
     expect(blockedRequests).toEqual([]);
   });
 
-  it('runs chat locally without calling a SourAI API', async () => {
+  // Sending used to be answered by a local stub that echoed the prompt back,
+  // so the chat never reached a model at all. Sending must hit /api/chat.
+  it('sends a chat turn to the chat API', async () => {
     const user = userEvent.setup();
     render(<Root />);
     await user.type(await screen.findByPlaceholderText('How can I help you today?'), 'hello');
     await user.click(screen.getByTitle('Send Prompt'));
 
     expect(await screen.findByText('hello', { exact: true })).toBeInTheDocument();
-    expect(blockedRequests).toEqual([]);
+    expect(blockedRequests.some((url) => String(url).includes('/api/chat'))).toBe(true);
+    // Nothing else is contacted.
+    expect(blockedRequests.filter((url) => !String(url).includes('/api/chat'))).toEqual([]);
   });
 });
 
