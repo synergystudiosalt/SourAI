@@ -20,6 +20,17 @@ describe('preview console bridge', () => {
     expect(doc).toContain("addEventListener('unhandledrejection'");
   });
 
+  // A failed script or stylesheet load fires on the element and does not
+  // bubble, so only a capture-phase listener sees it. Missing these hid the
+  // most actionable failure there is: a mistyped CDN path 404s and the agent
+  // sees only "X is not defined".
+  it('catches a failed resource load, which needs the capture phase', () => {
+    expect(doc).toMatch(/addEventListener\('error'[\s\S]*?,\s*true\s*\)/);
+    expect(doc).toContain('Failed to load ');
+    // The URL is reported, so the agent can see the path is wrong.
+    expect(doc).toMatch(/t\.src\s*\|\|\s*t\.href/);
+  });
+
   it('runs under the preview CSP, which allows inline script', () => {
     expect(PREVIEW_DOCUMENT_POLICY).toContain("script-src 'unsafe-inline'");
   });

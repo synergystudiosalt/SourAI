@@ -111,6 +111,14 @@ export interface PreviewLogEntry {
  * reported — those are exactly the failures worth catching, and they happen
  * before any project code could report itself.
  *
+ * The error listener uses the capture phase deliberately. A failed script or
+ * stylesheet load fires on the element and does not bubble, so a bubble-phase
+ * window listener never sees it. That was the most useful failure of all to
+ * miss: a mistyped CDN path 404s, the library global is never defined, and the
+ * agent sees only "X is not defined" with no hint that a file failed to load.
+ * One such case had the model write a retry loop waiting for a global that
+ * could never arrive.
+ *
  * Kept to ES5 and wrapped in try/catch: it runs inside untrusted project code
  * and must never be the thing that breaks the page.
  */
@@ -134,8 +142,13 @@ for(var i=0;i<levels.length;i++){(function(level){
   console[level]=function(){send(level,arguments);if(orig)try{orig.apply(console,arguments);}catch(e){}};
 })(levels[i]);}
 window.addEventListener('error',function(e){
+  var t=e.target;
+  if(t&&t!==window&&(t.src||t.href)){
+    send('error',['Failed to load '+String(t.tagName||'resource').toLowerCase()+': '+(t.src||t.href)+' (check the URL is correct and reachable)']);
+    return;
+  }
   send('error',[(e.message||'Error')+' ('+(e.filename||'inline')+':'+(e.lineno||0)+')']);
-});
+},true);
 window.addEventListener('unhandledrejection',function(e){
   var r=e.reason;send('error',['Unhandled promise rejection: '+((r&&(r.stack||r.message))||r)]);
 });
