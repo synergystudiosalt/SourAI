@@ -19,7 +19,73 @@ const CONTEXT_STORE_RE = /^@@context_store:\s*([^=\r\n]+?)\s*=\s*(.+?)\s*$/gm;
 const CONTEXT_GET_RE = /^@@context_get:\s*(.+?)\s*$/gm;
 const CONTEXT_LIST_RE = /^@@context_list\s*$/gm;
 const CONTEXT_CLEAR_RE = /^@@context_clear:\s*(.+?)\s*$/gm;
-const REPLACE_RE = /^@@replace:\s*(.+?)\s*\|\|\|\s*([\s\S]+?)\s*\|\|\|\s*([\s\S]+?)\s*$/gm;
+/**
+ * Start of a replace directive. The two `|||`-separated halves that follow are
+ * read by extractReplaceRequests, not by this pattern.
+ *
+ * A single regex cannot do it. With the `m` flag `$` matches at the first line
+ * boundary, so a lazy trailing group stopped there and a multi-line replacement
+ * captured only its first line — the edit still applied, silently replacing the
+ * target with that one line and discarding the rest, while the remainder leaked
+ * into the visible reply.
+ */
+const REPLACE_START_RE = /^@@replace:[ \t]*(.+?)[ \t]*\|\|\|/gm;
+/** Any directive or fence that must end an unterminated replace block. */
+const NEXT_DIRECTIVE_RE = /^(?:@@\w+|```)/m;
+
+export interface ParsedReplaceRequest {
+  readonly path: string;
+  readonly search: string;
+  readonly replace: string;
+}
+
+/**
+ * Pulls every replace directive out of `text`, returning the requests and the
+ * text with those directives removed.
+ *
+ * Scans forward from each opener rather than pattern-matching the whole block,
+ * so both halves may span any number of lines. A block is bounded by the next
+ * directive or fence, which stops one malformed request from swallowing the
+ * rest of the reply.
+ */
+export function extractReplaceRequests(
+  text: string
+): { requests: ParsedReplaceRequest[]; text: string } {
+  const requests: ParsedReplaceRequest[] = [];
+  let output = '';
+  let cursor = 0;
+
+  REPLACE_START_RE.lastIndex = 0;
+  let opener: RegExpExecArray | null;
+  while ((opener = REPLACE_START_RE.exec(text)) !== null) {
+    const bodyStart = opener.index + opener[0].length;
+    const rest = text.slice(bodyStart);
+
+    // A later directive or fence bounds this block; otherwise it runs to the end.
+    const boundary = rest.search(NEXT_DIRECTIVE_RE);
+    const block = boundary === -1 ? rest : rest.slice(0, boundary);
+
+    const separator = block.indexOf('|||');
+    if (separator === -1) {
+      // No closing separator: leave the directive visible rather than applying
+      // half an edit, so the malformed request is obvious.
+      continue;
+    }
+
+    const path = normalizePath(opener[1]);
+    const search = block.slice(0, separator);
+    const replace = block.slice(separator + 3);
+    if (path && search.trim()) {
+      requests.push({ path, search: search.trim(), replace: replace.trim() });
+      output += text.slice(cursor, opener.index);
+      cursor = bodyStart + (boundary === -1 ? rest.length : boundary);
+      REPLACE_START_RE.lastIndex = cursor;
+    }
+  }
+
+  output += text.slice(cursor);
+  return { requests, text: output };
+}
 const SEARCH_IMPORTS_RE = /^@@search_imports:\s*(.+?)\s*$/gm;
 const RENAME_RE = /^@@rename:\s*(.+?)\s*\|\|\|\s*(.+?)\s*$/gm;
 const TODO_RE = /^@@todo:\s*\[(\w+)\]\s*(.+?)\s*$/gm;
@@ -279,12 +345,11 @@ export function parseAgentResponse(raw: string): ParsedAgentResponse {
     return '';
   });
 
-  const replaceRequests: { path: string; search: string; replace: string }[] = [];
-  text = text.replace(REPLACE_RE, (_match, rawPath: string, search: string, replace: string) => {
-    const p = normalizePath(rawPath);
-    if (p) replaceRequests.push({ path: p, search: search.trim(), replace: replace.trim() });
-    return '';
-  });
+  const extractedReplaces = extractReplaceRequests(text);
+  const replaceRequests: { path: string; search: string; replace: string }[] = [
+    ...extractedReplaces.requests,
+  ];
+  text = extractedReplaces.text;
 
   const searchImportsRequests: string[] = [];
   text = text.replace(SEARCH_IMPORTS_RE, (_match, symbol: string) => {
