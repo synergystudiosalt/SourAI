@@ -359,6 +359,45 @@ export function buildReactPreview(
 export function buildPreviewDocument(tree: WorkspaceFileNode[], entry: WorkspaceFileNode): string {
   const files = listFiles(tree);
   const findByPath = (p: string) => files.find((f) => f.path === p);
+  const inlinedPaths = new Set<string>();
+
+  const missingComment = (path: string) => `<!-- Missing local file: ${path} -->`;
+  const resolveLocalPath = (fromPath: string, ref: string) =>
+    resolveRelativePath(ref.startsWith('/') ? '' : fromPath, ref);
+
+  const inlineCss = (source: string, fromPath: string): string =>
+    source.replace(
+      /@import\s+(?:url\(\s*)?(?:(['"])([^'"]+)\1|([^'")\s]+))\s*\)?\s*;/gi,
+      (match: string, _quote: string | undefined, quotedRef: string | undefined, bareRef: string | undefined) => {
+        const ref = quotedRef || bareRef;
+        if (!ref || isExternalRef(ref)) return match;
+        return inlineLocalFile(ref, fromPath, 'css');
+      }
+    );
+
+  const inlineJavaScript = (source: string, fromPath: string): string =>
+    source.replace(
+      /(^|\n)([ \t]*import\s+(?:(?:[\w$*{}\s,]+\s+from\s+)?['"]([^'"]+)['"])\s*;?)/g,
+      (match: string, lineStart: string, _statement: string, ref: string) => {
+        if (isExternalRef(ref)) return match;
+        return `${lineStart}${inlineLocalFile(ref, fromPath, 'script')}`;
+      }
+    );
+
+  function inlineLocalFile(ref: string, fromPath: string, kind: 'css' | 'script'): string {
+    const resolvedPath = resolveLocalPath(fromPath, ref);
+    const file = findByPath(resolvedPath);
+    if (!file) return missingComment(resolvedPath);
+    if (inlinedPaths.has(resolvedPath)) return '';
+
+    // Mark before descending so A -> B -> A cycles terminate, and so a later
+    // HTML reference cannot execute a dependency for a second time.
+    inlinedPaths.add(resolvedPath);
+    const source = file.content || '';
+    return kind === 'css'
+      ? inlineCss(source, resolvedPath)
+      : inlineJavaScript(source, resolvedPath);
+  }
 
   let doc: Document;
   try {
@@ -367,28 +406,33 @@ export function buildPreviewDocument(tree: WorkspaceFileNode[], entry: Workspace
     return entry.content || '';
   }
 
+  doc.querySelectorAll('style').forEach((style) => {
+    style.textContent = inlineCss(style.textContent || '', entry.path);
+  });
+
   doc.querySelectorAll('link[rel="stylesheet"]').forEach((link) => {
     const href = link.getAttribute('href');
     if (!href || isExternalRef(href)) return;
-    const cssFile = findByPath(resolveRelativePath(entry.path, href));
-    if (cssFile) {
-      const style = doc.createElement('style');
-      style.textContent = cssFile.content || '';
-      link.replaceWith(style);
+    const resolvedPath = resolveLocalPath(entry.path, href);
+    if (!findByPath(resolvedPath)) {
+      link.replaceWith(doc.createComment(` Missing local file: ${resolvedPath} `));
+      return;
     }
+    const style = doc.createElement('style');
+    style.textContent = inlineLocalFile(href, entry.path, 'css');
+    link.replaceWith(style);
   });
 
   doc.querySelectorAll('script[src]').forEach((script) => {
     const src = script.getAttribute('src');
     if (!src || isExternalRef(src)) return;
-    const jsFile = findByPath(resolveRelativePath(entry.path, src));
-    if (jsFile) {
-      const inline = doc.createElement('script');
-      const type = script.getAttribute('type');
-      if (type) inline.setAttribute('type', type);
-      inline.textContent = jsFile.content || '';
-      script.replaceWith(inline);
+    const resolvedPath = resolveLocalPath(entry.path, src);
+    if (!findByPath(resolvedPath)) {
+      script.replaceWith(doc.createComment(` Missing local file: ${resolvedPath} `));
+      return;
     }
+    script.removeAttribute('src');
+    script.textContent = inlineLocalFile(src, entry.path, 'script');
   });
 
   return `<!DOCTYPE html>\n${doc.documentElement.outerHTML}`;

@@ -81,6 +81,9 @@ describe('CodeWorkspace preview security', () => {
     }
     // jsdelivr is the default for three.js and was previously omitted.
     expect(document).toContain('https://cdn.jsdelivr.net');
+    expect(document).toContain("style-src 'unsafe-inline' https://fonts.googleapis.com");
+    expect(document).toContain('font-src data: https://fonts.gstatic.com');
+    expect(document).toContain("connect-src 'none'");
   });
 
   it('forces an opaque origin on the served response, however the URL is reached', () => {

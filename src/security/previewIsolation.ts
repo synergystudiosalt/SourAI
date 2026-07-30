@@ -75,8 +75,8 @@ const PREVIEW_POLICY_DIRECTIVES = [
   "form-action 'none'",
   'img-src data: blob:',
   'media-src data: blob:',
-  'font-src data:',
-  "style-src 'unsafe-inline'",
+  'font-src data: https://fonts.gstatic.com',
+  "style-src 'unsafe-inline' https://fonts.googleapis.com",
   `script-src 'unsafe-inline' ${PREVIEW_SCRIPT_SOURCES.join(' ')}`,
   "worker-src 'none'",
 ];
