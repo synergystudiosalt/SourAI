@@ -32,7 +32,7 @@ export interface EffortContextBudget {
   readonly mentionedFileChars: number;
   /** How many project paths to list in the context block. */
   readonly maxProjectFiles: number;
-  /** How many prior chat messages to replay. */
+  /** Maximum verbatim history before older turns are summarised (and fallback depth if that fails). */
   readonly historyMessages: number;
 }
 

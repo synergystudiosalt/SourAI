@@ -44,6 +44,17 @@ describe('planCompaction', () => {
     expect(plan.keep).toHaveLength(DEFAULT_KEEP_RECENT);
   });
 
+  it('compacts a long low-token thread before message overhead grows unbounded', () => {
+    const short = Array.from({ length: 9 }, (_, index) =>
+      msg(index % 2 ? 'assistant' : 'user', `turn ${index}`)
+    );
+    const plan = planCompaction(short, { budgetTokens: 5000, maxMessages: 8 });
+
+    expect(plan.needed).toBe(true);
+    expect(plan.summarise).toEqual(short.slice(0, -DEFAULT_KEEP_RECENT));
+    expect(plan.keep).toEqual(short.slice(-DEFAULT_KEEP_RECENT));
+  });
+
   it('always keeps the most recent turns verbatim', () => {
     const plan = planCompaction(long, { budgetTokens: 500, keepRecent: 3 });
     expect(plan.keep).toEqual(long.slice(-3));

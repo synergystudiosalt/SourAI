@@ -886,14 +886,15 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         activeFile: activeFile
           ? { path: activeFile.path, content: activeFile.content.slice(0, effort.context.activeFileChars) }
           : null,
-        projectFiles: knownPaths.slice(0, effort.context.maxProjectFiles),
+        // The server applies the effort cap after prioritising open and
+        // mentioned files, so relevant paths are not lost merely because they
+        // sort after an arbitrary client-side slice.
+        projectFiles: knownPaths,
         mentionedFiles,
         projectMemory: selectProjectMemory(contextRef.current, text),
       };
 
       // ── Agent loop: send prompt, resolve tools, repeat until no more tool calls ──
-      // History depth scales with effort so higher tiers keep more of the thread.
-      const historyStartIndex = Math.max(0, historyBase.length - effort.context.historyMessages);
       // rawModelResponse is intentionally omitted: it is UI-only diagnostic data
       // and must never consume provider context on a later turn.
       const toCompactableMessage = (message: AgentChatMessage): CompactableMessage => ({
@@ -903,9 +904,11 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
             ? summarizeForHistory(message.content, message.ops)
             : message.content,
       });
-      const uncompactedHistory = historyBase
-        .slice(historyStartIndex)
-        .map(toCompactableMessage);
+      // Plan from the complete thread. Older turns used to be sliced off before
+      // compaction, which saved tokens by losing context. The rolling summary
+      // now preserves those decisions while bounding the verbatim tail.
+      const uncompactedHistory = historyBase.map(toCompactableMessage);
+      const fallbackHistory = uncompactedHistory.slice(-effort.context.historyMessages);
       let conversationHistory: CompactableMessage[] = uncompactedHistory;
       const activeFileContext = basePayload.activeFile
         ? `${basePayload.activeFile.path}\n${basePayload.activeFile.content}`
@@ -913,13 +916,18 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       const mentionedFileContext = basePayload.mentionedFiles
         .map((file) => `${file.path}\n${file.content}`)
         .join('\n');
-      const projectPathContext = basePayload.projectFiles.join('\n');
+      const projectPathContext = basePayload.projectFiles
+        .slice(0, effort.context.maxProjectFiles)
+        .join('\n');
       const fixedOverheadTokens =
         SYSTEM_PROMPT_TOKEN_ALLOWANCE +
         estimateTokens(activeFileContext) +
         estimateTokens(mentionedFileContext) +
         estimateTokens(projectPathContext);
-      const compactionOptions = { fixedOverheadTokens };
+      const compactionOptions = {
+        fixedOverheadTokens,
+        maxMessages: effort.context.historyMessages,
+      };
       const prefixKey = (count: number) =>
         historyBase.slice(0, count).map((message) => message.id).join('\u001f');
 
@@ -933,9 +941,9 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           .sort((a, b) => b.coveredMessageCount - a.coveredMessageCount)[0];
 
         let historyToPlan = uncompactedHistory;
-        let coveredBeforePlan = historyStartIndex;
+        let coveredBeforePlan = 0;
         let cachedSummaryMessageCount = 0;
-        if (reusableCache && reusableCache.coveredMessageCount >= historyStartIndex) {
+        if (reusableCache) {
           historyToPlan = applyCompaction(
             reusableCache.summary,
             historyBase
@@ -964,6 +972,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
               body: JSON.stringify({
                 messages: buildCompactionRequest(plan.summarise),
                 model: 'sour-omni-flash',
+                purpose: 'compaction',
               }),
               signal: summaryController.signal,
             });
@@ -990,7 +999,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
             // Compaction is an optimisation. The user's actual turn must still
             // run even if the cheap summary model is unavailable or too slow.
             console.warn('[sour.ai] Conversation compaction skipped', error);
-            conversationHistory = uncompactedHistory;
+            conversationHistory = fallbackHistory;
           } finally {
             window.clearTimeout(timeout);
             controller.signal.removeEventListener('abort', forwardAbort);

@@ -108,6 +108,7 @@ describe('AgentPanel conversation compaction', () => {
     expect(callsFor('/api/agent')).toHaveLength(1);
     const summaryPayload = JSON.parse(String(callsFor('/api/chat')[0][1]?.body));
     expect(summaryPayload.model).toBe('sour-omni-flash');
+    expect(summaryPayload.purpose).toBe('compaction');
     expect(agentPayload).toBeDefined();
 
     const uncompacted: CompactableMessage[] = [

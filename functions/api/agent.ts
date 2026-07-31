@@ -1,9 +1,7 @@
 import { generateText, streamText, resolveModelRoute, getApiKeys, serializeAiError, type GenerationTuning } from '../shared/ai';
-import { AGENT_SYSTEM_PROMPT, AGENT_WRITE_MODE_NOTE, AGENT_PLAN_MODE_NOTE, buildAgentContextBlock, buildReasoningEffortInstruction } from '../shared/systemPrompts';
+import { buildAgentContextBlock, buildAgentSystemPrompt, buildReasoningEffortInstruction } from '../shared/systemPrompts';
 import { resolveEffortProfile } from '../shared/effortProfile';
 import { splitThinkingAndText } from '../shared/responseFormatting';
-
-const AGENT_SYSTEM_PROMPT_BASE = AGENT_SYSTEM_PROMPT;
 
 export const onRequest: PagesFunction = async (context) => {
   if (context.request.method !== 'POST') {
@@ -92,19 +90,26 @@ export const onRequest: PagesFunction = async (context) => {
       effort.context.maxProjectFiles
     );
 
-    // Build the full prompt with system instruction
+    const agentMode = mode === 'write' ? 'write' : 'plan';
+    const recentConversation = messages
+      .slice(-4)
+      .map((message: any) => typeof message?.content === 'string' ? message.content : '')
+      .join('\n');
+    const includeRuntimeErrors = /\b(?:error|exception|stack trace|failed to load|console|runtime|crash(?:ed)?)\b/i
+      .test(recentConversation);
+
+    // Assemble only the branches this request can use. Plan turns no longer
+    // pay for mutation syntax, and routine turns omit error-recovery guidance.
     const systemInstruction = [
-      AGENT_SYSTEM_PROMPT,
+      buildAgentSystemPrompt({
+        mode: agentMode,
+        hasProjectFiles: projectFiles.length > 0,
+        includeRuntimeErrors,
+      }),
       buildReasoningEffortInstruction(reasoningEffort),
-      mode === 'write' ? AGENT_WRITE_MODE_NOTE : AGENT_PLAN_MODE_NOTE,
       '',
       'File context:',
       contextBlock,
-      '',
-      'Progress reporting:',
-      '- Keep private chain-of-thought private.',
-      '- If a task is long, use at most one short <thinking> status describing the current action.',
-      '- Never repeat reasoning tags or narrate obvious steps.',
     ].join('\n');
 
     // Prepare message content for Gemini format

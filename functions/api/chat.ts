@@ -41,9 +41,17 @@ export const onRequest: PagesFunction = async (context) => {
       messages?: any[];
       attachments?: any[];
       model?: string;
+      purpose?: 'chat' | 'compaction';
     };
 
-    const { messages = [], attachments = [], model } = body;
+    const { messages = [], attachments = [], model, purpose = 'chat' } = body;
+
+    if (purpose !== 'chat' && purpose !== 'compaction') {
+      return new Response(
+        JSON.stringify({ error: 'Unsupported request purpose' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
 
     if (!Array.isArray(messages) || messages.length === 0) {
       return new Response(
@@ -56,7 +64,7 @@ export const onRequest: PagesFunction = async (context) => {
       .reverse()
       .find((message: any) => message?.role === 'user')?.content || '';
 
-    if (isIdentityRequest(lastUserText)) {
+    if (purpose === 'chat' && isIdentityRequest(lastUserText)) {
       return new Response(JSON.stringify({
         text: "I'm sour.ai, an AI coding assistant created by Synergy Studios.",
         thinking: 'I recognized an identity question.',
@@ -65,7 +73,9 @@ export const onRequest: PagesFunction = async (context) => {
       }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
-    const imageRequest = detectImageRequest(lastUserText);
+    const imageRequest = purpose === 'chat'
+      ? detectImageRequest(lastUserText)
+      : { shouldGenerate: false, prompt: '' };
     if (imageRequest.shouldGenerate) {
       const { text: imageText, images, errors } = await processImageRequests(
         `[GENERATE_IMAGE: ${imageRequest.prompt}]`
@@ -93,9 +103,9 @@ export const onRequest: PagesFunction = async (context) => {
     const route = resolveModelRoute(model);
 
     // Convert attachments to Gemini format
-    const attachmentContents = await convertAttachmentsToGeminiContents(
-      attachments
-    );
+    const attachmentContents = purpose === 'chat'
+      ? await convertAttachmentsToGeminiContents(attachments)
+      : [];
 
     // Build contents for Gemini (multimodal support)
     const contents = messages.map((m: any) => ({
@@ -113,7 +123,9 @@ export const onRequest: PagesFunction = async (context) => {
       content: m.content || '',
     }));
 
-    const systemInstruction = `${CHAT_SYSTEM_PROMPT}
+    const systemInstruction = purpose === 'compaction'
+      ? 'Write the requested faithful conversation summary. Preserve decisions, paths, failures, and unfinished work. Return only the summary.'
+      : `${CHAT_SYSTEM_PROMPT}
 
 Reasoning format:
 - Use <think> tags for internal reasoning when solving complex problems.
@@ -135,6 +147,14 @@ Only if the user explicitly asks you to generate an image, picture, or photo (us
     })) || '';
 
     const { text, thinking } = splitThinkingAndText(rawText);
+
+    if (purpose === 'compaction') {
+      const summary = text.trim();
+      return new Response(JSON.stringify({ text: summary }), {
+        status: summary ? 200 : 502,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
 
     // Process image generation requests in the response
     const { text: processedText, images } = await processImageRequests(text);

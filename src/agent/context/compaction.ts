@@ -38,6 +38,8 @@ export interface CompactionOptions {
   readonly budgetTokens?: number;
   /** System prompt plus file context: rebuilt each turn and not compactable. */
   readonly fixedOverheadTokens?: number;
+  /** Maximum messages to replay verbatim before rolling older turns into a summary. */
+  readonly maxMessages?: number;
   /** Recent turns kept verbatim. Recency carries most of the meaning. */
   readonly keepRecent?: number;
 }
@@ -71,14 +73,16 @@ export function planCompaction(
   const budget = options.budgetTokens ?? DEFAULT_BUDGET_TOKENS;
   const overhead = Math.max(0, options.fixedOverheadTokens ?? 0);
   const keepRecent = Math.max(1, options.keepRecent ?? DEFAULT_KEEP_RECENT);
+  const maxMessages = Math.max(keepRecent + 1, options.maxMessages ?? Number.MAX_SAFE_INTEGER);
 
   const available = Math.max(0, budget - overhead);
   const estimatedTokens = estimateHistoryTokens(messages);
 
   const withinBudget = estimatedTokens <= available;
+  const withinMessageLimit = messages.length <= maxMessages;
   const older = messages.slice(0, Math.max(0, messages.length - keepRecent));
 
-  if (withinBudget || older.length < MIN_MESSAGES_TO_SUMMARISE) {
+  if ((withinBudget && withinMessageLimit) || older.length < MIN_MESSAGES_TO_SUMMARISE) {
     return {
       needed: false,
       summarise: [],
