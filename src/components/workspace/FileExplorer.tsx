@@ -276,7 +276,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
 
   if (isCollapsed) {
     return (
-      <div className="zed-file-explorer w-9 border-l flex flex-col items-center py-3 shrink-0">
+      <div className="w-9 border-l border-[#e5e3db] dark:border-[#2d2d2c] flex flex-col items-center py-3 bg-[#fbfaf7] dark:bg-[#1e1e1e] shrink-0">
         <button
           onClick={onToggleCollapse}
           title="Show file explorer"
@@ -289,7 +289,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   }
 
   return (
-    <div className="zed-file-explorer w-56 border-l flex flex-col select-none shrink-0">
+    <div className="w-56 border-l border-[#e5e3db] dark:border-[#2d2d2c] flex flex-col bg-[#fbfaf7] dark:bg-[#1e1e1e] select-none shrink-0">
       <div className="px-3 py-2 border-b border-[#e5e3db] dark:border-[#2d2d2c] flex items-center justify-between">
         <span
           className="text-[11px] font-semibold text-[#8c887d] dark:text-[#a09c94] uppercase tracking-wide truncate"

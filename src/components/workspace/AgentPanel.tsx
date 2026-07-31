@@ -1622,7 +1622,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
 
   if (isCollapsed) {
     return (
-      <div className="zed-agent-panel w-9 border-r flex flex-col items-center py-3 shrink-0">
+      <div className="w-9 border-r border-[#e5e3db] dark:border-[#2d2d2c] flex flex-col items-center py-3 bg-[#fbfaf7] dark:bg-[#1e1e1e] shrink-0">
         <button
           onClick={onToggleCollapse}
           title="Show sour.ai Agent"
@@ -1660,7 +1660,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   };
 
   return (
-    <div className="zed-agent-panel w-full lg:w-72 h-full border-r flex flex-col select-none shrink-0 relative">
+    <div className="w-full lg:w-72 h-full border-r border-[#e5e3db] dark:border-[#2d2d2c] flex flex-col bg-[#fbfaf7] dark:bg-[#1e1e1e] select-none shrink-0 relative">
       <div className="h-8 sm:h-9 border-b border-[#e5e3db] dark:border-[#2d2d2c] flex items-center justify-between px-2 sm:px-3 text-xs text-[#8c887d] dark:text-[#a09c94] shrink-0">
         <span className="flex items-center gap-1 sm:gap-1.5 truncate text-[11px] sm:text-xs">
           <Logo size={12} className="sm:w-4" />

@@ -155,8 +155,7 @@ export default function App() {
   }, [messageUnitsUsed]);
 
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
-    const savedTheme = localStorage.getItem('sour_dark_mode');
-    return savedTheme === null ? true : savedTheme === 'true';
+    return localStorage.getItem('sour_dark_mode') === 'true';
   });
 
   useEffect(() => {

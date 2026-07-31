@@ -3,7 +3,6 @@ import { motion } from 'motion/react';
 import {
   Plus, Folder, ArrowLeft, Save, AlertCircle, CheckCircle2, X, Loader2,
   Download, WrapText, RefreshCw, Eye, EyeOff, RotateCw, ExternalLink,
-  Command, GitBranch, SquareTerminal,
 } from 'lucide-react';
 import JSZip from 'jszip';
 import ReactMarkdown from 'react-markdown';
@@ -983,74 +982,59 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
 
   if (!activeProject) {
     return (
-      <div className={`zed-workspace flex-1 h-full flex flex-col overflow-hidden relative ${isDarkMode ? 'bg-[#101112] text-[#e8e8e3]' : 'bg-[#f3f1eb] text-[#1c1d1e]'}`}>
-        <div className="zed-titlebar h-10 flex items-center justify-between px-3 border-b shrink-0 select-none">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5" aria-hidden="true">
-              <span className="h-2.5 w-2.5 rounded-full bg-[#ff605c]" />
-              <span className="h-2.5 w-2.5 rounded-full bg-[#ffbd44]" />
-              <span className="h-2.5 w-2.5 rounded-full bg-[#00ca4e]" />
-            </div>
-            <span className="text-[11px] font-mono text-[#7f848e]">sour.ai / workspace</span>
-          </div>
-          <div className="zed-command-center hidden sm:flex items-center gap-2 w-[min(420px,42vw)] px-3 py-1 border rounded-md text-[11px] text-[#858b95]">
-            <Command className="w-3 h-3" />
-            <span className="flex-1 text-center">Open a project to start building</span>
-          </div>
-          <span className="text-[10px] font-mono text-[#686e78]">LOCAL</span>
-        </div>
-        <div className="zed-grid-bg flex-1 flex flex-col items-center justify-center p-6 select-none relative">
-          <div className="flex flex-col max-w-xl w-full">
-            <div className="flex items-center gap-3.5 mb-8">
-              <div className="zed-logo-shell"><Logo size={38} /></div>
+      <div className={`flex-1 h-full flex flex-col overflow-hidden relative ${isDarkMode ? 'bg-[#181817] text-[#f0efe6]' : 'bg-[#faf9f6] text-[#1c1b1a]'}`}>
+        <div className="flex-1 flex flex-col items-center justify-center p-6 select-none relative">
+          <div className="flex flex-col items-center text-center max-w-lg w-full">
+            <div className="flex items-center justify-center gap-3.5 mb-8">
+              <Logo size={42} />
               <div className="text-left">
-                <h1 className="text-[22px] font-semibold tracking-tight font-mono">
+                <h1 className="text-xl font-medium tracking-tight font-instrument text-[#1c1b1a] dark:text-[#f0efe6]">
                   Welcome back to sour.ai
                 </h1>
-                <p className="text-[11px] text-[#787f89] font-mono tracking-wide mt-1">
-                  agentic coding, without leaving the editor
+                <p className="text-xs text-[#78746a] dark:text-[#a09c94] font-medium tracking-wide font-sans">
+                  The workspace for what's next
                 </p>
               </div>
             </div>
 
-            <div className="zed-launcher w-full border rounded-lg overflow-hidden text-left">
-              <span className="text-[10px] font-semibold text-[#737983] tracking-[0.14em] uppercase block px-3 pt-3 pb-2 text-left font-mono">
-                Quick start
+            <div className="w-full border-t border-[#e5e3db] dark:border-[#2d2d2c] pt-4 text-left">
+              <span className="text-[10px] font-bold text-[#8c887d] dark:text-[#888] tracking-wider uppercase block mb-2.5 text-left">
+                Get Started
               </span>
 
-              <div className="w-full text-left pb-1.5">
+              <div className="space-y-1 w-full text-left">
                 <button
                   onClick={handleNewEmptyWorkspace}
-                  className="zed-launcher-row w-full flex items-center justify-between text-xs px-3 py-2.5 text-[#d4d6d8] group cursor-pointer text-left"
+                  className="w-full flex items-center justify-between text-xs px-3 py-1.5 text-[#3d3a33] dark:text-[#dedcd6] hover:bg-[#efede4] dark:hover:bg-[#232322] hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] group cursor-pointer text-left blurry-hover"
                 >
                   <span className="flex items-center gap-2.5">
-                    <Plus className="w-3.5 h-3.5 text-[#a8cc8c]" />
+                    <Plus className="w-3.5 h-3.5 text-[#8c887d] dark:text-[#888]" />
                     <span>New File</span>
                   </span>
-                  <span className="text-[10px] text-[#656b75] font-mono group-hover:text-[#b6bac1] transition-colors">ALT N</span>
+                  <span className="text-[10px] text-[#8c887d] dark:text-[#888] font-mono group-hover:text-[#1c1b1a] dark:group-hover:text-white transition-colors">⌥N</span>
                 </button>
 
                 <button
                   onClick={handleOpenLocalDirectory}
                   disabled={!isDirectoryPickerSupported() || isScanning}
                   title={isDirectoryPickerSupported() ? undefined : 'Opening real folders needs a Chromium-based browser (Chrome or Edge).'}
-                  className="zed-launcher-row w-full flex items-center justify-between text-xs px-3 py-2.5 text-[#d4d6d8] group cursor-pointer text-left disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="w-full flex items-center justify-between text-xs px-3 py-1.5 text-[#3d3a33] dark:text-[#dedcd6] hover:bg-[#efede4] dark:hover:bg-[#232322] hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] group cursor-pointer text-left disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent blurry-hover"
                 >
                   <span className="flex items-center gap-2.5">
-                    <Folder className="w-3.5 h-3.5 text-[#e5c07b]" />
+                    <Folder className="w-3.5 h-3.5 text-[#8c887d] dark:text-[#888]" />
                     <span>{isScanning ? 'Opening…' : 'Open Project'}</span>
                   </span>
-                  <span className="text-[10px] text-[#656b75] font-mono group-hover:text-[#b6bac1] transition-colors">ALT O</span>
+                  <span className="text-[10px] text-[#8c887d] dark:text-[#888] font-mono group-hover:text-[#1c1b1a] dark:group-hover:text-white transition-colors">⌥O</span>
                 </button>
 
                 {hasSavedVirtualProject && (
                   <button
                     onClick={handleRestoreVirtualProject}
-                    className="zed-launcher-row w-full flex items-center justify-between text-xs px-3 py-2.5 text-[#d4d6d8] group cursor-pointer text-left"
+                    className="w-full flex items-center justify-between text-xs px-3 py-1.5 text-[#3d3a33] dark:text-[#dedcd6] hover:bg-[#efede4] dark:hover:bg-[#232322] hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] group cursor-pointer text-left blurry-hover"
                   >
                     <span className="flex items-center gap-2.5">
-                      <RefreshCw className="w-3.5 h-3.5 text-[#61afef]" />
-                      <span>Continue previous session</span>
+                      <RefreshCw className="w-3.5 h-3.5 text-[#8c887d] dark:text-[#888]" />
+                      <span>Continue Previous Session</span>
                     </span>
                   </button>
                 )}
@@ -1063,53 +1047,40 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
   }
 
   return (
-    <div className={`zed-workspace flex-1 h-full flex flex-col overflow-hidden relative ${isDarkMode ? 'bg-[#101112] text-[#e8e8e3]' : 'bg-[#f3f1eb] text-[#1c1d1e]'}`}>
+    <div className={`flex-1 h-full flex flex-col overflow-hidden relative ${isDarkMode ? 'bg-[#181817] text-[#f0efe6]' : 'bg-[#faf9f6] text-[#1c1b1a]'}`}>
       <PreviewRuntimeCollector
         request={previewRuntimeRequest}
         onComplete={handlePreviewRuntimeCollectionComplete}
       />
       <div className="flex-1 flex flex-col h-full overflow-hidden">
-        <div className="zed-titlebar h-10 border-b flex items-center justify-between px-3 select-none shrink-0">
+        <div className="h-9 border-b border-[#e5e3db] dark:border-[#2d2d2c] flex items-center justify-between px-3 select-none bg-[#f4f2eb] dark:bg-[#1a1a19] shrink-0">
           <div className="flex items-center gap-3">
-            <div className="hidden sm:flex items-center gap-1.5" aria-hidden="true">
-              <span className="h-2.5 w-2.5 rounded-full bg-[#ff605c]" />
-              <span className="h-2.5 w-2.5 rounded-full bg-[#ffbd44]" />
-              <span className="h-2.5 w-2.5 rounded-full bg-[#00ca4e]" />
-            </div>
             <button
               onClick={() => setActiveProject(null)}
-              className="flex items-center gap-1.5 text-[11px] text-[#858b95] hover:text-[#e8e8e3] font-mono cursor-pointer"
+              className="flex items-center gap-1.5 text-[11px] text-[#78746a] dark:text-[#a09c94] hover:text-[#1c1b1a] dark:hover:text-white font-medium cursor-pointer blurry-hover"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">workspace</span>
+              <span>Exit Workspace</span>
             </button>
-            <div className="h-4 w-px bg-[#30343a]" />
-            <span className="max-w-48 truncate text-[11px] text-[#c4c7cc] font-mono">{activeProject.name}</span>
-          </div>
-
-          <div className="zed-command-center hidden lg:flex items-center gap-2 w-[min(430px,38vw)] px-3 py-1 border rounded-md text-[11px] text-[#7f858f]">
-            <Command className="w-3 h-3" />
-            <span className="flex-1 text-center truncate">{activeProject.name} / {activeTabPath || 'untitled'}</span>
-            <span className="text-[9px] text-[#626872]">LOCAL</span>
           </div>
 
           <div className="flex items-center gap-3">
             <SaveStatusIndicator status={saveStatus} />
             <button
               onClick={handleDownloadProject}
-              className="zed-toolbar-button flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-mono border rounded cursor-pointer"
+              className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium border border-[#e5e3db] dark:border-[#2d2d2c] hover:bg-[#ede9df] dark:hover:bg-[#242423] text-[#1c1b1a] dark:text-[#f0efe6] cursor-pointer ws-toolbar-btn"
               title="Download the whole project as a .zip"
             >
               <Download className="w-3 h-3" />
-              <span className="hidden md:inline">project.zip</span>
+              <span>Download Project</span>
             </button>
             <button
               onClick={() => activeTabPath && handleDownloadFile(activeTabPath)}
               disabled={!activeTabPath}
-              className="zed-toolbar-button hidden sm:flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-mono border rounded cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium border border-[#e5e3db] dark:border-[#2d2d2c] hover:bg-[#ede9df] dark:hover:bg-[#242423] text-[#1c1b1a] dark:text-[#f0efe6] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ws-toolbar-btn"
               title="Export active file code"
             >
-              <span>export</span>
+              <span>Export Code</span>
             </button>
           </div>
         </div>
@@ -1171,8 +1142,8 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
             )}
           </motion.div>
 
-          <div className="zed-editor-surface flex-1 flex flex-col h-full overflow-hidden min-w-0">
-            <div className="zed-tabbar h-9 border-b flex items-stretch select-none shrink-0">
+          <div className="flex-1 flex flex-col h-full overflow-hidden bg-white dark:bg-[#1e1e1e] min-w-0">
+            <div className="h-9 border-b border-[#e5e3db] dark:border-[#2d2d2c] bg-[#f7f6f2] dark:bg-[#1e1e1e] flex items-stretch select-none shrink-0">
               <div className="flex items-stretch overflow-x-auto flex-1 min-w-0">
                 {openTabs.map((tab) => {
                   const node = findNode(tree, tab.path);
@@ -1329,10 +1300,8 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
               )}
             </div>
 
-            <div className="zed-statusbar h-7 border-t flex items-center justify-between px-3 text-[10px] text-[#858b95] shrink-0 font-mono">
+            <div className="h-6 border-t border-[#e5e3db] dark:border-[#2d2d2c] bg-white dark:bg-[#1e1e1e] flex items-center justify-between px-3 text-[10px] text-[#8c887d] dark:text-[#a09c94] shrink-0">
               <div className="flex items-center gap-3">
-                <span className="flex items-center gap-1.5 text-[#98c379]"><GitBranch className="w-3 h-3" /> main</span>
-                <span className="flex items-center gap-1.5"><SquareTerminal className="w-3 h-3" /> local</span>
                 {truncatedNotice && <span title="Some files were hidden to keep the explorer fast">Large project — some files hidden</span>}
               </div>
               <div className="flex items-center gap-4">
