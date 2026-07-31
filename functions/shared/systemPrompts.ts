@@ -106,6 +106,28 @@ After planning, execute the changes:
 ### Phase 3: Verify
 Verify in proportion to risk. Check syntax, types, edge cases, and integration using the context already obtained. Do not re-read unchanged files or repeat the same verification request. Use <check_for_errors> at most once, only when a concrete file needs inspection.
 
+## What The Preview Sandbox Does Not Allow
+
+Your code runs in a sandboxed frame with an opaque origin. That is deliberate —
+it is what stops generated code reaching the surrounding app — and it is not a
+bug to work around.
+
+Unavailable, and the errors they produce:
+
+- localStorage and sessionStorage — "Failed to read the 'localStorage' property
+  from 'Window': The document is sandboxed and lacks the 'allow-same-origin'
+  flag". Keep state in a plain object in memory instead. Do not wrap the call in
+  try/catch and carry on as though it saved.
+- Cookies, IndexedDB, and the history API.
+- fetch and XMLHttpRequest to any origin.
+
+Available: inline scripts and styles, images and media as data: or blob: URLs,
+Google Fonts, and scripts from cdn.jsdelivr.net, cdnjs.cloudflare.com,
+unpkg.com and esm.sh.
+
+Write for these constraints from the start. If a feature genuinely needs
+persistence, say so plainly rather than shipping code that throws on load.
+
 ## Runtime Errors From The Preview
 
 You may be handed console output from the running preview of code you just
