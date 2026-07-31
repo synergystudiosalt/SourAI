@@ -231,7 +231,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   const [showSlash, setShowSlash] = useState(false);
   const [openXmlTags, setOpenXmlTags] = useState<Set<string>>(new Set());
   const [openToolCalls, setOpenToolCalls] = useState<Set<string>>(new Set());
-  const [todoItems, setTodoItems] = useState<{ id: string; text: string; priority: string; done: boolean }[]>([]);
 
   // Context usage calculation — excludes input to avoid dip after sending
   const MAX_CONTEXT_CHARS = 128000;
@@ -741,27 +740,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     return keys.map(k => `[Context cleared: "${k}"]`).join('\n');
   };
 
-  /** Resolves @@todo: [priority] task — manages the in-session todo list. */
-  const resolveTodo = (items: { action: 'add' | 'done' | 'remove'; priority: string; text: string }[]): string => {
-    if (items.length === 0) return '';
-    setTodoItems((prev) => {
-      let next = [...prev];
-      for (const item of items) {
-        if (item.action === 'add') {
-          const id = `todo-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-          next.push({ id, text: item.text, priority: item.priority, done: false });
-        } else if (item.action === 'done') {
-          const match = next.find(t => t.text.toLowerCase() === item.text.toLowerCase() && !t.done);
-          if (match) match.done = true;
-        } else if (item.action === 'remove') {
-          next = next.filter(t => t.text.toLowerCase() !== item.text.toLowerCase());
-        }
-      }
-      return next;
-    });
-    return `[Todo updated — ${items.length} item(s)]`;
-  };
-
   /** Resolves @@replace: path ||| search ||| replace — surgical in-file edit. */
   const resolveReplaceRequests = (
     requests: { path: string; search: string; replace: string }[]
@@ -1110,9 +1088,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           || parsed.replaceRequests.length > 0 || parsed.searchImportsRequests.length > 0 || parsed.renameRequests.length > 0;
         const hasCheckErrors = parsed.checkErrorsContent.length > 0;
         const hasContextOps = parsed.contextStore.length > 0 || parsed.contextGet.length > 0 || parsed.contextList || parsed.contextClear.length > 0;
-        const hasTodoOps = parsed.todoItems.length > 0;
 
-        if (hasToolCalls || hasCheckErrors || hasContextOps || hasTodoOps) {
+        if (hasToolCalls || hasCheckErrors || hasContextOps) {
           appendThinking(parsed.displayText);
           finalDisplayText = '';
           const { toolCalls: readCalls, resultText: readText } = resolveFileRequests(parsed.fileRequests);
@@ -1144,9 +1121,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           if (parsed.contextGet.length > 0) contextResultParts.push(resolveContextGet(parsed.contextGet));
           if (parsed.contextList) contextResultParts.push(resolveContextList());
           if (parsed.contextClear.length > 0) contextResultParts.push(await resolveContextClear(parsed.contextClear));
-
-          // Resolve todo operations
-          const todoResultText = parsed.todoItems.length > 0 ? resolveTodo(parsed.todoItems) : '';
 
           // Resolve replace / search_imports / rename
           const replaceResult: { toolCalls: AgentToolCall[]; ops: AgentFileOp[]; resultText: string } = parsed.replaceRequests.length > 0
@@ -1211,7 +1185,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           const duplicateNotice = filteredRequests.repeatedRequestCount > 0
             ? `[Runtime: skipped ${filteredRequests.repeatedRequestCount} duplicate tool request(s). Do not request them again; continue from the results already provided.]`
             : '';
-          const resultText = [readText, findText, listDirText, globText, fileInfoText, replaceResult.resultText, importsResult.resultText, renameResult.resultText, todoResultText, ...checkResultParts, ...contextResultParts, duplicateNotice].filter(Boolean).join('\n\n');
+          const resultText = [readText, findText, listDirText, globText, fileInfoText, replaceResult.resultText, importsResult.resultText, renameResult.resultText, ...checkResultParts, ...contextResultParts, duplicateNotice].filter(Boolean).join('\n\n');
 
           setMessages((prev) =>
             prev.map((m) =>

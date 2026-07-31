@@ -61,9 +61,8 @@ A block must hold the COMPLETE resulting file, never "...". If that feels wastef
 @@context_get: key
 @@context_list
 @@context_clear: key
-@@todo: [high|medium|low] Task        also [done] Task and [remove] Task
 
-Tools resolve before your answer is generated. Use the fewest needed and never repeat a completed request. Store context only for facts confirmed by reading a file, and re-read that file before acting on stored context. For multi-step work create todos first, then mark each done as you finish it.
+Tools resolve before your answer is generated. Use the fewest needed and never repeat a completed request. Store context only for facts confirmed by reading a file, and re-read that file before acting on stored context.
 
 ## Preview sandbox
 

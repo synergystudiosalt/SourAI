@@ -88,9 +88,8 @@ export function extractReplaceRequests(
 }
 const SEARCH_IMPORTS_RE = /^@@search_imports:\s*(.+?)\s*$/gm;
 const RENAME_RE = /^@@rename:\s*(.+?)\s*\|\|\|\s*(.+?)\s*$/gm;
-const TODO_RE = /^@@todo:\s*\[(\w+)\]\s*(.+?)\s*$/gm;
 const INLINE_TOOL_SEQUENCE_RE =
-  /^(@@(?:delete|readfile|findall|listdir|glob|fileinfo|context_store|context_get|context_list|context_clear|replace|search_imports|rename|todo)(?::|\b)[^\r\n]*?)(?=@@(?:delete|readfile|findall|listdir|glob|fileinfo|context_store|context_get|context_list|context_clear|replace|search_imports|rename|todo)(?::|\b))/gim;
+  /^(@@(?:delete|readfile|findall|listdir|glob|fileinfo|context_store|context_get|context_list|context_clear|replace|search_imports|rename)(?::|\b)[^\r\n]*?)(?=@@(?:delete|readfile|findall|listdir|glob|fileinfo|context_store|context_get|context_list|context_clear|replace|search_imports|rename)(?::|\b))/gim;
 
 function splitInlineToolSequences(raw: string): string {
   let result = raw;
@@ -207,7 +206,6 @@ export interface ParsedAgentResponse {
   replaceRequests: { path: string; search: string; replace: string }[];
   searchImportsRequests: string[];
   renameRequests: { oldPath: string; newPath: string }[];
-  todoItems: { action: 'add' | 'done' | 'remove'; priority: string; text: string }[];
 }
 
 export interface FilteredAgentRequests {
@@ -272,11 +270,6 @@ export function filterRepeatedAgentRequests(
         response.renameRequests,
         'rename',
         (item) => `${item.oldPath}\u0000${item.newPath}`
-      ),
-      todoItems: keep(
-        response.todoItems,
-        'todo',
-        (item) => `${item.action}\u0000${item.priority}\u0000${item.text}`
       ),
     },
     newRequestCount,
@@ -403,21 +396,6 @@ export function parseAgentResponse(
     return '';
   });
 
-  const todoItems: { action: 'add' | 'done' | 'remove'; priority: string; text: string }[] = [];
-  text = text.replace(TODO_RE, (_match, priority: string, taskText: string) => {
-    const p = priority.toLowerCase().trim();
-    const t = taskText.trim();
-    if (!t) return '';
-    if (p === 'done') {
-      todoItems.push({ action: 'done', priority: 'done', text: t });
-    } else if (p === 'remove') {
-      todoItems.push({ action: 'remove', priority: 'remove', text: t });
-    } else {
-      todoItems.push({ action: 'add', priority: p, text: t });
-    }
-    return '';
-  });
-
   text = text.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
 
   return {
@@ -439,7 +417,6 @@ export function parseAgentResponse(
     replaceRequests,
     searchImportsRequests,
     renameRequests,
-    todoItems,
   };
 }
 

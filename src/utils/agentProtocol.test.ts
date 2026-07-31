@@ -143,16 +143,6 @@ describe('parseAgentResponse — current behaviour', () => {
     expect(renameRequests).toEqual([{ oldPath: 'src/a.ts', newPath: 'src/b.ts' }]);
   });
 
-  it('parses todo actions and priorities', () => {
-    const { todoItems } = parseAgentResponse(
-      '@@todo: [high] Ship it\n@@todo: [done] Ship it\n@@todo: [remove] Ship it'
-    );
-    expect(todoItems).toEqual([
-      { action: 'add', priority: 'high', text: 'Ship it' },
-      { action: 'done', priority: 'done', text: 'Ship it' },
-      { action: 'remove', priority: 'remove', text: 'Ship it' },
-    ]);
-  });
 
   it('parses multiple context memories without one value swallowing later tools', () => {
     const parsed = parseAgentResponse(
