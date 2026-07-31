@@ -1213,6 +1213,26 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
               turnWasProductive = true;
             }
           }
+          if (!hasMoreTools) {
+            const emptyRetry = runController.consumeEmptyRetry(
+              finalDisplayText,
+              parsed.ops.length,
+              Boolean(responseThinking || separatedResponse.thinking),
+              filteredRequests.newRequestCount + filteredRequests.repeatedRequestCount,
+              turnCount,
+              maxAgentTurns
+            );
+            if (emptyRetry) {
+              conversationHistory = [
+                ...conversationHistory,
+                { role: 'assistant', content: responseText || '(empty)' },
+                { role: 'user', content: emptyRetry },
+              ];
+              finalDisplayText = '';
+              hasMoreTools = true;
+              turnWasProductive = true;
+            }
+          }
         }
         runController.recordTurnOutcome(turnWasProductive);
       };

@@ -8,6 +8,7 @@ import {
   LAST_TURN_NOTICE,
   lastTurnNotice,
   NO_PROGRESS_RESPONSE,
+  RETRY_AFTER_EMPTY,
   SILENT_MODEL_RESPONSE,
   UNRESOLVED_WORKSPACE_REQUEST,
 } from './chatRunController';
@@ -114,5 +115,58 @@ describe('stalled runs', () => {
     dead(controller);
     expect(controller.finalText('Here is the answer.', 0, false)).toBe('Here is the answer.');
     expect(controller.finalText('', 3, false)).toBe('Changes are ready for review.');
+  });
+});
+
+describe('empty response retry', () => {
+  it('grants one retry after workspace reads resolved but model returned nothing', () => {
+    const controller = new ChatRunController();
+    controller.recordWorkspaceRequest('src/App.tsx', true);
+    // Empty response: no text, no ops, no reasoning, no requests
+    const retry = controller.consumeEmptyRetry('', 0, false, 0, 2, 6);
+    expect(retry).toBe(RETRY_AFTER_EMPTY);
+  });
+
+  it('only fires once', () => {
+    const controller = new ChatRunController();
+    controller.recordWorkspaceRequest('src/App.tsx', true);
+    expect(controller.consumeEmptyRetry('', 0, false, 0, 2, 6)).toBe(RETRY_AFTER_EMPTY);
+    expect(controller.consumeEmptyRetry('', 0, false, 0, 3, 6)).toBeNull();
+  });
+
+  it('does not fire when no workspace reads were resolved', () => {
+    const controller = new ChatRunController();
+    // No resolved workspace requests
+    expect(controller.consumeEmptyRetry('', 0, false, 0, 1, 6)).toBeNull();
+  });
+
+  it('does not fire when model already produced display text', () => {
+    const controller = new ChatRunController();
+    controller.recordWorkspaceRequest('src/App.tsx', true);
+    expect(controller.consumeEmptyRetry('Some answer', 0, false, 0, 2, 6)).toBeNull();
+  });
+
+  it('does not fire when model produced operations', () => {
+    const controller = new ChatRunController();
+    controller.recordWorkspaceRequest('src/App.tsx', true);
+    expect(controller.consumeEmptyRetry('', 3, false, 0, 2, 6)).toBeNull();
+  });
+
+  it('does not fire when model produced reasoning (consumeIncomplete handles that)', () => {
+    const controller = new ChatRunController();
+    controller.recordWorkspaceRequest('src/App.tsx', true);
+    expect(controller.consumeEmptyRetry('', 0, true, 0, 2, 6)).toBeNull();
+  });
+
+  it('does not fire when model made new requests', () => {
+    const controller = new ChatRunController();
+    controller.recordWorkspaceRequest('src/App.tsx', true);
+    expect(controller.consumeEmptyRetry('', 0, false, 2, 2, 6)).toBeNull();
+  });
+
+  it('does not fire on the last turn', () => {
+    const controller = new ChatRunController();
+    controller.recordWorkspaceRequest('src/App.tsx', true);
+    expect(controller.consumeEmptyRetry('', 0, false, 0, 6, 6)).toBeNull();
   });
 });

@@ -121,6 +121,30 @@ describe('AgentPanel completed-turn parity', () => {
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
   });
 
+  it('reports stall when duplicate tool requests persist past a recovery nudge', async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(streamedTurn('@@readfile: src/a.ts'))
+      .mockResolvedValueOnce(jsonTurn('@@readfile: src/a.ts'))
+      .mockResolvedValueOnce(jsonTurn('@@readfile: src/a.ts'));
+
+    renderPanel([
+      {
+        id: 'src/a.ts',
+        name: 'a.ts',
+        path: 'src/a.ts',
+        type: 'file',
+        content: 'export const value = 1;',
+      },
+    ]);
+    sendPrompt();
+
+    expect(
+      await screen.findByText(/stopped making progress/i)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/returned no final answer/i)).not.toBeInTheDocument();
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(3));
+  });
+
   it('labels and sends a runtime-error follow-up collected with the preview pane closed', async () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce(

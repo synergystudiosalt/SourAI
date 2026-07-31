@@ -8,6 +8,8 @@ export const FINISH_WITH_EXISTING_RESULTS =
   '[Runtime: those workspace requests were already completed. Do not call another tool. Finish the requested work now using the results already present in this conversation.]';
 export const CONTINUE_AFTER_REASONING =
   '[Runtime: your previous turn ended after reasoning without a final answer or workspace change. Continue now and complete the requested work. Use workspace tools if needed, then return a concrete final result.]';
+export const RETRY_AFTER_EMPTY =
+  '[Runtime: your previous turn returned an empty response. You have all the workspace context you need. Continue now and complete the requested work — output your final answer or file changes.]';
 export const UNRESOLVED_WORKSPACE_REQUEST = (examplePath: string) =>
   `The model returned no final answer because its workspace requests could not be resolved. One unresolved path was "${examplePath}".`;
 export const SILENT_MODEL_RESPONSE =
@@ -50,6 +52,7 @@ export class ChatRunController {
   private readonly seenRequests = new Set<string>();
   private recoveryUsed = false;
   private incompleteRecoveryUsed = false;
+  private emptyRetryUsed = false;
   private workspaceRequestCount = 0;
   private resolvedWorkspaceRequestCount = 0;
   private unresolvedExamplePath = '';
@@ -112,6 +115,38 @@ export class ChatRunController {
     return CONTINUE_AFTER_REASONING;
   }
 
+  /**
+   * One-shot retry for a completely empty response.
+   *
+   * When the model returns nothing at all — no text, no operations, no tool
+   * requests, no reasoning — after workspace reads were already resolved, the
+   * most likely cause is a transient generation failure (context too large for
+   * one attempt, output-token limit, or a provider hiccup). Nudging once
+   * recovers the majority of these without wasting the whole turn budget.
+   */
+  consumeEmptyRetry(
+    displayText: string,
+    operationCount: number,
+    hadReasoning: boolean,
+    requestCount: number,
+    turn: number,
+    maxTurns: number
+  ): string | null {
+    if (
+      displayText.trim() ||
+      operationCount > 0 ||
+      hadReasoning ||
+      requestCount > 0 ||
+      this.emptyRetryUsed ||
+      this.resolvedWorkspaceRequestCount === 0 ||
+      turn >= maxTurns
+    ) {
+      return null;
+    }
+    this.emptyRetryUsed = true;
+    return RETRY_AFTER_EMPTY;
+  }
+
   finalText(displayText: string, operationCount: number, exhausted: boolean): string {
     const answer = displayText.trim();
     if (answer) return answer;
@@ -125,7 +160,12 @@ export class ChatRunController {
     }
     // Checked before the budget message: a stalled run is abandoned early and
     // has turns to spare, so "exhausted its budget" would misdescribe it.
-    if (this.stalled) return NO_PROGRESS_RESPONSE;
+    if (
+      this.stalled ||
+      (this.consecutiveDeadTurns > 0 && (this.recoveryUsed || this.incompleteRecoveryUsed))
+    ) {
+      return NO_PROGRESS_RESPONSE;
+    }
     return exhausted
       ? 'The model exhausted its workspace-tool budget without returning a final answer.'
       : SILENT_MODEL_RESPONSE;
