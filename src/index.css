@@ -457,3 +457,83 @@ html.dark body {
   filter: blur(0px) brightness(0.98);
   transform: translateX(2px) scale(0.98);
 }
+
+/* ── Zed-inspired blue-dark workspace chrome ──────────────────────────────────
+   Scoped to .zed-workspace so it restyles the editor surface without touching
+   the rest of the app. Light is the base and .dark is the override, because
+   the theme class sits on the App root div rather than <html>; a
+   `html:not(.dark)` style would match in both themes. */
+.zed-workspace {
+  --zed-bg: #f7f9fc;
+  --zed-panel: #eef2f9;
+  --zed-panel-raised: #ffffff;
+  --zed-border: #d8e0ee;
+  --zed-muted: #6b7794;
+  --zed-text: #232a3d;
+  --zed-accent: #3d6fd6;
+  --zed-accent-soft: rgba(61, 111, 214, 0.11);
+  font-family: 'Fira Code', 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
+  font-variant-ligatures: contextual;
+}
+
+.dark .zed-workspace {
+  --zed-bg: #0d111b;
+  --zed-panel: #10141f;
+  --zed-panel-raised: #161c2c;
+  --zed-border: #232b40;
+  --zed-muted: #7d88a8;
+  --zed-text: #c0caf5;
+  --zed-accent: #7aa2f7;
+  --zed-accent-soft: rgba(122, 162, 247, 0.14);
+}
+
+.zed-workspace,
+.zed-editor-surface {
+  background: var(--zed-bg);
+  color: var(--zed-text);
+}
+
+/* Panel chrome. !important is needed to win over the Tailwind utility classes
+   already on these elements without rewriting every call site. */
+.zed-titlebar,
+.zed-tabbar,
+.zed-statusbar,
+.zed-agent-panel,
+.zed-file-explorer {
+  background: var(--zed-panel) !important;
+  border-color: var(--zed-border) !important;
+  color: var(--zed-text);
+}
+
+.zed-tab {
+  color: var(--zed-muted);
+  border-color: transparent;
+  font-size: 12px;
+  transition: color 120ms ease, background-color 120ms ease;
+}
+.zed-tab:hover {
+  color: var(--zed-text);
+  background: var(--zed-accent-soft);
+}
+.zed-tab[data-active='true'] {
+  color: var(--zed-text);
+  background: var(--zed-bg);
+  border-bottom-color: var(--zed-accent);
+}
+
+.zed-statusbar {
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--zed-muted);
+}
+
+/* Ligatures are the reason to pick Fira Code; make sure the editor keeps them. */
+.zed-workspace .cm-editor,
+.zed-workspace .cm-content {
+  font-family: 'Fira Code', 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
+  font-variant-ligatures: contextual;
+}
+
+.zed-workspace .cm-editor.cm-focused {
+  outline: none;
+}

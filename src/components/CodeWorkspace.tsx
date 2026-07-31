@@ -982,7 +982,7 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
 
   if (!activeProject) {
     return (
-      <div className={`flex-1 h-full flex flex-col overflow-hidden relative ${isDarkMode ? 'bg-[#181817] text-[#f0efe6]' : 'bg-[#faf9f6] text-[#1c1b1a]'}`}>
+      <div className={`zed-workspace flex-1 h-full flex flex-col overflow-hidden relative ${isDarkMode ? 'bg-[#181817] text-[#f0efe6]' : 'bg-[#faf9f6] text-[#1c1b1a]'}`}>
         <div className="flex-1 flex flex-col items-center justify-center p-6 select-none relative">
           <div className="flex flex-col items-center text-center max-w-lg w-full">
             <div className="flex items-center justify-center gap-3.5 mb-8">
@@ -1047,13 +1047,13 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
   }
 
   return (
-    <div className={`flex-1 h-full flex flex-col overflow-hidden relative ${isDarkMode ? 'bg-[#181817] text-[#f0efe6]' : 'bg-[#faf9f6] text-[#1c1b1a]'}`}>
+    <div className={`zed-workspace flex-1 h-full flex flex-col overflow-hidden relative ${isDarkMode ? 'bg-[#181817] text-[#f0efe6]' : 'bg-[#faf9f6] text-[#1c1b1a]'}`}>
       <PreviewRuntimeCollector
         request={previewRuntimeRequest}
         onComplete={handlePreviewRuntimeCollectionComplete}
       />
       <div className="flex-1 flex flex-col h-full overflow-hidden">
-        <div className="h-9 border-b border-[#e5e3db] dark:border-[#2d2d2c] flex items-center justify-between px-3 select-none bg-[#f4f2eb] dark:bg-[#1a1a19] shrink-0">
+        <div className="zed-titlebar h-9 border-b border-[#e5e3db] dark:border-[#2d2d2c] flex items-center justify-between px-3 select-none bg-[#f4f2eb] dark:bg-[#1a1a19] shrink-0">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setActiveProject(null)}
