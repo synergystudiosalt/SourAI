@@ -32,12 +32,12 @@ export const UpgradeModal: React.FC<UpgradeModalProps> = ({ isOpen, onClose, lim
             animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
             exit={{ opacity: 0, scale: 0.94, filter: 'blur(10px)' }}
             transition={{ duration: 0.25, ease: 'easeOut' }}
-            className="relative w-full max-w-md bg-[#faf9f6] dark:bg-[#1a1a19] border border-[#e5e3db] dark:border-[#2d2d2c] rounded-3xl shadow-2xl overflow-hidden p-6 z-10 text-center flex flex-col items-center"
+            className="relative w-full max-w-md bg-[#fbfcfd] dark:bg-[#17191d] border border-[#dfe3ea] dark:border-[#282c33] rounded-3xl shadow-2xl overflow-hidden p-6 z-10 text-center flex flex-col items-center"
           >
             {/* Close Button */}
             <button
               onClick={onClose}
-              className="absolute top-4 right-4 p-1.5 rounded-full text-[#78746a] dark:text-[#a09c94] hover:bg-[#efece5] dark:hover:bg-[#282826] hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] transition-colors cursor-pointer"
+              className="absolute top-4 right-4 p-1.5 rounded-full text-[#4a5259] dark:text-[#a9afbc] hover:bg-[#f2f4f7] dark:hover:bg-[#1e2128] hover:text-[#16181d] dark:hover:text-[#dce0e5] transition-colors cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
@@ -47,10 +47,10 @@ export const UpgradeModal: React.FC<UpgradeModalProps> = ({ isOpen, onClose, lim
               <Sparkles className="w-6 h-6 text-[#d96b43]" />
             </div>
 
-            <h2 className="font-instrument text-2xl font-normal text-[#1c1b1a] dark:text-[#f0efe6] tracking-tight mb-2">
+            <h2 className="font-instrument text-2xl font-normal text-[#16181d] dark:text-[#dce0e5] tracking-tight mb-2">
               Message Limit Reached
             </h2>
-            <p className="text-xs text-[#615e56] dark:text-[#a09c94] mb-4 leading-relaxed">
+            <p className="text-xs text-[#4a5259] dark:text-[#a9afbc] mb-4 leading-relaxed">
               You have used all {MESSAGE_QUOTA} message units for this session. Your limit will automatically refresh once the timer expires.
             </p>
 
@@ -58,7 +58,7 @@ export const UpgradeModal: React.FC<UpgradeModalProps> = ({ isOpen, onClose, lim
 
             <button
               onClick={onClose}
-              className="w-full bg-[#1c1b1a] dark:bg-[#f0efe6] text-white dark:text-[#1c1b1a] hover:bg-[#33312e] dark:hover:bg-white text-xs font-semibold py-2.5 rounded-xl transition-all cursor-pointer shadow-xs"
+              className="w-full bg-[#16181d] dark:bg-[#dce0e5] text-white dark:text-[#16181d] hover:bg-[#33312e] dark:hover:bg-white text-xs font-semibold py-2.5 rounded-xl transition-all cursor-pointer shadow-xs"
             >
               Got it
             </button>

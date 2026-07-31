@@ -37,7 +37,7 @@ export const GreetingHeader: React.FC<GreetingHeaderProps> = ({ customGreeting }
       <Logo size={32} />
 
       {/* Main Title Heading in Instrument Serif */}
-      <h1 className="font-instrument text-3xl sm:text-4xl font-normal tracking-tight text-[#1c1b1a] dark:text-[#f0efe6] leading-none">
+      <h1 className="font-instrument text-3xl sm:text-4xl font-normal tracking-tight text-[#16181d] dark:text-[#dce0e5] leading-none">
         Hello, {greetingText}
       </h1>
     </motion.div>

@@ -955,7 +955,7 @@ export function AgentWorkspace({
   return (
     <aside
       aria-label="Professional agent workspace"
-      className={`flex h-full min-w-0 border-r ${isDarkMode ? 'border-[#30302e] bg-[#1d1d1c] text-[#efeee8]' : 'border-[#dedbd1] bg-[#faf9f6] text-[#24221f]'}`}
+      className={`flex h-full min-w-0 border-r ${isDarkMode ? 'border-[#30302e] bg-[#1d1d1c] text-[#efeee8]' : 'border-[#dedbd1] bg-[#fbfcfd] text-[#24221f]'}`}
     >
       <nav aria-label="Agent threads" className="w-36 shrink-0 border-r border-current/10 p-2">
         <div className="mb-2 flex items-center justify-between">

@@ -204,7 +204,7 @@ export const ToolCallList: React.FC<ToolCallListProps> = ({
         <button
           type="button"
           onClick={() => !isReading && onToggle(groupId)}
-          className="flex min-w-0 max-w-full items-center gap-1.5 text-[10.5px] font-medium text-[#8c887d] hover:text-[#1c1b1a] dark:text-[#a09c94] dark:hover:text-[#f0efe6]"
+          className="flex min-w-0 max-w-full items-center gap-1.5 text-[10.5px] font-medium text-[#78828e] hover:text-[#16181d] dark:text-[#a9afbc] dark:hover:text-[#dce0e5]"
         >
           {isReading ? (
             <Loader2 className="h-3 w-3 animate-spin shrink-0" />
@@ -231,7 +231,7 @@ export const ToolCallList: React.FC<ToolCallListProps> = ({
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
-              className="mt-1.5 max-h-40 space-y-1 overflow-y-auto border-l border-[#e2dec0] pl-2 text-[10px] text-[#706c62] dark:border-[#383836] dark:text-[#a09d98]"
+              className="mt-1.5 max-h-40 space-y-1 overflow-y-auto border-l border-[#dfe3ea] pl-2 text-[10px] text-[#4a5259] dark:border-[#3b414d] dark:text-[#a9afbc]"
             >
               {toolCalls.map((toolCall, index) => (
                 <div key={`${groupId}-${index}`} className="truncate">
@@ -255,7 +255,7 @@ export const ToolCallList: React.FC<ToolCallListProps> = ({
           <button
             type="button"
             onClick={() => !isReading && onToggle(itemId)}
-            className="flex min-w-0 max-w-full items-center gap-1.5 text-[10.5px] font-medium text-[#8c887d] dark:text-[#a09c94] hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth"
+            className="flex min-w-0 max-w-full items-center gap-1.5 text-[10.5px] font-medium text-[#78828e] dark:text-[#a9afbc] hover:text-[#16181d] dark:hover:text-[#dce0e5] cursor-pointer ws-button-smooth"
           >
             {isReading && !(toolCall.type === 'readfile' && !toolCall.found) ? (
               <Loader2 className="w-3 h-3 animate-spin shrink-0" />
@@ -289,7 +289,7 @@ export const ToolCallList: React.FC<ToolCallListProps> = ({
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
                 transition={{ duration: 0.15 }}
-                className="mt-1.5 pl-2 border-l border-[#e2dec0] dark:border-[#383836] text-[10.5px] text-[#706c62] dark:text-[#a09d98] space-y-1 leading-relaxed overflow-hidden"
+                className="mt-1.5 pl-2 border-l border-[#dfe3ea] dark:border-[#3b414d] text-[10.5px] text-[#4a5259] dark:text-[#a9afbc] space-y-1 leading-relaxed overflow-hidden"
               >
                 <ToolCallDetails toolCall={toolCall} />
               </motion.div>

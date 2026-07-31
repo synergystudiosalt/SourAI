@@ -1622,11 +1622,11 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
 
   if (isCollapsed) {
     return (
-      <div className="zed-agent-panel w-9 border-r border-[#e5e3db] dark:border-[#2d2d2c] flex flex-col items-center py-3 bg-[#fbfaf7] dark:bg-[#1e1e1e] shrink-0">
+      <div className="zed-agent-panel w-9 border-r border-[#dfe3ea] dark:border-[#282c33] flex flex-col items-center py-3 bg-[#fbfcfd] dark:bg-[#1e2128] shrink-0">
         <button
           onClick={onToggleCollapse}
           title="Show sour.ai Agent"
-          className="p-1.5 rounded-lg text-[#8c887d] dark:text-[#a09c94] hover:bg-[#efece5] dark:hover:bg-[#2a2a2a] hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer"
+          className="p-1.5 rounded-lg text-[#78828e] dark:text-[#a9afbc] hover:bg-[#f2f4f7] dark:hover:bg-[#2a2a2a] hover:text-[#16181d] dark:hover:text-[#dce0e5] cursor-pointer"
         >
           <ChevronRight className="w-4 h-4" />
         </button>
@@ -1660,8 +1660,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   };
 
   return (
-    <div className="zed-agent-panel w-full lg:w-72 h-full border-r border-[#e5e3db] dark:border-[#2d2d2c] flex flex-col bg-[#fbfaf7] dark:bg-[#1e1e1e] select-none shrink-0 relative">
-      <div className="h-8 sm:h-9 border-b border-[#e5e3db] dark:border-[#2d2d2c] flex items-center justify-between px-2 sm:px-3 text-xs text-[#8c887d] dark:text-[#a09c94] shrink-0">
+    <div className="zed-agent-panel w-full lg:w-72 h-full border-r border-[#dfe3ea] dark:border-[#282c33] flex flex-col bg-[#fbfcfd] dark:bg-[#1e2128] select-none shrink-0 relative">
+      <div className="h-8 sm:h-9 border-b border-[#dfe3ea] dark:border-[#282c33] flex items-center justify-between px-2 sm:px-3 text-xs text-[#78828e] dark:text-[#a9afbc] shrink-0">
         <span className="flex items-center gap-1 sm:gap-1.5 truncate text-[11px] sm:text-xs">
           <Logo size={12} className="sm:w-4" />
           <span className="hidden sm:inline">New sour.ai Agent Thread</span>
@@ -1671,15 +1671,15 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           <button
             onClick={() => setShowSlash((visible) => !visible)}
             title="Open coding tools"
-            className="flex items-center gap-1 hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth transition-colors"
+            className="flex items-center gap-1 hover:text-[#16181d] dark:hover:text-[#dce0e5] cursor-pointer ws-button-smooth transition-colors"
           >
             <Settings className="w-3 sm:w-3.5 h-3 sm:h-3.5" />
             <span className="hidden sm:inline text-[10px]">Tools</span>
           </button>
-          <button onClick={handleNewThread} title="New thread" className="hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth transition-colors">
+          <button onClick={handleNewThread} title="New thread" className="hover:text-[#16181d] dark:hover:text-[#dce0e5] cursor-pointer ws-button-smooth transition-colors">
             <Plus className="w-3 sm:w-3.5 h-3 sm:h-3.5" />
           </button>
-          <button onClick={onToggleCollapse} title="Collapse" className="hidden lg:block hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth transition-colors">
+          <button onClick={onToggleCollapse} title="Collapse" className="hidden lg:block hover:text-[#16181d] dark:hover:text-[#dce0e5] cursor-pointer ws-button-smooth transition-colors">
             <ChevronRight className="w-3 sm:w-3.5 h-3 sm:h-3.5 rotate-180" />
           </button>
         </div>
@@ -1693,7 +1693,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center gap-2 sm:gap-3 text-center py-6 sm:py-10">
             <PixelBowlIcon size={28} className="sm:size-10 opacity-80" />
-            <span className="font-pixel text-[10px] sm:text-[11px] leading-relaxed text-[#8c887d] dark:text-[#a09c94]">
+            <span className="font-pixel text-[10px] sm:text-[11px] leading-relaxed text-[#78828e] dark:text-[#a9afbc]">
               Code with me
             </span>
             <span className="text-[9.5px] sm:text-[10.5px] text-[#a39d8f] dark:text-[#767671] max-w-[85%] leading-relaxed">
@@ -1704,7 +1704,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           messages.map(renderMessage)
         )}
         {isSending && !messages.some((message) => message.role === 'assistant' && message.isReadingFiles) && (
-          <div className="flex items-center gap-2 text-[10px] sm:text-[11px] text-[#8c887d] dark:text-[#a09c94]">
+          <div className="flex items-center gap-2 text-[10px] sm:text-[11px] text-[#78828e] dark:text-[#a9afbc]">
             <Loader2 className="w-2.5 h-2.5 sm:w-3 sm:h-3 animate-spin" />
             <span className="agent-active-gradient">Starting agent</span>
           </div>
@@ -1722,16 +1722,16 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         )}
       </div>
 
-      <div className="border-t border-[#e5e3db] dark:border-[#2d2d2c] px-2 sm:px-2.5 pt-2 relative flex flex-col shrink-0">
+      <div className="border-t border-[#dfe3ea] dark:border-[#282c33] px-2 sm:px-2.5 pt-2 relative flex flex-col shrink-0">
         {mentionState && mentionMatches.length > 0 && (
-          <div className="absolute left-2.5 right-2.5 bottom-full mb-1 bg-white dark:bg-[#1e1e1d] border border-[#d8d5c9] dark:border-[#333230] shadow-lg p-1 max-h-40 overflow-y-auto z-20">
+          <div className="absolute left-2.5 right-2.5 bottom-full mb-1 bg-white dark:bg-[#1e2128] border border-[#c3cad6] dark:border-[#3b414d] shadow-lg p-1 max-h-40 overflow-y-auto z-20">
             {mentionMatches.map((f) => (
               <button
                 key={f.path}
                 onClick={() => selectMention(f.path)}
-                className="w-full flex items-center gap-1.5 px-2 py-1.5 text-[11px] text-left hover:bg-[#f5f3ec] dark:hover:bg-[#282826] cursor-pointer ws-button-smooth"
+                className="w-full flex items-center gap-1.5 px-2 py-1.5 text-[11px] text-left hover:bg-[#f6f8fa] dark:hover:bg-[#1e2128] cursor-pointer ws-button-smooth"
               >
-                <AtSign className="w-3 h-3 text-[#8c887d] shrink-0" />
+                <AtSign className="w-3 h-3 text-[#78828e] shrink-0" />
                 <span className="truncate">{f.path}</span>
               </button>
             ))}
@@ -1739,26 +1739,26 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         )}
 
         {showSlash && (
-          <div className="absolute left-2.5 right-2.5 bottom-full mb-1 bg-white dark:bg-[#1e1e1d] border border-[#d8d5c9] dark:border-[#333230] shadow-lg p-1 max-h-48 overflow-y-auto z-20">
+          <div className="absolute left-2.5 right-2.5 bottom-full mb-1 bg-white dark:bg-[#1e2128] border border-[#c3cad6] dark:border-[#3b414d] shadow-lg p-1 max-h-48 overflow-y-auto z-20">
             {SLASH_COMMANDS.map((cmd) => (
               <button
                 key={cmd.cmd}
                 onClick={() => selectSlashCommand(cmd)}
-                className="w-full flex items-center justify-between gap-2 px-2 py-1.5 text-[11px] text-left hover:bg-[#f5f3ec] dark:hover:bg-[#282826] cursor-pointer ws-button-smooth"
+                className="w-full flex items-center justify-between gap-2 px-2 py-1.5 text-[11px] text-left hover:bg-[#f6f8fa] dark:hover:bg-[#1e2128] cursor-pointer ws-button-smooth"
               >
-                <span className="text-[#1c1b1a] dark:text-[#f0efe6]">{cmd.label}</span>
-                <span className="text-[#8c887d] dark:text-[#a09c94] font-mono">{cmd.cmd}</span>
+                <span className="text-[#16181d] dark:text-[#dce0e5]">{cmd.label}</span>
+                <span className="text-[#78828e] dark:text-[#a9afbc] font-mono">{cmd.cmd}</span>
               </button>
             ))}
           </div>
         )}
 
         {agentAttachments.length > 0 && (
-          <div className="flex flex-wrap gap-2 p-2 border-t border-[#d8d5c9] dark:border-[#333230] bg-[#f5f3ec] dark:bg-[#2d2c2b]">
+          <div className="flex flex-wrap gap-2 p-2 border-t border-[#c3cad6] dark:border-[#3b414d] bg-[#f6f8fa] dark:bg-[#2d2c2b]">
             {agentAttachments.map((att, idx) => (
               <div
                 key={idx}
-                className="flex items-center gap-2 px-2.5 py-1.5 rounded bg-white dark:bg-[#1e1e1d] border border-[#d8d5c9] dark:border-[#444240] text-[10px] text-[#1c1b1a] dark:text-[#f0efe6]"
+                className="flex items-center gap-2 px-2.5 py-1.5 rounded bg-white dark:bg-[#1e2128] border border-[#c3cad6] dark:border-[#444240] text-[10px] text-[#16181d] dark:text-[#dce0e5]"
               >
                 <ImageIcon className="w-3.5 h-3.5 text-[#d96b43]" />
                 <span className="truncate flex-1">{att.name}</span>
@@ -1781,22 +1781,22 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
           placeholder="Message Agent, @ for context, / for commands"
-          className="w-full resize-none bg-transparent text-[11px] sm:text-xs text-[#1c1b1a] dark:text-[#f0efe6] placeholder-[#8c887d] dark:placeholder-[#767671] outline-none leading-tight h-16 sm:h-20 overflow-auto"
+          className="w-full resize-none bg-transparent text-[11px] sm:text-xs text-[#16181d] dark:text-[#dce0e5] placeholder-[#78828e] dark:placeholder-[#767671] outline-none leading-tight h-16 sm:h-20 overflow-auto"
         />
 
-        <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-[#8c887d] dark:text-[#a09c94] h-8 sm:h-8 shrink-0 gap-1 sm:gap-2">
+        <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-[#78828e] dark:text-[#a9afbc] h-8 sm:h-8 shrink-0 gap-1 sm:gap-2">
           <div className="flex items-center gap-1 sm:gap-3 flex-wrap">
             <button
               onClick={() => setShowAttachmentPopover((v) => !v)}
               title="Attach files or images"
-              className="flex items-center justify-center p-1.5 sm:p-0 gap-1 sm:gap-1.5 hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth transition-colors min-w-[44px] sm:min-w-auto h-[44px] sm:h-auto"
+              className="flex items-center justify-center p-1.5 sm:p-0 gap-1 sm:gap-1.5 hover:text-[#16181d] dark:hover:text-[#dce0e5] cursor-pointer ws-button-smooth transition-colors min-w-[44px] sm:min-w-auto h-[44px] sm:h-auto"
             >
               <Plus className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
             </button>
             <button
               onClick={() => setMode((m) => (m === 'write' ? 'plan' : 'write'))}
               title={mode === 'write' ? 'Write: auto-apply changes' : 'Plan: guidance only, no code changes'}
-              className="flex items-center justify-center p-1.5 sm:p-0 gap-1 sm:gap-1.5 hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth transition-colors min-w-[44px] sm:min-w-auto h-[44px] sm:h-auto"
+              className="flex items-center justify-center p-1.5 sm:p-0 gap-1 sm:gap-1.5 hover:text-[#16181d] dark:hover:text-[#dce0e5] cursor-pointer ws-button-smooth transition-colors min-w-[44px] sm:min-w-auto h-[44px] sm:h-auto"
             >
               <span className="w-3 h-3 sm:w-3.5 sm:h-3.5 border border-current flex items-center justify-center text-[6px] sm:text-[8px] font-bold">
                 {mode === 'write' ? 'W' : 'P'}
@@ -1809,7 +1809,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                 <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="3" className="text-[#c7c3b6] dark:text-[#444]" />
                 <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="3"
                   strokeDasharray={`${contextUsage * 0.6283} 62.83`}
-                  className="text-[#1c1b1a] dark:text-[#f0efe6]"
+                  className="text-[#16181d] dark:text-[#dce0e5]"
                   strokeLinecap="round"
                 />
               </svg>
@@ -1819,12 +1819,12 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                 type="button"
                 onClick={() => setShowReasoningPopover((visible) => !visible)}
                 title={`Reasoning: ${REASONING_OPTIONS.find((option) => option.id === reasoningEffort)?.label}`}
-                className="flex min-w-[44px] items-center justify-center gap-1 p-1.5 text-[9px] transition-colors hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] sm:h-auto sm:min-w-0 sm:p-0 sm:text-[11px]"
+                className="flex min-w-[44px] items-center justify-center gap-1 p-1.5 text-[9px] transition-colors hover:text-[#16181d] dark:hover:text-[#dce0e5] sm:h-auto sm:min-w-0 sm:p-0 sm:text-[11px]"
               >
                 <Brain className="h-3.5 w-3.5" />
               </button>
               {showReasoningPopover && (
-                <div className="fixed bottom-11 left-2 z-50 w-56 max-w-[calc(100vw-1rem)] rounded-xl border border-[#d8d5c9] bg-[#f5f3ee] p-3 shadow-xl dark:border-[#3a3937] dark:bg-[#242423]">
+                <div className="fixed bottom-11 left-2 z-50 w-56 max-w-[calc(100vw-1rem)] rounded-xl border border-[#c3cad6] bg-[#f5f3ee] p-3 shadow-xl dark:border-[#3a3937] dark:bg-[#1e2128]">
                   <div className="mb-3 flex items-center justify-between text-[11px] font-medium text-[#656158] dark:text-[#aaa69e]">
                     <span>
                       Effort{' '}
@@ -1838,9 +1838,9 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                         {REASONING_OPTIONS.find((option) => option.id === reasoningEffort)?.label}
                       </span>
                     </span>
-                    <CircleHelp className="h-3.5 w-3.5 text-[#8c887d]" />
+                    <CircleHelp className="h-3.5 w-3.5 text-[#78828e]" />
                   </div>
-                  <div className="mb-1.5 flex items-center justify-between text-[10px] font-semibold text-[#8c887d] dark:text-[#aaa69e]">
+                  <div className="mb-1.5 flex items-center justify-between text-[10px] font-semibold text-[#78828e] dark:text-[#aaa69e]">
                     <span>Faster</span>
                     <span>Smarter</span>
                   </div>
@@ -1883,12 +1883,12 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
               )}
             </div>
             <div className="relative" ref={modelPopoverRef}>
-              <button onClick={() => setShowModelPopover((v) => !v)} className="flex items-center justify-center p-1.5 sm:p-0 gap-0.5 sm:gap-1 hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth transition-colors text-[9px] sm:text-[11px] min-w-[44px] sm:min-w-auto h-[44px] sm:h-auto">
+              <button onClick={() => setShowModelPopover((v) => !v)} className="flex items-center justify-center p-1.5 sm:p-0 gap-0.5 sm:gap-1 hover:text-[#16181d] dark:hover:text-[#dce0e5] cursor-pointer ws-button-smooth transition-colors text-[9px] sm:text-[11px] min-w-[44px] sm:min-w-auto h-[44px] sm:h-auto">
                 <span className="hidden sm:inline">{MODEL_ROUTES[selectedModel]?.label || (selectedModel.startsWith('custom_') ? 'API' : selectedModel)}</span>
                 <span className="sm:hidden">M</span>
               </button>
               {showModelPopover && (
-                <div className="absolute bottom-full mb-2 left-0 w-48 bg-white dark:bg-[#1e1e1d] border border-[#d8d5c9] dark:border-[#333230] shadow-lg p-1 z-20">
+                <div className="absolute bottom-full mb-2 left-0 w-48 bg-white dark:bg-[#1e2128] border border-[#c3cad6] dark:border-[#3b414d] shadow-lg p-1 z-20">
                   {/* Built-in Models */}
                   {MODEL_OPTIONS.map((m) => (
                     <button
@@ -1899,8 +1899,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                       }}
                       className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 text-[11px] text-left cursor-pointer ws-button-smooth ${
                         m === selectedModel
-                          ? 'bg-[#f4f2eb] dark:bg-[#282826] text-[#1c1b1a] dark:text-[#f0efe6]'
-                          : 'text-[#3d3a33] dark:text-[#dedcd6] hover:bg-[#f5f3ec] dark:hover:bg-[#282826]'
+                          ? 'bg-[#f6f8fa] dark:bg-[#1e2128] text-[#16181d] dark:text-[#dce0e5]'
+                          : 'text-[#3b414d] dark:text-[#dfe3ea] hover:bg-[#f6f8fa] dark:hover:bg-[#1e2128]'
                       }`}
                     >
                       <span>{MODEL_ROUTES[m].label}</span>
@@ -1911,7 +1911,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                   {/* Custom APIs */}
                   {customApiConfigs.length > 0 && (
                     <>
-                      <div className="border-t border-[#e5e3db] dark:border-[#333230] my-1" />
+                      <div className="border-t border-[#dfe3ea] dark:border-[#3b414d] my-1" />
                       {customApiConfigs.map((config) => (
                         <button
                           key={config.id}
@@ -1921,8 +1921,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                           }}
                           className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 text-[11px] text-left cursor-pointer ws-button-smooth ${
                             config.id === selectedModel
-                              ? 'bg-[#f4f2eb] dark:bg-[#282826] text-[#1c1b1a] dark:text-[#f0efe6]'
-                              : 'text-[#3d3a33] dark:text-[#dedcd6] hover:bg-[#f5f3ec] dark:hover:bg-[#282826]'
+                              ? 'bg-[#f6f8fa] dark:bg-[#1e2128] text-[#16181d] dark:text-[#dce0e5]'
+                              : 'text-[#3b414d] dark:text-[#dfe3ea] hover:bg-[#f6f8fa] dark:hover:bg-[#1e2128]'
                           }`}
                         >
                           <span className="truncate">{config.modelName}</span>
@@ -1933,13 +1933,13 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                   )}
 
                   {/* Add Custom API Option */}
-                  <div className="border-t border-[#e5e3db] dark:border-[#333230] my-1" />
+                  <div className="border-t border-[#dfe3ea] dark:border-[#3b414d] my-1" />
                   <button
                     onClick={() => {
                       setShowModelPopover(false);
                       setShowCustomApiModal(true);
                     }}
-                    className="w-full flex items-center gap-2 px-2 py-1.5 text-[11px] text-left cursor-pointer text-[#3d3a33] dark:text-[#dedcd6] hover:bg-[#f5f3ec] dark:hover:bg-[#282826] ws-button-smooth"
+                    className="w-full flex items-center gap-2 px-2 py-1.5 text-[11px] text-left cursor-pointer text-[#3b414d] dark:text-[#dfe3ea] hover:bg-[#f6f8fa] dark:hover:bg-[#1e2128] ws-button-smooth"
                   >
                     <Settings className="w-3 h-3" />
                     <span>Other model API</span>
@@ -1955,7 +1955,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
               className={`flex items-center justify-center p-1.5 sm:p-0 gap-1 cursor-pointer ws-button-smooth min-w-[44px] sm:min-w-auto h-[44px] sm:h-auto ${
                 isListening
                   ? 'text-[#d96b43] hover:text-[#c55a32]'
-                  : 'text-[#8c887d] dark:text-[#a09c94] hover:text-[#1c1b1a] dark:hover:text-[#f0efe6]'
+                  : 'text-[#78828e] dark:text-[#a9afbc] hover:text-[#16181d] dark:hover:text-[#dce0e5]'
               }`}
             >
               {isListening ? <Mic className="w-4 h-4 sm:w-3.5 sm:h-3.5" /> : <MicOff className="w-4 h-4 sm:w-3.5 sm:h-3.5" />}
@@ -1969,7 +1969,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                 onClick={() => handleSend()}
                 disabled={!input.trim()}
                 title="Send"
-                className="flex items-center justify-center p-1.5 sm:p-0 min-w-[44px] sm:min-w-auto h-[44px] sm:h-auto hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] disabled:opacity-40 cursor-pointer ws-button-smooth"
+                className="flex items-center justify-center p-1.5 sm:p-0 min-w-[44px] sm:min-w-auto h-[44px] sm:h-auto hover:text-[#16181d] dark:hover:text-[#dce0e5] disabled:opacity-40 cursor-pointer ws-button-smooth"
               >
                 <ArrowLeft className="w-4 h-4 sm:w-3.5 sm:h-3.5 rotate-180" />
               </button>

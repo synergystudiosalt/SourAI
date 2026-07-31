@@ -9,23 +9,23 @@ export const theme = {
     light: {
       // Primary backgrounds
       bg: {
-        primary: '#faf9f6',
-        secondary: '#f4f2eb',
+        primary: '#fbfcfd',
+        secondary: '#f6f8fa',
         tertiary: '#eeebe3',
         overlay: '#fcfbf9',
       },
       // Primary text
       text: {
-        primary: '#1c1b1a',
+        primary: '#16181d',
         secondary: '#524f47',
-        tertiary: '#8c887d',
+        tertiary: '#78828e',
         disabled: '#a39d8f',
       },
       // Borders
       border: {
         light: '#e8e7e1',
         medium: '#e2dfd5',
-        dark: '#d8d5c9',
+        dark: '#c3cad6',
       },
       // Semantic colors
       accent: '#d96b43', // Burnt orange/coral
@@ -37,23 +37,23 @@ export const theme = {
     dark: {
       // Primary backgrounds
       bg: {
-        primary: '#181817',
-        secondary: '#1e1e1d',
-        tertiary: '#252524',
-        overlay: '#121212',
+        primary: '#17191d',
+        secondary: '#1e2128',
+        tertiary: '#1e2128',
+        overlay: '#121316',
       },
       // Primary text
       text: {
-        primary: '#f0efe6',
+        primary: '#dce0e5',
         secondary: '#b0adab',
-        tertiary: '#a09c94',
+        tertiary: '#a9afbc',
         disabled: '#767671',
       },
       // Borders
       border: {
-        light: '#2d2d2c',
+        light: '#282c33',
         medium: '#333231',
-        dark: '#383836',
+        dark: '#3b414d',
       },
       // Semantic colors
       accent: '#ff8a65', // Lighter orange for dark mode
@@ -159,20 +159,20 @@ export const theme = {
     button: {
       base: 'inline-flex items-center justify-center font-medium rounded-lg transition-all duration-150 cursor-pointer',
       primary: 'bg-[#d96b43] text-white hover:bg-[#c85a35] active:bg-[#b84a27] disabled:opacity-50 disabled:cursor-not-allowed',
-      secondary: 'bg-[#eeebe3] dark:bg-[#2d2d2c] text-[#1c1b1a] dark:text-[#f0efe6] hover:bg-[#e4e0d5] dark:hover:bg-[#383836] active:bg-[#ddd9cf] dark:active:bg-[#424240]',
-      ghost: 'text-[#615e56] dark:text-[#a3a099] hover:bg-[#efece5] dark:hover:bg-[#252524] hover:text-[#1c1b1a] dark:hover:text-[#f0efe6]',
+      secondary: 'bg-[#eeebe3] dark:bg-[#282c33] text-[#16181d] dark:text-[#dce0e5] hover:bg-[#e4e0d5] dark:hover:bg-[#3b414d] active:bg-[#ddd9cf] dark:active:bg-[#424240]',
+      ghost: 'text-[#4a5259] dark:text-[#a3a099] hover:bg-[#f2f4f7] dark:hover:bg-[#1e2128] hover:text-[#16181d] dark:hover:text-[#dce0e5]',
       danger: 'bg-red-600 text-white hover:bg-red-700 active:bg-red-800 disabled:opacity-50',
     },
 
     // Input styles
     input: {
-      base: 'w-full px-3 py-2 rounded-lg bg-white dark:bg-[#1a1a19] border border-[#e6e4dc] dark:border-[#2d2d2c] text-[#1c1b1a] dark:text-[#f0efe6] placeholder-[#8c887d] dark:placeholder-[#767671] outline-none transition-colors',
+      base: 'w-full px-3 py-2 rounded-lg bg-white dark:bg-[#17191d] border border-[#e6e4dc] dark:border-[#282c33] text-[#16181d] dark:text-[#dce0e5] placeholder-[#78828e] dark:placeholder-[#767671] outline-none transition-colors',
       focus: 'focus:border-[#c5c2b6] dark:focus:border-[#444] focus:ring-2 focus:ring-[#d96b43]/20',
     },
 
     // Card styles with subtle shadows and borders
     card: {
-      base: 'rounded-lg border border-[#e8e7e1] dark:border-[#2d2d2c] bg-white dark:bg-[#1e1e1d] shadow-sm',
+      base: 'rounded-lg border border-[#e8e7e1] dark:border-[#282c33] bg-white dark:bg-[#1e2128] shadow-sm',
       hover: 'hover:shadow-md transition-shadow',
     },
 
@@ -180,7 +180,7 @@ export const theme = {
     badge: {
       base: 'inline-flex items-center px-2 py-1 rounded-full text-xs font-medium',
       primary: 'bg-[#d96b43] text-white',
-      secondary: 'bg-[#e8e6df] dark:bg-[#2d2d2c] text-[#524f47] dark:text-[#b0adab]',
+      secondary: 'bg-[#e8e6df] dark:bg-[#282c33] text-[#524f47] dark:text-[#b0adab]',
       success: 'bg-emerald-100 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-200',
       error: 'bg-red-100 dark:bg-red-950/30 text-red-800 dark:text-red-200',
     },

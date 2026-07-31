@@ -40,7 +40,7 @@ export const AgentMarkdownImage: React.FC<MarkdownImageProps> = ({
     <button
       type="button"
       onClick={() => setAllowed(true)}
-      className="my-2 rounded border border-[#d8d5c9] px-3 py-2 text-xs text-[#706c62] dark:border-[#383836] dark:text-[#a09d98]"
+      className="my-2 rounded border border-[#c3cad6] px-3 py-2 text-xs text-[#4a5259] dark:border-[#3b414d] dark:text-[#a9afbc]"
     >
       Load remote image from {host}
       {alt ? ` (${alt})` : ''}
@@ -56,7 +56,7 @@ export const MiniMarkdown: React.FC<{ text: string }> = ({ text }) => (
       ol: ({ children }) => <ol className="list-decimal pl-5 mb-2 space-y-1 leading-[1.7]">{children}</ol>,
       li: ({ children }) => <li>{children}</li>,
       strong: ({ children }) => (
-        <strong className="font-semibold text-[#1c1b1a] dark:text-[#f0efe6]">{children}</strong>
+        <strong className="font-semibold text-[#16181d] dark:text-[#dce0e5]">{children}</strong>
       ),
       a: ({ children, href }) => (
         <a href={href} target="_blank" rel="noreferrer" className="text-[#d96b43] underline">
@@ -148,7 +148,7 @@ const KNOWN_TAGS: Record<
       tag,
       {
         label: 'Thinking',
-        color: 'text-[#97948A] dark:text-[#97948A]',
+        color: 'text-[#78828e] dark:text-[#78828e]',
         bg: '',
         border: '',
       },
@@ -156,21 +156,21 @@ const KNOWN_TAGS: Record<
   ),
   check_for_errors: {
     label: 'Error Check',
-    color: 'text-[#97948A] dark:text-[#97948A]',
+    color: 'text-[#78828e] dark:text-[#78828e]',
     bg: 'bg-[#f5f3eb] dark:bg-[#1f1f1e]',
-    border: 'border-[#97948A] dark:border-[#97948A]',
+    border: 'border-[#78828e] dark:border-[#78828e]',
   },
   function_request: {
     label: 'Function Request',
-    color: 'text-[#8c887d] dark:text-[#a09c94]',
+    color: 'text-[#78828e] dark:text-[#a9afbc]',
     bg: 'bg-[#f5f3eb] dark:bg-[#1f1f1e]',
-    border: 'border-[#8c887d] dark:border-[#a09c94]',
+    border: 'border-[#78828e] dark:border-[#a9afbc]',
   },
   function_result: {
     label: 'Function Result',
-    color: 'text-[#8c887d] dark:text-[#a09c94]',
+    color: 'text-[#78828e] dark:text-[#a9afbc]',
     bg: 'bg-[#f5f3eb] dark:bg-[#1f1f1e]',
-    border: 'border-[#8c887d] dark:border-[#a09c94]',
+    border: 'border-[#78828e] dark:border-[#a9afbc]',
   },
   using_fallback_model: {
     label: 'Using Fallback Model',
@@ -188,14 +188,14 @@ const KNOWN_TAGS: Record<
 
 const TAG_COLOR_CYCLE = [
   {
-    color: 'text-[#8c887d] dark:text-[#a09c94]',
+    color: 'text-[#78828e] dark:text-[#a9afbc]',
     bg: 'bg-[#f5f3eb] dark:bg-[#1f1f1e]',
-    border: 'border-[#8c887d] dark:border-[#a09c94]',
+    border: 'border-[#78828e] dark:border-[#a9afbc]',
   },
   {
-    color: 'text-[#97948A] dark:text-[#97948A]',
+    color: 'text-[#78828e] dark:text-[#78828e]',
     bg: 'bg-[#f5f3eb] dark:bg-[#1f1f1e]',
-    border: 'border-[#97948A] dark:border-[#97948A]',
+    border: 'border-[#78828e] dark:border-[#78828e]',
   },
   {
     color: 'text-blue-500 dark:text-blue-400',
@@ -278,7 +278,7 @@ const ExpandableTag: React.FC<ExpandableTagProps> = ({
       <button
         type="button"
         onClick={() => onToggle(id)}
-        className={`flex min-w-0 max-w-full items-center gap-1.5 text-[10.5px] font-medium ${color} hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth`}
+        className={`flex min-w-0 max-w-full items-center gap-1.5 text-[10.5px] font-medium ${color} hover:text-[#16181d] dark:hover:text-[#dce0e5] cursor-pointer ws-button-smooth`}
       >
         {showsReadIcon && (
           <FileText data-testid="read-tag-icon" aria-hidden="true" className="w-3 h-3 shrink-0" />
@@ -309,7 +309,7 @@ const ExpandableTag: React.FC<ExpandableTagProps> = ({
               // without a wrap rule those tokens pushed out past the panel.
               // Capped and scrollable keeps it readable and the layout intact.
               isThinkTag
-                ? 'mt-1.5 pl-2 border-l border-[#e2dec0] dark:border-[#383836] text-[10.5px] text-[#706c62] dark:text-[#a09d98] leading-relaxed max-h-64 overflow-y-auto overflow-x-hidden [overflow-wrap:anywhere] thin-scrollbar'
+                ? 'mt-1.5 pl-2 border-l border-[#dfe3ea] dark:border-[#3b414d] text-[10.5px] text-[#4a5259] dark:text-[#a9afbc] leading-relaxed max-h-64 overflow-y-auto overflow-x-hidden [overflow-wrap:anywhere] thin-scrollbar'
                 : `mt-1.5 pl-2 border-l ${border} text-[10.5px] ${color} space-y-1 leading-relaxed max-h-64 overflow-y-auto overflow-x-hidden [overflow-wrap:anywhere] thin-scrollbar`
             }
           >
@@ -355,7 +355,7 @@ export const RawModelResponse: React.FC<RawModelResponseProps> = ({
       <button
         type="button"
         onClick={() => onToggle(id)}
-        className="flex min-w-0 max-w-full items-center gap-1.5 text-[10.5px] font-medium text-[#97948A] hover:text-[#1c1b1a] dark:text-[#97948A] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth"
+        className="flex min-w-0 max-w-full items-center gap-1.5 text-[10.5px] font-medium text-[#78828e] hover:text-[#16181d] dark:text-[#78828e] dark:hover:text-[#dce0e5] cursor-pointer ws-button-smooth"
       >
         <span className="min-w-0 truncate">Raw model response (for diagnosis)</span>
         <ChevronDown
@@ -369,7 +369,7 @@ export const RawModelResponse: React.FC<RawModelResponseProps> = ({
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.15 }}
-            className="mt-1.5 pl-2 border-l border-[#e2dec0] dark:border-[#383836] text-[10.5px] text-[#706c62] dark:text-[#a09d98] leading-relaxed max-h-64 overflow-y-auto overflow-x-hidden [overflow-wrap:anywhere] thin-scrollbar"
+            className="mt-1.5 pl-2 border-l border-[#dfe3ea] dark:border-[#3b414d] text-[10.5px] text-[#4a5259] dark:text-[#a9afbc] leading-relaxed max-h-64 overflow-y-auto overflow-x-hidden [overflow-wrap:anywhere] thin-scrollbar"
           >
             <pre className="m-0 whitespace-pre-wrap font-mono [overflow-wrap:anywhere]">
               {clipped.text || '(empty response)'}

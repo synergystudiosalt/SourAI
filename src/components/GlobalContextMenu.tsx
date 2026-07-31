@@ -12,7 +12,7 @@ interface MenuState {
 }
 
 const itemClass =
-  'w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-left cursor-pointer text-[#3d3a33] dark:text-[#dedcd6] hover:bg-[#f5f3ec] dark:hover:bg-[#282826] transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent';
+  'w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-left cursor-pointer text-[#3b414d] dark:text-[#dfe3ea] hover:bg-[#f6f8fa] dark:hover:bg-[#1e2128] transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent';
 
 /**
  * A single custom right-click menu mounted once at the app root. It only
@@ -69,7 +69,7 @@ export const GlobalContextMenu: React.FC<GlobalContextMenuProps> = ({ isDarkMode
     <div
       ref={menuRef}
       style={{ position: 'fixed', top: menu.y, left: menu.x }}
-      className="z-[300] w-44 bg-white/95 dark:bg-[#1e1e1d]/95 backdrop-blur-md border border-[#d8d5c9] dark:border-[#333230] rounded-xl shadow-xl p-1 space-y-0.5 animate-in fade-in zoom-in-95 duration-150"
+      className="z-[300] w-44 bg-white/95 dark:bg-[#1e2128]/95 backdrop-blur-md border border-[#c3cad6] dark:border-[#3b414d] rounded-xl shadow-xl p-1 space-y-0.5 animate-in fade-in zoom-in-95 duration-150"
     >
       <button
         className={itemClass}
@@ -103,7 +103,7 @@ export const GlobalContextMenu: React.FC<GlobalContextMenuProps> = ({ isDarkMode
       <button className={itemClass} onClick={() => run(() => document.execCommand('selectAll'))}>
         <TextSelect className="w-3.5 h-3.5" /> Select All
       </button>
-      <div className="h-px bg-[#e5e3db] dark:bg-[#2d2d2c] my-1" />
+      <div className="h-px bg-[#dfe3ea] dark:bg-[#282c33] my-1" />
       <button className={itemClass} onClick={() => run(onToggleTheme)}>
         {isDarkMode ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
         {isDarkMode ? 'Light mode' : 'Dark mode'}

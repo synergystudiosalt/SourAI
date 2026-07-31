@@ -34,7 +34,7 @@ export const AgentMessage: React.FC<AgentMessageProps> = ({
   if (message.role === 'user') {
     return (
       <div className="flex justify-end mb-4">
-        <div className="max-w-[88%] bg-[#f0ede4] dark:bg-[#252524] text-[#1c1b1a] dark:text-[#f0efe6] px-2.5 py-1.5 text-[12px] leading-relaxed whitespace-pre-wrap wrap-break-word rounded-lg">
+        <div className="max-w-[88%] bg-[#f0ede4] dark:bg-[#1e2128] text-[#16181d] dark:text-[#dce0e5] px-2.5 py-1.5 text-[12px] leading-relaxed whitespace-pre-wrap wrap-break-word rounded-lg">
           {message.content}
         </div>
       </div>
@@ -67,7 +67,7 @@ export const AgentMessage: React.FC<AgentMessageProps> = ({
           className={`text-[12px] leading-[1.7] wrap-break-word ${
             message.isError
               ? 'text-red-600 dark:text-red-400'
-              : 'text-[#3d3a33] dark:text-[#dedcd6]'
+              : 'text-[#3b414d] dark:text-[#dfe3ea]'
           }`}
         >
           {!message.content.startsWith('**Sub-agent') ? (
@@ -103,7 +103,7 @@ export const AgentMessage: React.FC<AgentMessageProps> = ({
       )}
 
       {operations.length > 0 && (
-        <div className="overflow-hidden rounded-md border border-[#d8d5c9] bg-white dark:border-[#3a3937] dark:bg-[#20201f]">
+        <div className="overflow-hidden rounded-md border border-[#c3cad6] bg-white dark:border-[#3a3937] dark:bg-[#20201f]">
           <div className="px-2 pt-2">
             <OperationList
               messageId={message.id}
@@ -114,20 +114,20 @@ export const AgentMessage: React.FC<AgentMessageProps> = ({
             />
           </div>
           {message.approvalStatus === 'applied' ? (
-            <div className="flex items-center gap-1.5 border-t border-[#e5e3db] px-2.5 py-2 text-[10.5px] text-emerald-700 dark:border-[#333230] dark:text-emerald-400">
+            <div className="flex items-center gap-1.5 border-t border-[#dfe3ea] px-2.5 py-2 text-[10.5px] text-emerald-700 dark:border-[#3b414d] dark:text-emerald-400">
               <Check className="h-3 w-3" /> Changes applied
             </div>
           ) : message.approvalStatus === 'rejected' ? (
-            <div className="flex items-center gap-1.5 border-t border-[#e5e3db] px-2.5 py-2 text-[10.5px] text-[#8c887d] dark:border-[#333230] dark:text-[#a09c94]">
+            <div className="flex items-center gap-1.5 border-t border-[#dfe3ea] px-2.5 py-2 text-[10.5px] text-[#78828e] dark:border-[#3b414d] dark:text-[#a9afbc]">
               <X className="h-3 w-3" /> Changes rejected
             </div>
           ) : (
-            <div className="flex items-center justify-between gap-2 border-t border-[#e5e3db] px-2 py-2 dark:border-[#333230]">
+            <div className="flex items-center justify-between gap-2 border-t border-[#dfe3ea] px-2 py-2 dark:border-[#3b414d]">
               <span
                 className={`text-[9.5px] ${
                   message.approvalStatus === 'failed'
                     ? 'text-red-600 dark:text-red-400'
-                    : 'text-[#8c887d] dark:text-[#a09c94]'
+                    : 'text-[#78828e] dark:text-[#a9afbc]'
                 }`}
               >
                 {message.approvalStatus === 'failed'
@@ -139,7 +139,7 @@ export const AgentMessage: React.FC<AgentMessageProps> = ({
                   type="button"
                   disabled={message.approvalStatus === 'applying'}
                   onClick={() => onRejectOperations(message.id)}
-                  className="rounded border border-[#d8d5c9] px-2 py-1 text-[10px] text-[#706c62] hover:bg-[#f5f3ec] disabled:opacity-50 dark:border-[#444240] dark:text-[#b8b4ac] dark:hover:bg-[#2a2928]"
+                  className="rounded border border-[#c3cad6] px-2 py-1 text-[10px] text-[#4a5259] hover:bg-[#f6f8fa] disabled:opacity-50 dark:border-[#444240] dark:text-[#b8b4ac] dark:hover:bg-[#2a2928]"
                 >
                   Reject
                 </button>

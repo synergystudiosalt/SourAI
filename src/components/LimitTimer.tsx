@@ -40,8 +40,8 @@ export const LimitTimer: React.FC<LimitTimerProps> = ({ targetTime, onReset, cla
     .padStart(2, '0')}m ${seconds.toString().padStart(2, '0')}s`;
 
   return (
-    <div className={`flex items-center gap-1.5 text-[11px] font-medium text-[#78746a] dark:text-[#aaa] shrink-0 select-none ${className}`}>
-      <Clock className="w-3.5 h-3.5 text-[#78746a] dark:text-[#aaa]" />
+    <div className={`flex items-center gap-1.5 text-[11px] font-medium text-[#4a5259] dark:text-[#aaa] shrink-0 select-none ${className}`}>
+      <Clock className="w-3.5 h-3.5 text-[#4a5259] dark:text-[#aaa]" />
       <span>Resets in {formatted}</span>
     </div>
   );

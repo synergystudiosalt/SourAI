@@ -143,7 +143,7 @@ export const QuestionBox: React.FC<QuestionBoxProps> = ({ questions, onAnswer, o
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -6 }}
         transition={{ duration: 0.18, ease: 'easeOut' }}
-        className="relative w-full max-w-[560px] mx-auto bg-white dark:bg-[#1a1a19] rounded-2xl shadow-[0_2px_16px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_16px_rgba(0,0,0,0.25)] border border-[#e8e6e0] dark:border-[#2d2d2c] p-3 sm:p-4 outline-none select-none"
+        className="relative w-full max-w-[560px] mx-auto bg-white dark:bg-[#17191d] rounded-2xl shadow-[0_2px_16px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_16px_rgba(0,0,0,0.25)] border border-[#e8e6e0] dark:border-[#282c33] p-3 sm:p-4 outline-none select-none"
       >
         {/* Top row: pagination + close */}
         <div className="flex items-center justify-between mb-2.5">
@@ -158,7 +158,7 @@ export const QuestionBox: React.FC<QuestionBoxProps> = ({ questions, onAnswer, o
                 type="button"
                 onClick={handleSkipNext}
                 disabled={!!selected}
-                className="p-0.5 rounded text-[#a09a8e] dark:text-[#666] hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] hover:bg-[#f0eee8] dark:hover:bg-[#282826] transition-colors cursor-pointer disabled:cursor-default disabled:opacity-40"
+                className="p-0.5 rounded text-[#a09a8e] dark:text-[#666] hover:text-[#16181d] dark:hover:text-[#dce0e5] hover:bg-[#f0eee8] dark:hover:bg-[#1e2128] transition-colors cursor-pointer disabled:cursor-default disabled:opacity-40"
                 title="Next question"
               >
                 <ChevronRight className="w-3.5 h-3.5" />
@@ -169,7 +169,7 @@ export const QuestionBox: React.FC<QuestionBoxProps> = ({ questions, onAnswer, o
             type="button"
             onClick={handleClose}
             disabled={!!selected}
-            className="p-1 rounded-lg text-[#b0ada5] dark:text-[#666] hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] hover:bg-[#f0eee8] dark:hover:bg-[#282826] transition-colors cursor-pointer shrink-0 disabled:cursor-default disabled:opacity-40"
+            className="p-1 rounded-lg text-[#b0ada5] dark:text-[#666] hover:text-[#16181d] dark:hover:text-[#dce0e5] hover:bg-[#f0eee8] dark:hover:bg-[#1e2128] transition-colors cursor-pointer shrink-0 disabled:cursor-default disabled:opacity-40"
             title="Close"
           >
             <X className="w-3.5 h-3.5" />
@@ -177,7 +177,7 @@ export const QuestionBox: React.FC<QuestionBoxProps> = ({ questions, onAnswer, o
         </div>
 
         {/* Question text */}
-        <p className="text-[13px] font-medium text-[#1c1b1a] dark:text-[#f0efe6] leading-snug mb-3">
+        <p className="text-[13px] font-medium text-[#16181d] dark:text-[#dce0e5] leading-snug mb-3">
           {question.question}
         </p>
 
@@ -201,20 +201,20 @@ export const QuestionBox: React.FC<QuestionBoxProps> = ({ questions, onAnswer, o
                   transition={{ delay: idx * 0.03 }}
                   className={`w-full flex items-center gap-2.5 h-[36px] sm:h-[38px] px-2.5 rounded-lg transition-all duration-150
                     ${isSelectedRow
-                      ? 'bg-[#f2f2f2] dark:bg-[#282826]'
+                      ? 'bg-[#f2f2f2] dark:bg-[#1e2128]'
                       : isHighlighted && !selected
-                        ? 'bg-[#f7f6f2] dark:bg-[#222221]'
-                        : 'bg-transparent hover:bg-[#f7f6f2] dark:hover:bg-[#222221]'
+                        ? 'bg-[#f6f8fa] dark:bg-[#222221]'
+                        : 'bg-transparent hover:bg-[#f6f8fa] dark:hover:bg-[#222221]'
                     }
                     ${isDisabled && !isSelectedRow ? 'opacity-40 cursor-default' : 'cursor-pointer'}
                   `}
                 >
                   <span className={`w-6 h-6 flex items-center justify-center rounded-md text-[11px] font-semibold shrink-0 transition-all duration-150
                     ${isSelectedRow
-                      ? 'bg-[#e0ded8] dark:bg-[#3a3a38] text-[#1c1b1a] dark:text-[#f0efe6]'
+                      ? 'bg-[#e0ded8] dark:bg-[#3a3a38] text-[#16181d] dark:text-[#dce0e5]'
                       : isHighlighted && !selected
-                        ? 'bg-[#eae8e2] dark:bg-[#333] text-[#3d3a33] dark:text-[#dedcd6]'
-                        : 'bg-[#f0eee8] dark:bg-[#282826] text-[#a09a8e] dark:text-[#777]'
+                        ? 'bg-[#eae8e2] dark:bg-[#333] text-[#3b414d] dark:text-[#dfe3ea]'
+                        : 'bg-[#f0eee8] dark:bg-[#1e2128] text-[#a09a8e] dark:text-[#777]'
                     }
                   `}>
                     {idx + 1}
@@ -222,10 +222,10 @@ export const QuestionBox: React.FC<QuestionBoxProps> = ({ questions, onAnswer, o
 
                   <span className={`text-[13px] font-medium flex-1 text-left transition-colors duration-150 truncate
                     ${isSelectedRow
-                      ? 'text-[#1c1b1a] dark:text-[#f0efe6]'
+                      ? 'text-[#16181d] dark:text-[#dce0e5]'
                       : isHighlighted && !selected
-                        ? 'text-[#1c1b1a] dark:text-[#dedcd6]'
-                        : 'text-[#3d3a33] dark:text-[#a09a8e]'
+                        ? 'text-[#16181d] dark:text-[#dfe3ea]'
+                        : 'text-[#3b414d] dark:text-[#a09a8e]'
                     }
                   `}>
                     {option}
@@ -243,14 +243,14 @@ export const QuestionBox: React.FC<QuestionBoxProps> = ({ questions, onAnswer, o
                 </motion.button>
 
                 {idx < 3 && displayOptions[idx + 1] && (
-                  <div className="h-px bg-[#eceae4] dark:bg-[#2d2d2c] mx-2.5" />
+                  <div className="h-px bg-[#eceae4] dark:bg-[#282c33] mx-2.5" />
                 )}
               </React.Fragment>
             );
           })}
 
           {/* Something Else */}
-          <div className="h-px bg-[#eceae4] dark:bg-[#2d2d2c] mx-2.5 my-1" />
+          <div className="h-px bg-[#eceae4] dark:bg-[#282c33] mx-2.5 my-1" />
           <div className="flex items-center gap-2.5 h-[36px] sm:h-[38px] px-2.5 rounded-lg">
             <Pencil className="w-[14px] h-[14px] text-[#b0ada5] dark:text-[#666] shrink-0" />
             {showCustomInput ? (
@@ -269,7 +269,7 @@ export const QuestionBox: React.FC<QuestionBoxProps> = ({ questions, onAnswer, o
                   }}
                   onBlur={() => { if (!customText.trim()) setShowCustomInput(false); }}
                   placeholder="Type your answer..."
-                  className="flex-1 text-[13px] font-medium text-[#1c1b1a] dark:text-[#f0efe6] placeholder-[#b0ada5] dark:placeholder-[#666] outline-none bg-transparent"
+                  className="flex-1 text-[13px] font-medium text-[#16181d] dark:text-[#dce0e5] placeholder-[#b0ada5] dark:placeholder-[#666] outline-none bg-transparent"
                 />
               </form>
             ) : (
@@ -290,7 +290,7 @@ export const QuestionBox: React.FC<QuestionBoxProps> = ({ questions, onAnswer, o
               type="button"
               onClick={handleSkip}
               disabled={!!selected}
-              className="px-3 py-1 text-[11px] font-medium rounded-md border border-[#d4d2cc] dark:border-[#3a3a38] text-[#3d3a33] dark:text-[#dedcd6] bg-white dark:bg-[#1a1a19] hover:bg-[#f7f6f2] dark:hover:bg-[#222221] transition-colors cursor-pointer disabled:cursor-default disabled:opacity-40"
+              className="px-3 py-1 text-[11px] font-medium rounded-md border border-[#d4d2cc] dark:border-[#3a3a38] text-[#3b414d] dark:text-[#dfe3ea] bg-white dark:bg-[#17191d] hover:bg-[#f6f8fa] dark:hover:bg-[#222221] transition-colors cursor-pointer disabled:cursor-default disabled:opacity-40"
             >
               Skip
             </button>

@@ -74,7 +74,7 @@ export const ChatMarkdownImage: React.FC<MarkdownImageProps> = ({
     <button
       type="button"
       onClick={() => setAllowed(true)}
-      className="my-2 rounded border border-[#d8d5c9] px-3 py-2 text-xs text-[#706c62] dark:border-[#383836] dark:text-[#a09d98]"
+      className="my-2 rounded border border-[#c3cad6] px-3 py-2 text-xs text-[#4a5259] dark:border-[#3b414d] dark:text-[#a9afbc]"
     >
       Load remote image from {host}
       {alt ? ` (${alt})` : ''}
@@ -182,7 +182,7 @@ const TypewriterMessage: React.FC<TypewriterMessageProps> = ({
       {/* Dynamic Thinking */}
       {thinking && !isErrorMsg && (
         <div className="mb-3 select-none">
-          <div className="flex items-center gap-1.5 text-[12px] font-medium text-[#97948A] dark:text-[#97948A] py-0.5">
+          <div className="flex items-center gap-1.5 text-[12px] font-medium text-[#78828e] dark:text-[#78828e] py-0.5">
             <span>{isThinking ? 'Thinking...' : (thinkingLabel || thinking)}</span>
           </div>
         </div>
@@ -202,7 +202,7 @@ const TypewriterMessage: React.FC<TypewriterMessageProps> = ({
           initial={{ opacity: 0, filter: 'blur(6px)' }}
           animate={{ opacity: 1, filter: 'blur(0px)' }}
           transition={{ duration: 0.3 }}
-          className="text-sm sm:text-base text-[#1c1b1a] dark:text-[#f0efe6] leading-relaxed space-y-3 font-sans"
+          className="text-sm sm:text-base text-[#16181d] dark:text-[#dce0e5] leading-relaxed space-y-3 font-sans"
         >
           <ReactMarkdown
             remarkPlugins={[remarkMath]}
@@ -210,17 +210,17 @@ const TypewriterMessage: React.FC<TypewriterMessageProps> = ({
             components={{
               p: ({ children }) => <div className="mb-3 leading-relaxed">{children}</div>,
               h1: ({ children }) => (
-                <h1 className="font-serif text-lg sm:text-xl font-medium mt-4 mb-2 text-[#1c1b1a] dark:text-[#f0efe6]">
+                <h1 className="font-serif text-lg sm:text-xl font-medium mt-4 mb-2 text-[#16181d] dark:text-[#dce0e5]">
                   {children}
                 </h1>
               ),
               h2: ({ children }) => (
-                <h2 className="font-serif text-base sm:text-lg font-medium mt-3 mb-2 text-[#1c1b1a] dark:text-[#f0efe6]">
+                <h2 className="font-serif text-base sm:text-lg font-medium mt-3 mb-2 text-[#16181d] dark:text-[#dce0e5]">
                   {children}
                 </h2>
               ),
               h3: ({ children }) => (
-                <h3 className="font-sans text-sm font-semibold mt-3 mb-1 text-[#1c1b1a] dark:text-[#f0efe6]">
+                <h3 className="font-sans text-sm font-semibold mt-3 mb-1 text-[#16181d] dark:text-[#dce0e5]">
                   {children}
                 </h3>
               ),
@@ -257,20 +257,20 @@ const TypewriterMessage: React.FC<TypewriterMessageProps> = ({
 
                 if (inline) {
                   return (
-                    <code className="bg-[#f2f0ea] dark:bg-[#282826] text-[#c7552d] dark:text-[#e07e5d] px-1.5 py-0.5 rounded text-[11px] font-mono">
+                    <code className="bg-[#f2f0ea] dark:bg-[#1e2128] text-[#c7552d] dark:text-[#e07e5d] px-1.5 py-0.5 rounded text-[11px] font-mono">
                       {children}
                     </code>
                   );
                 }
                 return (
-                  <div className="my-3 overflow-hidden rounded-lg bg-[#f5f3ec] dark:bg-[#1a1a19] border border-[#e2dec0] dark:border-[#333] text-[#1c1b1a] dark:text-[#f0efe6] text-xs font-mono shadow-2xs">
-                    <div className="flex items-center justify-between px-3 py-1.5 bg-[#eae6dc] dark:bg-[#242423] border-b border-[#e2dec0] dark:border-[#333] text-[11px] text-[#6e6a5e] dark:text-[#a09c94]">
+                  <div className="my-3 overflow-hidden rounded-lg bg-[#f6f8fa] dark:bg-[#17191d] border border-[#dfe3ea] dark:border-[#333] text-[#16181d] dark:text-[#dce0e5] text-xs font-mono shadow-2xs">
+                    <div className="flex items-center justify-between px-3 py-1.5 bg-[#eae6dc] dark:bg-[#1e2128] border-b border-[#dfe3ea] dark:border-[#333] text-[11px] text-[#4a5259] dark:text-[#a9afbc]">
                       <span>code snippet</span>
                       <div className="flex items-center gap-1">
                         <button
                           type="button"
                           onClick={handleDownloadCode}
-                          className="p-1 hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] transition-colors cursor-pointer rounded hover:bg-[#ded9cc] dark:hover:bg-[#30302e]"
+                          className="p-1 hover:text-[#16181d] dark:hover:text-[#dce0e5] transition-colors cursor-pointer rounded hover:bg-[#ded9cc] dark:hover:bg-[#30302e]"
                           title="Download code"
                         >
                           <Download className="w-3.5 h-3.5" />
@@ -278,7 +278,7 @@ const TypewriterMessage: React.FC<TypewriterMessageProps> = ({
                         <button
                           type="button"
                           onClick={handleCopyCode}
-                          className="p-1 hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] transition-colors cursor-pointer rounded hover:bg-[#ded9cc] dark:hover:bg-[#30302e]"
+                          className="p-1 hover:text-[#16181d] dark:hover:text-[#dce0e5] transition-colors cursor-pointer rounded hover:bg-[#ded9cc] dark:hover:bg-[#30302e]"
                           title={copied ? "Copied" : "Copy code"}
                         >
                           {copied ? (
@@ -323,12 +323,12 @@ const TypewriterMessage: React.FC<TypewriterMessageProps> = ({
           animate={{ opacity: 1, filter: 'blur(0px)' }}
           className="mt-4 flex flex-col items-start gap-3"
         >
-          <div className="flex items-center gap-1 text-[#8c887d] dark:text-[#a09c94]">
+          <div className="flex items-center gap-1 text-[#78828e] dark:text-[#a9afbc]">
             {/* Copy Button */}
             <button
               type="button"
               onClick={onCopy}
-              className="p-1.5 rounded-lg hover:bg-[#f4f2eb] dark:hover:bg-[#282826] hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer interactable-btn"
+              className="p-1.5 rounded-lg hover:bg-[#f6f8fa] dark:hover:bg-[#1e2128] hover:text-[#16181d] dark:hover:text-[#dce0e5] cursor-pointer interactable-btn"
               title="Copy response"
             >
               {isCopied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
@@ -338,10 +338,10 @@ const TypewriterMessage: React.FC<TypewriterMessageProps> = ({
             <button
               type="button"
               onClick={onSpeak}
-              className={`p-1.5 rounded-lg hover:bg-[#f4f2eb] dark:hover:bg-[#282826] cursor-pointer interactable-btn ${
+              className={`p-1.5 rounded-lg hover:bg-[#f6f8fa] dark:hover:bg-[#1e2128] cursor-pointer interactable-btn ${
                 isSpeaking
-                  ? 'text-[#d96b43] bg-[#f4f2eb] dark:bg-[#282826]'
-                  : 'hover:text-[#1c1b1a] dark:hover:text-[#f0efe6]'
+                  ? 'text-[#d96b43] bg-[#f6f8fa] dark:bg-[#1e2128]'
+                  : 'hover:text-[#16181d] dark:hover:text-[#dce0e5]'
               }`}
               title="Read aloud"
             >
@@ -352,8 +352,8 @@ const TypewriterMessage: React.FC<TypewriterMessageProps> = ({
             <button
               type="button"
               onClick={() => setIsLiked(isLiked === true ? null : true)}
-              className={`p-1.5 rounded-lg hover:bg-[#f4f2eb] dark:hover:bg-[#282826] cursor-pointer interactable-btn ${
-                isLiked === true ? 'text-emerald-600 font-bold' : 'hover:text-[#1c1b1a] dark:hover:text-[#f0efe6]'
+              className={`p-1.5 rounded-lg hover:bg-[#f6f8fa] dark:hover:bg-[#1e2128] cursor-pointer interactable-btn ${
+                isLiked === true ? 'text-emerald-600 font-bold' : 'hover:text-[#16181d] dark:hover:text-[#dce0e5]'
               }`}
               title="Good response"
             >
@@ -364,8 +364,8 @@ const TypewriterMessage: React.FC<TypewriterMessageProps> = ({
             <button
               type="button"
               onClick={() => setIsLiked(isLiked === false ? null : false)}
-              className={`p-1.5 rounded-lg hover:bg-[#f4f2eb] dark:hover:bg-[#282826] cursor-pointer interactable-btn ${
-                isLiked === false ? 'text-red-500 font-bold' : 'hover:text-[#1c1b1a] dark:hover:text-[#f0efe6]'
+              className={`p-1.5 rounded-lg hover:bg-[#f6f8fa] dark:hover:bg-[#1e2128] cursor-pointer interactable-btn ${
+                isLiked === false ? 'text-red-500 font-bold' : 'hover:text-[#16181d] dark:hover:text-[#dce0e5]'
               }`}
               title="Bad response"
             >
@@ -376,7 +376,7 @@ const TypewriterMessage: React.FC<TypewriterMessageProps> = ({
             <button
               type="button"
               onClick={onRetry}
-              className="p-1.5 rounded-lg hover:bg-[#f4f2eb] dark:hover:bg-[#282826] hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer interactable-btn"
+              className="p-1.5 rounded-lg hover:bg-[#f6f8fa] dark:hover:bg-[#1e2128] hover:text-[#16181d] dark:hover:text-[#dce0e5] cursor-pointer interactable-btn"
               title="Regenerate response"
             >
               <RotateCw className="w-4 h-4" />
@@ -618,11 +618,11 @@ export const ChatStreamView: React.FC<ChatStreamViewProps> = ({
       className="flex-1 w-full max-w-2xl flex flex-col h-full overflow-hidden mx-auto px-2 sm:px-3 md:px-4"
     >
       {/* Active Header Bar */}
-      <div className="sticky top-0 bg-[#faf9f6]/95 dark:bg-[#121212]/95 backdrop-blur-md py-2 sm:py-2.5 border-b border-[#e8e7e1] dark:border-[#2d2d2c] flex items-center justify-between shrink-0 z-50 select-none">
+      <div className="sticky top-0 bg-[#fbfcfd]/95 dark:bg-[#121316]/95 backdrop-blur-md py-2 sm:py-2.5 border-b border-[#e8e7e1] dark:border-[#282c33] flex items-center justify-between shrink-0 z-50 select-none">
         <button
           type="button"
           onClick={onBackToHome}
-          className="flex items-center gap-1 text-xs text-[#6e6a5e] dark:text-[#a09c94] hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] p-1 rounded-lg hover:bg-[#efece5] dark:hover:bg-[#252524] cursor-pointer interactable-btn transition-colors"
+          className="flex items-center gap-1 text-xs text-[#4a5259] dark:text-[#a9afbc] hover:text-[#16181d] dark:hover:text-[#dce0e5] p-1 rounded-lg hover:bg-[#f2f4f7] dark:hover:bg-[#1e2128] cursor-pointer interactable-btn transition-colors"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
           <span className="hidden sm:inline">Home</span>
@@ -630,14 +630,14 @@ export const ChatStreamView: React.FC<ChatStreamViewProps> = ({
 
         <div className="relative flex items-center gap-1">
           <Logo size={16} className="sm:w-5" />
-          <span className="font-instrument text-sm sm:text-base font-normal text-[#1c1b1a] dark:text-[#f0efe6]">sour.ai</span>
+          <span className="font-instrument text-sm sm:text-base font-normal text-[#16181d] dark:text-[#dce0e5]">sour.ai</span>
 
           {/* Header Model Selector Dropdown Badge */}
           <div ref={modelPopoverRef} className="relative flex items-center justify-center">
             <button
               type="button"
               onClick={() => setShowHeaderModelPopover(!showHeaderModelPopover)}
-              className="flex items-center gap-1 text-[10px] bg-[#e8e6df] dark:bg-[#2d2d2c] hover:bg-[#ddd9cf] dark:hover:bg-[#383836] text-[#524f47] dark:text-[#b0adab] font-medium px-2 py-0.5 rounded-full cursor-pointer interactable-btn"
+              className="flex items-center gap-1 text-[10px] bg-[#e8e6df] dark:bg-[#282c33] hover:bg-[#ddd9cf] dark:hover:bg-[#3b414d] text-[#524f47] dark:text-[#b0adab] font-medium px-2 py-0.5 rounded-full cursor-pointer interactable-btn"
               title="Change Model"
             >
               <span>{modelDisplayName}</span>
@@ -672,7 +672,7 @@ export const ChatStreamView: React.FC<ChatStreamViewProps> = ({
         <button
           type="button"
           onClick={onBackToHome}
-          className="p-1 text-[#6e6a5e] dark:text-[#a09c94] hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] hover:bg-[#efece5] dark:hover:bg-[#252524] rounded-lg cursor-pointer interactable-btn"
+          className="p-1 text-[#4a5259] dark:text-[#a9afbc] hover:text-[#16181d] dark:hover:text-[#dce0e5] hover:bg-[#f2f4f7] dark:hover:bg-[#1e2128] rounded-lg cursor-pointer interactable-btn"
           title="New conversation"
         >
           <Plus className="w-3.5 h-3.5" />
@@ -706,7 +706,7 @@ export const ChatStreamView: React.FC<ChatStreamViewProps> = ({
                   )}
 
                   {msg.content && (
-                    <div className="max-w-[95%] sm:max-w-[88%] bg-[#f4f2eb] dark:bg-[#242423] border border-[#e2dfd5] dark:border-[#333] text-[#1c1b1a] dark:text-[#f0efe6] px-3 sm:px-4 py-2 sm:py-2.5 rounded-2xl rounded-tr-xs text-xs sm:text-sm md:text-base leading-relaxed text-left shadow-2xs">
+                    <div className="max-w-[95%] sm:max-w-[88%] bg-[#f6f8fa] dark:bg-[#1e2128] border border-[#e2dfd5] dark:border-[#333] text-[#16181d] dark:text-[#dce0e5] px-3 sm:px-4 py-2 sm:py-2.5 rounded-2xl rounded-tr-xs text-xs sm:text-sm md:text-base leading-relaxed text-left shadow-2xs">
                       <p className="whitespace-pre-wrap break-words">{msg.content}</p>
                     </div>
                   )}
@@ -773,10 +773,10 @@ export const ChatStreamView: React.FC<ChatStreamViewProps> = ({
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
-          className={`relative bg-white dark:bg-[#1a1a19] border ${
+          className={`relative bg-white dark:bg-[#17191d] border ${
             isDragging
               ? 'border-[#d96b43] ring-2 ring-[#d96b43]/20'
-              : 'border-[#e6e4dc] dark:border-[#2d2d2c]'
+              : 'border-[#e6e4dc] dark:border-[#282c33]'
           } rounded-xl sm:rounded-2xl p-2 sm:p-3 shadow-xs focus-within:border-[#c5c2b6] dark:focus-within:border-[#444] transition-all`}
         >
           {/* Attachments preview row */}
@@ -799,7 +799,7 @@ export const ChatStreamView: React.FC<ChatStreamViewProps> = ({
             onKeyDown={handleKeyDown}
             placeholder="Write a message..."
             rows={1}
-            className="w-full text-xs sm:text-sm text-[#1c1b1a] dark:text-[#f0efe6] placeholder-[#8d897f] dark:placeholder-[#777] outline-none resize-none px-1 bg-transparent leading-relaxed"
+            className="w-full text-xs sm:text-sm text-[#16181d] dark:text-[#dce0e5] placeholder-[#8d897f] dark:placeholder-[#777] outline-none resize-none px-1 bg-transparent leading-relaxed"
           />
 
           {/* Bottom Toolbar Row: + on left, mic & send on right (NO model selector in prompt box, NO waveform icon) */}
@@ -809,7 +809,7 @@ export const ChatStreamView: React.FC<ChatStreamViewProps> = ({
               <button
                 type="button"
                 onClick={() => setShowAttachPopover(!showAttachPopover)}
-                className="p-1.5 rounded-lg text-[#6e6a5e] dark:text-[#a09c94] hover:bg-[#f4f2eb] dark:hover:bg-[#282826] hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer interactable-btn"
+                className="p-1.5 rounded-lg text-[#4a5259] dark:text-[#a9afbc] hover:bg-[#f6f8fa] dark:hover:bg-[#1e2128] hover:text-[#16181d] dark:hover:text-[#dce0e5] cursor-pointer interactable-btn"
                 title="Add attachment"
               >
                 <Plus className="w-4.5 h-4.5 stroke-[1.75]" />
@@ -842,7 +842,7 @@ export const ChatStreamView: React.FC<ChatStreamViewProps> = ({
                 className={`p-1.5 rounded-lg cursor-pointer interactable-btn ${
                   isRecording
                     ? 'bg-red-100 dark:bg-red-950/60 text-red-600 dark:text-red-400 animate-pulse'
-                    : 'text-[#6e6a5e] dark:text-[#a09c94] hover:bg-[#f4f2eb] dark:hover:bg-[#282826] hover:text-[#1c1b1a] dark:hover:text-[#f0efe6]'
+                    : 'text-[#4a5259] dark:text-[#a9afbc] hover:bg-[#f6f8fa] dark:hover:bg-[#1e2128] hover:text-[#16181d] dark:hover:text-[#dce0e5]'
                 }`}
                 title={isRecording ? 'Listening...' : 'Voice Dictation'}
               >
@@ -877,7 +877,7 @@ export const ChatStreamView: React.FC<ChatStreamViewProps> = ({
           </div>
         </div>
 
-        <p className="text-[10px] text-center text-[#8c887d] dark:text-[#777] mt-1.5">
+        <p className="text-[10px] text-center text-[#78828e] dark:text-[#777] mt-1.5">
           sour.ai is AI and can make mistakes. Please double-check responses.
         </p>
       </div>

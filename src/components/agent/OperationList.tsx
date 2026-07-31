@@ -37,27 +37,27 @@ export const OperationList: React.FC<OperationListProps> = ({
       return (
         <div
           key={operationId}
-          className="select-none border border-[#e5e3db] dark:border-[#2d2d2c] rounded-md overflow-hidden mb-2"
+          className="select-none border border-[#dfe3ea] dark:border-[#282c33] rounded-md overflow-hidden mb-2"
         >
           <button
             type="button"
             onClick={() => !isCoding && onToggle(operationId)}
-            className="w-full flex items-center gap-1.5 px-2.5 py-1.5 bg-[#f5f3eb] dark:bg-[#252524] border-b border-[#e5e3db] dark:border-[#2d2d2c] text-[10.5px] text-[#706c62] dark:text-[#a09c94] hover:bg-[#efece3] dark:hover:bg-[#2a2a29] cursor-pointer ws-button-smooth"
+            className="w-full flex items-center gap-1.5 px-2.5 py-1.5 bg-[#f5f3eb] dark:bg-[#1e2128] border-b border-[#dfe3ea] dark:border-[#282c33] text-[10.5px] text-[#4a5259] dark:text-[#a9afbc] hover:bg-[#efece3] dark:hover:bg-[#2a2a29] cursor-pointer ws-button-smooth"
           >
             {isCoding ? (
-              <Loader2 className="w-3 h-3 animate-spin shrink-0 text-[#97948A]" />
+              <Loader2 className="w-3 h-3 animate-spin shrink-0 text-[#78828e]" />
             ) : operation.type === 'delete' ? (
-              <Trash2 className="w-3 h-3 shrink-0 text-[#97948A]" />
+              <Trash2 className="w-3 h-3 shrink-0 text-[#78828e]" />
             ) : (
-              <FilePlus className="w-3 h-3 shrink-0 text-[#97948A]" />
+              <FilePlus className="w-3 h-3 shrink-0 text-[#78828e]" />
             )}
             <span className="truncate flex-1 text-left">
               {directoryPath && <span className="opacity-50">{directoryPath}/</span>}
-              <span className="font-medium text-[#1c1b1a] dark:text-[#f0efe6]">{fileName}</span>
+              <span className="font-medium text-[#16181d] dark:text-[#dce0e5]">{fileName}</span>
             </span>
             {!isCoding && (
               <ChevronDown
-                className={`w-3 h-3 transition-transform duration-200 shrink-0 text-[#97948A] ${isOpen ? 'rotate-180' : ''}`}
+                className={`w-3 h-3 transition-transform duration-200 shrink-0 text-[#78828e] ${isOpen ? 'rotate-180' : ''}`}
               />
             )}
           </button>
@@ -89,7 +89,7 @@ export const OperationList: React.FC<OperationListProps> = ({
                           className={`flex-1 px-2.5 py-[1px] font-mono text-[10px] leading-[1.7] whitespace-pre ${
                             addedLines.has(index)
                               ? 'bg-emerald-100/60 dark:bg-emerald-900/20 text-emerald-900 dark:text-emerald-200'
-                              : 'text-[#1c1b1a] dark:text-[#e0dcd4]'
+                              : 'text-[#16181d] dark:text-[#e0dcd4]'
                           }`}
                         >
                           {line || ' '}

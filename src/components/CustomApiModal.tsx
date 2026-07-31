@@ -99,18 +99,18 @@ export const CustomApiModal: React.FC<CustomApiModalProps> = ({
       {/* Modal */}
       <div
         ref={modalRef}
-        className={`relative w-96 ${isDarkMode ? 'bg-[#1e1e1e]' : 'bg-white'} border ${isDarkMode ? 'border-[#2d2d2c]' : 'border-[#e5e3db]'} shadow-2xl`}
+        className={`relative w-96 ${isDarkMode ? 'bg-[#1e2128]' : 'bg-white'} border ${isDarkMode ? 'border-[#282c33]' : 'border-[#dfe3ea]'} shadow-2xl`}
       >
         {/* Header */}
         <div
-          className={`flex items-center justify-between px-4 py-3 border-b ${isDarkMode ? 'border-[#2d2d2c]' : 'border-[#e5e3db]'}`}
+          className={`flex items-center justify-between px-4 py-3 border-b ${isDarkMode ? 'border-[#282c33]' : 'border-[#dfe3ea]'}`}
         >
-          <h2 className={`text-sm font-semibold ${isDarkMode ? 'text-[#f0efe6]' : 'text-[#1c1b1a]'}`}>
+          <h2 className={`text-sm font-semibold ${isDarkMode ? 'text-[#dce0e5]' : 'text-[#16181d]'}`}>
             Add Custom API
           </h2>
           <button
             onClick={onClose}
-            className={`p-1 hover:bg-opacity-10 cursor-pointer ${isDarkMode ? 'hover:bg-white text-[#a09c94]' : 'hover:bg-black text-[#8c887d]'}`}
+            className={`p-1 hover:bg-opacity-10 cursor-pointer ${isDarkMode ? 'hover:bg-white text-[#a9afbc]' : 'hover:bg-black text-[#78828e]'}`}
           >
             <X className="w-4 h-4" />
           </button>
@@ -120,7 +120,7 @@ export const CustomApiModal: React.FC<CustomApiModalProps> = ({
         <div className="p-4 space-y-4">
           {/* Provider Selection */}
           <div className="space-y-2">
-            <label className={`text-xs font-semibold uppercase tracking-wide ${isDarkMode ? 'text-[#a09c94]' : 'text-[#8c887d]'}`}>
+            <label className={`text-xs font-semibold uppercase tracking-wide ${isDarkMode ? 'text-[#a9afbc]' : 'text-[#78828e]'}`}>
               API Provider
             </label>
             <div className="grid grid-cols-2 gap-2">
@@ -131,11 +131,11 @@ export const CustomApiModal: React.FC<CustomApiModalProps> = ({
                   className={`px-3 py-2 text-xs font-medium border transition-colors ${
                     selectedProvider === provider
                       ? isDarkMode
-                        ? 'bg-[#252524] border-[#d96b43] text-[#f0efe6]'
-                        : 'bg-[#f4f2eb] border-[#d96b43] text-[#1c1b1a]'
+                        ? 'bg-[#1e2128] border-[#d96b43] text-[#dce0e5]'
+                        : 'bg-[#f6f8fa] border-[#d96b43] text-[#16181d]'
                       : isDarkMode
-                      ? 'bg-[#252524] border-[#2d2d2c] text-[#a09c94] hover:border-[#666] hover:text-[#f0efe6]'
-                      : 'bg-[#efede4] border-[#e5e3db] text-[#8c887d] hover:border-[#999] hover:text-[#1c1b1a]'
+                      ? 'bg-[#1e2128] border-[#282c33] text-[#a9afbc] hover:border-[#666] hover:text-[#dce0e5]'
+                      : 'bg-[#efede4] border-[#dfe3ea] text-[#78828e] hover:border-[#999] hover:text-[#16181d]'
                   }`}
                 >
                   {PROVIDER_LABELS[provider]}
@@ -146,7 +146,7 @@ export const CustomApiModal: React.FC<CustomApiModalProps> = ({
 
           {/* API Key Input */}
           <div className="space-y-2">
-            <label className={`text-xs font-semibold uppercase tracking-wide ${isDarkMode ? 'text-[#a09c94]' : 'text-[#8c887d]'}`}>
+            <label className={`text-xs font-semibold uppercase tracking-wide ${isDarkMode ? 'text-[#a9afbc]' : 'text-[#78828e]'}`}>
               API Key
             </label>
             <div className="relative flex items-center">
@@ -159,13 +159,13 @@ export const CustomApiModal: React.FC<CustomApiModalProps> = ({
                 placeholder={PROVIDER_PLACEHOLDERS[selectedProvider]}
                 className={`flex-1 px-3 py-2 text-xs font-mono border ${
                   isDarkMode
-                    ? 'bg-[#141413] border-[#2d2d2c] text-[#f0efe6] placeholder-[#666]'
-                    : 'bg-[#faf9f6] border-[#e5e3db] text-[#1c1b1a] placeholder-[#999]'
+                    ? 'bg-[#141413] border-[#282c33] text-[#dce0e5] placeholder-[#666]'
+                    : 'bg-[#fbfcfd] border-[#dfe3ea] text-[#16181d] placeholder-[#999]'
                 } focus:outline-none focus:border-[#d96b43]`}
               />
               <button
                 onClick={() => setShowApiKey(!showApiKey)}
-                className={`absolute right-2 p-1 ${isDarkMode ? 'text-[#a09c94] hover:text-[#f0efe6]' : 'text-[#8c887d] hover:text-[#1c1b1a]'}`}
+                className={`absolute right-2 p-1 ${isDarkMode ? 'text-[#a9afbc] hover:text-[#dce0e5]' : 'text-[#78828e] hover:text-[#16181d]'}`}
               >
                 {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
@@ -174,7 +174,7 @@ export const CustomApiModal: React.FC<CustomApiModalProps> = ({
 
           {/* Model Name Input */}
           <div className="space-y-2">
-            <label className={`text-xs font-semibold uppercase tracking-wide ${isDarkMode ? 'text-[#a09c94]' : 'text-[#8c887d]'}`}>
+            <label className={`text-xs font-semibold uppercase tracking-wide ${isDarkMode ? 'text-[#a9afbc]' : 'text-[#78828e]'}`}>
               Model Name
             </label>
             <input
@@ -185,8 +185,8 @@ export const CustomApiModal: React.FC<CustomApiModalProps> = ({
               placeholder="e.g., llama-3.1-8b-instant"
               className={`w-full px-3 py-2 text-xs border ${
                 isDarkMode
-                  ? 'bg-[#141413] border-[#2d2d2c] text-[#f0efe6] placeholder-[#666]'
-                  : 'bg-[#faf9f6] border-[#e5e3db] text-[#1c1b1a] placeholder-[#999]'
+                  ? 'bg-[#141413] border-[#282c33] text-[#dce0e5] placeholder-[#666]'
+                  : 'bg-[#fbfcfd] border-[#dfe3ea] text-[#16181d] placeholder-[#999]'
               } focus:outline-none focus:border-[#d96b43]`}
             />
           </div>
@@ -200,13 +200,13 @@ export const CustomApiModal: React.FC<CustomApiModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className={`flex items-center justify-end gap-2 px-4 py-3 border-t ${isDarkMode ? 'border-[#2d2d2c]' : 'border-[#e5e3db]'}`}>
+        <div className={`flex items-center justify-end gap-2 px-4 py-3 border-t ${isDarkMode ? 'border-[#282c33]' : 'border-[#dfe3ea]'}`}>
           <button
             onClick={onClose}
             className={`px-3 py-1.5 text-xs font-medium border cursor-pointer ${
               isDarkMode
-                ? 'bg-transparent border-[#2d2d2c] text-[#a09c94] hover:bg-[#252524]'
-                : 'bg-transparent border-[#e5e3db] text-[#8c887d] hover:bg-[#f9f8f5]'
+                ? 'bg-transparent border-[#282c33] text-[#a9afbc] hover:bg-[#1e2128]'
+                : 'bg-transparent border-[#dfe3ea] text-[#78828e] hover:bg-[#f9f8f5]'
             }`}
           >
             Cancel

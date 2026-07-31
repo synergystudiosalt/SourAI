@@ -132,7 +132,7 @@ export const WorkspaceMarkdownImage: React.FC<MarkdownImageProps> = ({
     <button
       type="button"
       onClick={() => setAllowed(true)}
-      className="my-2 rounded border border-[#d8d5c9] px-3 py-2 text-xs text-[#706c62] dark:border-[#383836] dark:text-[#a09d98]"
+      className="my-2 rounded border border-[#c3cad6] px-3 py-2 text-xs text-[#4a5259] dark:border-[#3b414d] dark:text-[#a9afbc]"
     >
       Load remote image from {host}
       {alt ? ` (${alt})` : ''}
@@ -343,7 +343,7 @@ export function getRenameBlockReason(
 const SaveStatusIndicator: React.FC<{ status: SaveStatus }> = ({ status }) => {
   if (status === 'saving') {
     return (
-      <span className="flex items-center gap-1 text-[11px] text-[#8c887d] dark:text-[#a09c94]">
+      <span className="flex items-center gap-1 text-[11px] text-[#78828e] dark:text-[#a9afbc]">
         <Loader2 className="w-3 h-3 animate-spin" /> Saving…
       </span>
     );
@@ -357,7 +357,7 @@ const SaveStatusIndicator: React.FC<{ status: SaveStatus }> = ({ status }) => {
   }
   if (status === 'unsaved') {
     return (
-      <span className="flex items-center gap-1 text-[11px] text-[#8c887d] dark:text-[#a09c94]">
+      <span className="flex items-center gap-1 text-[11px] text-[#78828e] dark:text-[#a9afbc]">
         <Save className="w-3 h-3" /> Unsaved
       </span>
     );
@@ -982,58 +982,58 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
 
   if (!activeProject) {
     return (
-      <div className={`zed-workspace flex-1 h-full flex flex-col overflow-hidden relative ${isDarkMode ? 'bg-[#181817] text-[#f0efe6]' : 'bg-[#faf9f6] text-[#1c1b1a]'}`}>
+      <div className={`zed-workspace flex-1 h-full flex flex-col overflow-hidden relative ${isDarkMode ? 'bg-[#17191d] text-[#dce0e5]' : 'bg-[#fbfcfd] text-[#16181d]'}`}>
         <div className="flex-1 flex flex-col items-center justify-center p-6 select-none relative">
           <div className="flex flex-col items-center text-center max-w-lg w-full">
             <div className="flex items-center justify-center gap-3.5 mb-8">
               <Logo size={42} />
               <div className="text-left">
-                <h1 className="text-xl font-medium tracking-tight font-instrument text-[#1c1b1a] dark:text-[#f0efe6]">
+                <h1 className="text-xl font-medium tracking-tight font-instrument text-[#16181d] dark:text-[#dce0e5]">
                   Welcome back to sour.ai
                 </h1>
-                <p className="text-xs text-[#78746a] dark:text-[#a09c94] font-medium tracking-wide font-sans">
+                <p className="text-xs text-[#4a5259] dark:text-[#a9afbc] font-medium tracking-wide font-sans">
                   The workspace for what's next
                 </p>
               </div>
             </div>
 
-            <div className="w-full border-t border-[#e5e3db] dark:border-[#2d2d2c] pt-4 text-left">
-              <span className="text-[10px] font-bold text-[#8c887d] dark:text-[#888] tracking-wider uppercase block mb-2.5 text-left">
+            <div className="w-full border-t border-[#dfe3ea] dark:border-[#282c33] pt-4 text-left">
+              <span className="text-[10px] font-bold text-[#78828e] dark:text-[#888] tracking-wider uppercase block mb-2.5 text-left">
                 Get Started
               </span>
 
               <div className="space-y-1 w-full text-left">
                 <button
                   onClick={handleNewEmptyWorkspace}
-                  className="w-full flex items-center justify-between text-xs px-3 py-1.5 text-[#3d3a33] dark:text-[#dedcd6] hover:bg-[#efede4] dark:hover:bg-[#232322] hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] group cursor-pointer text-left blurry-hover"
+                  className="w-full flex items-center justify-between text-xs px-3 py-1.5 text-[#3b414d] dark:text-[#dfe3ea] hover:bg-[#efede4] dark:hover:bg-[#232322] hover:text-[#16181d] dark:hover:text-[#dce0e5] group cursor-pointer text-left blurry-hover"
                 >
                   <span className="flex items-center gap-2.5">
-                    <Plus className="w-3.5 h-3.5 text-[#8c887d] dark:text-[#888]" />
+                    <Plus className="w-3.5 h-3.5 text-[#78828e] dark:text-[#888]" />
                     <span>New File</span>
                   </span>
-                  <span className="text-[10px] text-[#8c887d] dark:text-[#888] font-mono group-hover:text-[#1c1b1a] dark:group-hover:text-white transition-colors">⌥N</span>
+                  <span className="text-[10px] text-[#78828e] dark:text-[#888] font-mono group-hover:text-[#16181d] dark:group-hover:text-white transition-colors">⌥N</span>
                 </button>
 
                 <button
                   onClick={handleOpenLocalDirectory}
                   disabled={!isDirectoryPickerSupported() || isScanning}
                   title={isDirectoryPickerSupported() ? undefined : 'Opening real folders needs a Chromium-based browser (Chrome or Edge).'}
-                  className="w-full flex items-center justify-between text-xs px-3 py-1.5 text-[#3d3a33] dark:text-[#dedcd6] hover:bg-[#efede4] dark:hover:bg-[#232322] hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] group cursor-pointer text-left disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent blurry-hover"
+                  className="w-full flex items-center justify-between text-xs px-3 py-1.5 text-[#3b414d] dark:text-[#dfe3ea] hover:bg-[#efede4] dark:hover:bg-[#232322] hover:text-[#16181d] dark:hover:text-[#dce0e5] group cursor-pointer text-left disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent blurry-hover"
                 >
                   <span className="flex items-center gap-2.5">
-                    <Folder className="w-3.5 h-3.5 text-[#8c887d] dark:text-[#888]" />
+                    <Folder className="w-3.5 h-3.5 text-[#78828e] dark:text-[#888]" />
                     <span>{isScanning ? 'Opening…' : 'Open Project'}</span>
                   </span>
-                  <span className="text-[10px] text-[#8c887d] dark:text-[#888] font-mono group-hover:text-[#1c1b1a] dark:group-hover:text-white transition-colors">⌥O</span>
+                  <span className="text-[10px] text-[#78828e] dark:text-[#888] font-mono group-hover:text-[#16181d] dark:group-hover:text-white transition-colors">⌥O</span>
                 </button>
 
                 {hasSavedVirtualProject && (
                   <button
                     onClick={handleRestoreVirtualProject}
-                    className="w-full flex items-center justify-between text-xs px-3 py-1.5 text-[#3d3a33] dark:text-[#dedcd6] hover:bg-[#efede4] dark:hover:bg-[#232322] hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] group cursor-pointer text-left blurry-hover"
+                    className="w-full flex items-center justify-between text-xs px-3 py-1.5 text-[#3b414d] dark:text-[#dfe3ea] hover:bg-[#efede4] dark:hover:bg-[#232322] hover:text-[#16181d] dark:hover:text-[#dce0e5] group cursor-pointer text-left blurry-hover"
                   >
                     <span className="flex items-center gap-2.5">
-                      <RefreshCw className="w-3.5 h-3.5 text-[#8c887d] dark:text-[#888]" />
+                      <RefreshCw className="w-3.5 h-3.5 text-[#78828e] dark:text-[#888]" />
                       <span>Continue Previous Session</span>
                     </span>
                   </button>
@@ -1047,17 +1047,17 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
   }
 
   return (
-    <div className={`zed-workspace flex-1 h-full flex flex-col overflow-hidden relative ${isDarkMode ? 'bg-[#181817] text-[#f0efe6]' : 'bg-[#faf9f6] text-[#1c1b1a]'}`}>
+    <div className={`zed-workspace flex-1 h-full flex flex-col overflow-hidden relative ${isDarkMode ? 'bg-[#17191d] text-[#dce0e5]' : 'bg-[#fbfcfd] text-[#16181d]'}`}>
       <PreviewRuntimeCollector
         request={previewRuntimeRequest}
         onComplete={handlePreviewRuntimeCollectionComplete}
       />
       <div className="flex-1 flex flex-col h-full overflow-hidden">
-        <div className="zed-titlebar h-9 border-b border-[#e5e3db] dark:border-[#2d2d2c] flex items-center justify-between px-3 select-none bg-[#f4f2eb] dark:bg-[#1a1a19] shrink-0">
+        <div className="zed-titlebar h-9 border-b border-[#dfe3ea] dark:border-[#282c33] flex items-center justify-between px-3 select-none bg-[#f6f8fa] dark:bg-[#17191d] shrink-0">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setActiveProject(null)}
-              className="flex items-center gap-1.5 text-[11px] text-[#78746a] dark:text-[#a09c94] hover:text-[#1c1b1a] dark:hover:text-white font-medium cursor-pointer blurry-hover"
+              className="flex items-center gap-1.5 text-[11px] text-[#4a5259] dark:text-[#a9afbc] hover:text-[#16181d] dark:hover:text-white font-medium cursor-pointer blurry-hover"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               <span>Exit Workspace</span>
@@ -1068,7 +1068,7 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
             <SaveStatusIndicator status={saveStatus} />
             <button
               onClick={handleDownloadProject}
-              className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium border border-[#e5e3db] dark:border-[#2d2d2c] hover:bg-[#ede9df] dark:hover:bg-[#242423] text-[#1c1b1a] dark:text-[#f0efe6] cursor-pointer ws-toolbar-btn"
+              className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium border border-[#dfe3ea] dark:border-[#282c33] hover:bg-[#f2f4f7] dark:hover:bg-[#1e2128] text-[#16181d] dark:text-[#dce0e5] cursor-pointer ws-toolbar-btn"
               title="Download the whole project as a .zip"
             >
               <Download className="w-3 h-3" />
@@ -1077,7 +1077,7 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
             <button
               onClick={() => activeTabPath && handleDownloadFile(activeTabPath)}
               disabled={!activeTabPath}
-              className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium border border-[#e5e3db] dark:border-[#2d2d2c] hover:bg-[#ede9df] dark:hover:bg-[#242423] text-[#1c1b1a] dark:text-[#f0efe6] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ws-toolbar-btn"
+              className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium border border-[#dfe3ea] dark:border-[#282c33] hover:bg-[#f2f4f7] dark:hover:bg-[#1e2128] text-[#16181d] dark:text-[#dce0e5] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ws-toolbar-btn"
               title="Export active file code"
             >
               <span>Export Code</span>
@@ -1097,7 +1097,7 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
                 <button
                   type="button"
                   onClick={() => setAgentView('chat')}
-                  className="absolute right-2 top-2 z-30 rounded border border-[#e5e3db] bg-[#fbfaf7] px-2 py-1 text-[10px] text-[#78746a] hover:text-[#1c1b1a] dark:border-[#333230] dark:bg-[#1e1e1e] dark:text-[#a09c94] dark:hover:text-white"
+                  className="absolute right-2 top-2 z-30 rounded border border-[#dfe3ea] bg-[#fbfcfd] px-2 py-1 text-[10px] text-[#4a5259] hover:text-[#16181d] dark:border-[#3b414d] dark:bg-[#1e2128] dark:text-[#a9afbc] dark:hover:text-white"
                 >
                   Back to chat
                 </button>
@@ -1117,7 +1117,7 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
             ) : agentView === 'advanced' ? (
               <aside
                 aria-label="Client agent unavailable"
-                className="h-full border-r border-[#e5e3db] p-3 text-xs dark:border-[#2d2d2c]"
+                className="h-full border-r border-[#dfe3ea] p-3 text-xs dark:border-[#282c33]"
               >
                 The client-only agent needs Web Worker support and cannot fall back to a server API.
               </aside>
@@ -1142,8 +1142,8 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
             )}
           </motion.div>
 
-          <div className="flex-1 flex flex-col h-full overflow-hidden bg-white dark:bg-[#1e1e1e] min-w-0">
-            <div className="h-9 border-b border-[#e5e3db] dark:border-[#2d2d2c] bg-[#f7f6f2] dark:bg-[#1e1e1e] flex items-stretch select-none shrink-0">
+          <div className="zed-editor-surface flex-1 flex flex-col h-full overflow-hidden bg-white dark:bg-[#1e2128] min-w-0">
+            <div className="zed-tabbar h-9 border-b border-[#dfe3ea] dark:border-[#282c33] bg-[#f6f8fa] dark:bg-[#1e2128] flex items-stretch select-none shrink-0">
               <div className="flex items-stretch overflow-x-auto flex-1 min-w-0">
                 {openTabs.map((tab) => {
                   const node = findNode(tree, tab.path);
@@ -1155,10 +1155,10 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
                       key={tab.path}
                       onClick={() => setActiveTabPath(tab.path)}
                       title={tab.path}
-                      className={`h-full pl-3 pr-2 text-xs flex items-center gap-1.5 cursor-pointer shrink-0 group border-r border-[#e5e3db] dark:border-[#2d2d2c] ws-tab ${
+                      className={`h-full pl-3 pr-2 text-xs flex items-center gap-1.5 cursor-pointer shrink-0 group border-r border-[#dfe3ea] dark:border-[#282c33] ws-tab ${
                         isActive
-                          ? 'bg-white dark:bg-[#1e1e1e] text-[#1c1b1a] dark:text-[#f0efe6] font-medium'
-                          : 'text-[#8c887d] dark:text-[#a09c94] hover:bg-[#efede4] dark:hover:bg-[#2a2a2a] hover:text-[#1c1b1a] dark:hover:text-[#f0efe6]'
+                          ? 'bg-white dark:bg-[#1e2128] text-[#16181d] dark:text-[#dce0e5] font-medium'
+                          : 'text-[#78828e] dark:text-[#a9afbc] hover:bg-[#efede4] dark:hover:bg-[#2a2a2a] hover:text-[#16181d] dark:hover:text-[#dce0e5]'
                       }`}
                     >
                       <TabIcon className={`w-3.5 h-3.5 shrink-0 ${tabIconClass}`} />
@@ -1179,10 +1179,10 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
                 <button
                   onClick={togglePreviewForActiveTab}
                   title="Toggle live preview for this file"
-                  className={`flex items-center gap-1.5 px-3 text-[11px] font-medium border-l border-[#e5e3db] dark:border-[#2d2d2c] shrink-0 cursor-pointer ws-toolbar-btn ${
+                  className={`flex items-center gap-1.5 px-3 text-[11px] font-medium border-l border-[#dfe3ea] dark:border-[#282c33] shrink-0 cursor-pointer ws-toolbar-btn ${
                     showPreview
-                      ? 'bg-white dark:bg-[#1e1e1e] text-[#d96b43]'
-                      : 'text-[#8c887d] dark:text-[#a09c94] hover:bg-[#efede4] dark:hover:bg-[#2a2a2a] hover:text-[#1c1b1a] dark:hover:text-[#f0efe6]'
+                      ? 'bg-white dark:bg-[#1e2128] text-[#d96b43]'
+                      : 'text-[#78828e] dark:text-[#a9afbc] hover:bg-[#efede4] dark:hover:bg-[#2a2a2a] hover:text-[#16181d] dark:hover:text-[#dce0e5]'
                   }`}
                 >
                   {showPreview ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
@@ -1192,21 +1192,21 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
             </div>
 
             <div className="flex-1 flex overflow-hidden">
-              <div className={`flex flex-col overflow-hidden ${showPreview && htmlEntry ? 'w-1/2 border-r border-[#e5e3db] dark:border-[#2d2d2c]' : 'flex-1'}`}>
+              <div className={`flex flex-col overflow-hidden ${showPreview && htmlEntry ? 'w-1/2 border-r border-[#dfe3ea] dark:border-[#282c33]' : 'flex-1'}`}>
                 {activeNode && activeNode.type === 'file' ? (
                   isLikelyBinary(activeNode.path) ? (
-                    <div className="flex-1 flex flex-col items-center justify-center gap-3 text-sm text-[#8c887d] dark:text-[#a09c94] p-6 text-center">
+                    <div className="flex-1 flex flex-col items-center justify-center gap-3 text-sm text-[#78828e] dark:text-[#a9afbc] p-6 text-center">
                       <AlertCircle className="w-6 h-6" />
                       <span>Preview isn't available for this file type.</span>
                       <button
                         onClick={() => handleDownloadFile(activeNode.path)}
-                        className="text-xs px-3 py-1.5 bg-[#f4f2eb] dark:bg-[#252524] border border-[#e5e3db] dark:border-[#2d2d2c] hover:bg-[#ede9df] dark:hover:bg-[#30302e] cursor-pointer"
+                        className="text-xs px-3 py-1.5 bg-[#f6f8fa] dark:bg-[#1e2128] border border-[#dfe3ea] dark:border-[#282c33] hover:bg-[#f2f4f7] dark:hover:bg-[#30302e] cursor-pointer"
                       >
                         Download file
                       </button>
                     </div>
                   ) : !activeNode.isLoaded ? (
-                    <div className="flex-1 flex items-center justify-center gap-2 text-sm text-[#8c887d] dark:text-[#a09c94]">
+                    <div className="flex-1 flex items-center justify-center gap-2 text-sm text-[#78828e] dark:text-[#a9afbc]">
                       <Loader2 className="w-4 h-4 animate-spin" /> Loading file…
                     </div>
                   ) : (
@@ -1223,7 +1223,7 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
                     </div>
                   )
                 ) : (
-                  <div className="flex-1 flex items-center justify-center text-sm text-[#8c887d] dark:text-[#a09c94]">
+                  <div className="flex-1 flex items-center justify-center text-sm text-[#78828e] dark:text-[#a9afbc]">
                     Select a file to start editing
                   </div>
                 )}
@@ -1231,10 +1231,10 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
 
               {showPreview && htmlEntry && (
                 <div className="w-1/2 flex flex-col overflow-hidden preview-panel-enter">
-                  <div className="h-7 border-b border-[#e5e3db] dark:border-[#2d2d2c] bg-[#f7f6f2] dark:bg-[#1e1e1e] flex items-center justify-between px-2.5 text-[10px] text-[#8c887d] dark:text-[#a09c94] shrink-0">
+                  <div className="h-7 border-b border-[#dfe3ea] dark:border-[#282c33] bg-[#f6f8fa] dark:bg-[#1e2128] flex items-center justify-between px-2.5 text-[10px] text-[#78828e] dark:text-[#a9afbc] shrink-0">
                     <span className="truncate">Preview: {htmlEntry.path}</span>
                     <div className="flex items-center gap-2.5">
-                      <button onClick={() => setPreviewNonce((n) => n + 1)} title="Refresh preview" className="cursor-pointer hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] blurry-hover">
+                      <button onClick={() => setPreviewNonce((n) => n + 1)} title="Refresh preview" className="cursor-pointer hover:text-[#16181d] dark:hover:text-[#dce0e5] blurry-hover">
                         <RotateCw className="w-3 h-3" />
                       </button>
                       {(previewKind === 'html' || previewKind === 'svg') && (
@@ -1246,7 +1246,7 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
                           }
                           title="Open safe preview in new tab"
                           aria-label="Open safe preview in new tab"
-                          className="cursor-pointer hover:text-[#1c1b1a] dark:hover:text-[#f0efe6]"
+                          className="cursor-pointer hover:text-[#16181d] dark:hover:text-[#dce0e5]"
                         >
                           <ExternalLink className="w-3 h-3" />
                         </button>
@@ -1266,7 +1266,7 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
                             URL.revokeObjectURL(url);
                           }}
                           title="Download preview source as text"
-                          className="cursor-pointer hover:text-[#1c1b1a] dark:hover:text-[#f0efe6]"
+                          className="cursor-pointer hover:text-[#16181d] dark:hover:text-[#dce0e5]"
                         >
                           <Download className="w-3 h-3" />
                         </button>
@@ -1282,7 +1282,7 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
                     />
                   )}
                   {previewKind === 'markdown' && (
-                    <div key={previewNonce} className="flex-1 w-full overflow-y-auto bg-white dark:bg-[#141413] px-5 py-4 text-sm leading-relaxed text-[#1c1b1a] dark:text-[#f0efe6] space-y-2">
+                    <div key={previewNonce} className="flex-1 w-full overflow-y-auto bg-white dark:bg-[#141413] px-5 py-4 text-sm leading-relaxed text-[#16181d] dark:text-[#dce0e5] space-y-2">
                       <ReactMarkdown components={{ img: WorkspaceMarkdownImage }}>
                         {htmlEntry.content || ''}
                       </ReactMarkdown>
@@ -1300,7 +1300,7 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
               )}
             </div>
 
-            <div className="h-6 border-t border-[#e5e3db] dark:border-[#2d2d2c] bg-white dark:bg-[#1e1e1e] flex items-center justify-between px-3 text-[10px] text-[#8c887d] dark:text-[#a09c94] shrink-0">
+            <div className="zed-statusbar h-6 border-t border-[#dfe3ea] dark:border-[#282c33] bg-white dark:bg-[#1e2128] flex items-center justify-between px-3 text-[10px] text-[#78828e] dark:text-[#a9afbc] shrink-0">
               <div className="flex items-center gap-3">
                 {truncatedNotice && <span title="Some files were hidden to keep the explorer fast">Large project — some files hidden</span>}
               </div>
@@ -1313,7 +1313,7 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
                     </span>
                     <button
                       onClick={() => setWordWrap((v) => !v)}
-                      className={`flex items-center gap-1 cursor-pointer hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] ${wordWrap ? 'text-[#d96b43]' : ''}`}
+                      className={`flex items-center gap-1 cursor-pointer hover:text-[#16181d] dark:hover:text-[#dce0e5] ${wordWrap ? 'text-[#d96b43]' : ''}`}
                       title="Toggle word wrap"
                     >
                       <WrapText className="w-3 h-3" /> Wrap

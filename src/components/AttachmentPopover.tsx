@@ -39,7 +39,7 @@ export const AttachmentPopover: React.FC<AttachmentPopoverProps> = ({
   };
 
   return (
-    <div className={`${positionClass} w-60 bg-white/95 dark:bg-[#1e1e1d]/95 backdrop-blur-md border border-[#e5e3db] dark:border-[#2d2d2c] rounded-lg shadow-xl p-1.5 z-[100] select-none absolute`}>
+    <div className={`${positionClass} w-60 bg-white/95 dark:bg-[#1e2128]/95 backdrop-blur-md border border-[#dfe3ea] dark:border-[#282c33] rounded-lg shadow-xl p-1.5 z-[100] select-none absolute`}>
       <input
         type="file"
         ref={fileInputRef}
@@ -65,18 +65,18 @@ export const AttachmentPopover: React.FC<AttachmentPopoverProps> = ({
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          className="w-full flex items-center gap-2.5 px-2.5 py-2 text-xs text-[#1c1b1a] dark:text-[#f0efe6] hover:bg-[#f5f3ec] dark:hover:bg-[#282826] rounded-xl text-left cursor-pointer blurry-hover"
+          className="w-full flex items-center gap-2.5 px-2.5 py-2 text-xs text-[#16181d] dark:text-[#dce0e5] hover:bg-[#f6f8fa] dark:hover:bg-[#1e2128] rounded-xl text-left cursor-pointer blurry-hover"
         >
-          <Paperclip className="w-4 h-4 text-[#78746a] dark:text-[#aaa]" />
+          <Paperclip className="w-4 h-4 text-[#4a5259] dark:text-[#aaa]" />
           <span>Upload document or file</span>
         </button>
 
         <button
           type="button"
           onClick={() => imageInputRef.current?.click()}
-          className="w-full flex items-center gap-2.5 px-2.5 py-2 text-xs text-[#1c1b1a] dark:text-[#f0efe6] hover:bg-[#f5f3ec] dark:hover:bg-[#282826] rounded-xl text-left cursor-pointer blurry-hover"
+          className="w-full flex items-center gap-2.5 px-2.5 py-2 text-xs text-[#16181d] dark:text-[#dce0e5] hover:bg-[#f6f8fa] dark:hover:bg-[#1e2128] rounded-xl text-left cursor-pointer blurry-hover"
         >
-          <Image className="w-4 h-4 text-[#78746a] dark:text-[#aaa]" />
+          <Image className="w-4 h-4 text-[#4a5259] dark:text-[#aaa]" />
           <span>Add image or screenshot</span>
         </button>
 

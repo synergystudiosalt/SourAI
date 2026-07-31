@@ -71,7 +71,7 @@ export const ImagePreviewCard: React.FC<ImagePreviewCardProps> = ({ prompt, url,
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.1 }}
-      className="my-4 rounded-lg border border-[#e2dec0] dark:border-[#2d2d2c] overflow-hidden bg-white dark:bg-[#1a1a19]"
+      className="my-4 rounded-lg border border-[#dfe3ea] dark:border-[#282c33] overflow-hidden bg-white dark:bg-[#17191d]"
     >
       {/* Image Container */}
       <div className="relative aspect-square overflow-hidden flex items-center justify-center">
@@ -101,8 +101,8 @@ export const ImagePreviewCard: React.FC<ImagePreviewCardProps> = ({ prompt, url,
       </div>
 
       {/* Controls Footer */}
-      <div className="flex items-center justify-between gap-3 px-4 py-3 bg-[#f4f2eb] dark:bg-[#1e1e1d] border-t border-[#e2dec0] dark:border-[#2d2d2c]">
-        <p className="text-sm text-[#6e6a5e] dark:text-[#a09c94] flex-1 truncate">
+      <div className="flex items-center justify-between gap-3 px-4 py-3 bg-[#f6f8fa] dark:bg-[#1e2128] border-t border-[#dfe3ea] dark:border-[#282c33]">
+        <p className="text-sm text-[#4a5259] dark:text-[#a9afbc] flex-1 truncate">
           {prompt}
         </p>
 
@@ -117,7 +117,7 @@ export const ImagePreviewCard: React.FC<ImagePreviewCardProps> = ({ prompt, url,
           <button
             onClick={handleCopy}
             disabled={copied}
-            className="p-2 rounded-md hover:bg-[#e8e6e0] dark:hover:bg-[#282826] transition-colors flex items-center gap-1.5 disabled:opacity-50"
+            className="p-2 rounded-md hover:bg-[#e8e6e0] dark:hover:bg-[#1e2128] transition-colors flex items-center gap-1.5 disabled:opacity-50"
             title="Copy image to clipboard"
             aria-label="Copy image"
           >
@@ -128,8 +128,8 @@ export const ImagePreviewCard: React.FC<ImagePreviewCardProps> = ({ prompt, url,
               </>
             ) : (
               <>
-                <Copy size={16} className="text-[#6e6a5e] dark:text-[#a09c94]" />
-                <span className="text-xs text-[#6e6a5e] dark:text-[#a09c94]">Copy</span>
+                <Copy size={16} className="text-[#4a5259] dark:text-[#a9afbc]" />
+                <span className="text-xs text-[#4a5259] dark:text-[#a9afbc]">Copy</span>
               </>
             )}
           </button>
@@ -137,12 +137,12 @@ export const ImagePreviewCard: React.FC<ImagePreviewCardProps> = ({ prompt, url,
           <button
             onClick={handleDownload}
             disabled={downloading}
-            className="p-2 rounded-md hover:bg-[#e8e6e0] dark:hover:bg-[#282826] transition-colors flex items-center gap-1.5 disabled:opacity-50"
+            className="p-2 rounded-md hover:bg-[#e8e6e0] dark:hover:bg-[#1e2128] transition-colors flex items-center gap-1.5 disabled:opacity-50"
             title="Download image"
             aria-label="Download image"
           >
-            <Download size={16} className="text-[#6e6a5e] dark:text-[#a09c94]" />
-            <span className="text-xs text-[#6e6a5e] dark:text-[#a09c94]">
+            <Download size={16} className="text-[#4a5259] dark:text-[#a9afbc]" />
+            <span className="text-xs text-[#4a5259] dark:text-[#a9afbc]">
               {downloading ? 'Saving...' : 'Download'}
             </span>
           </button>

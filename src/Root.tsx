@@ -67,7 +67,7 @@ function StorageBoot() {
   }, [status]);
   if (status === 'ready') return <App />;
   return (
-    <main className="flex h-screen items-center justify-center bg-[#faf9f6] p-6 text-sm text-[#706c62]">
+    <main className="flex h-screen items-center justify-center bg-[#fbfcfd] p-6 text-sm text-[#4a5259]">
       {status === 'loading'
         ? 'Opening your private browser workspace…'
         : 'Private browser storage is unavailable. Check site storage permissions and reload.'}

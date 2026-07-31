@@ -1,0 +1,179 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   Site-wide theme: zed.dev-derived palette, boxy geometry, editorial type.
+
+   The palette is sampled from zed.dev rather than invented. Its neutrals all
+   sit at oklch hue 262.882 — subtly blue-tinted rather than saturated blue —
+   which is why this reads as "blue-dark" without looking like a blue filter.
+   The accent is their lab(36.33, 31.17, -81), converted to #004edb.
+
+   Fonts are self-hosted. The app's CSP is `font-src 'self' data:`, so a remote
+   face is blocked with no error and silently falls back.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+@font-face {
+  font-family: 'iA Writer Quattro';
+  src: url('../assets/fonts/iAWriterQuattroSRegular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'iA Writer Quattro';
+  src: url('../assets/fonts/iAWriterQuattroSItalic.ttf') format('truetype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'iA Writer Quattro';
+  src: url('../assets/fonts/iAWriterQuattroSBold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'iA Writer Quattro';
+  src: url('../assets/fonts/iAWriterQuattroSBoldItalic.ttf') format('truetype');
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+
+:root {
+  --font-heading: 'IBM Plex Serif', Georgia, 'Times New Roman', serif;
+  --font-body: 'iA Writer Quattro', ui-sans-serif, system-ui, sans-serif;
+  --font-code: 'Fira Code', 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
+
+  /* Light. Same hue family as the dark ramp so the two read as one system. */
+  --z-bg: #fbfcfd;
+  --z-bg-deep: #f2f4f7;
+  --z-surface: #f6f8fa;
+  --z-surface-raised: #ffffff;
+  --z-border: #dfe3ea;
+  --z-border-strong: #c3cad6;
+  --z-text: #16181d;
+  --z-text-secondary: #4a5259;
+  --z-text-muted: #78828e;
+  --z-accent: #004edb;
+  --z-accent-hover: #0a5cf0;
+  --z-accent-soft: rgba(0, 78, 219, 0.09);
+  --z-grid-line: rgba(22, 24, 29, 0.055);
+}
+
+.dark {
+  /* Sampled from zed.dev: rgb(18,19,22) dominant, rgb(40,44,51) raised,
+     rgb(59,65,77) strong border, rgb(220,224,229) primary text. */
+  --z-bg: #121316;
+  --z-bg-deep: #0d0e11;
+  --z-surface: #17191d;
+  --z-surface-raised: #1e2128;
+  --z-border: #282c33;
+  --z-border-strong: #3b414d;
+  --z-text: #dce0e5;
+  --z-text-secondary: #a9afbc;
+  --z-text-muted: #6b7480;
+  --z-accent: #3b6ffa;
+  --z-accent-hover: #5484ff;
+  --z-accent-soft: rgba(59, 111, 250, 0.15);
+  --z-grid-line: rgba(220, 224, 229, 0.05);
+}
+
+/* ── Boxy ────────────────────────────────────────────────────────────────────
+   No rounded corners anywhere. Scoped away from genuinely round affordances —
+   spinners, avatars, toggle knobs and the like still need their radius, and
+   squaring those reads as breakage rather than as a design choice. */
+*:not(.rounded-full):not(.rounded-full *):not(svg):not(svg *) {
+  border-radius: 0 !important;
+}
+
+/* ── Type ──────────────────────────────────────────────────────────────────── */
+body {
+  font-family: var(--font-body);
+  font-feature-settings: 'kern' 1, 'liga' 1;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, h5, h6,
+.font-heading {
+  font-family: var(--font-heading);
+  font-weight: 300;
+  letter-spacing: -0.012em;
+}
+
+/* Big headings go italic — the editorial note the serif is here for. */
+h1, .font-heading-lg {
+  font-style: italic;
+  font-weight: 300;
+  letter-spacing: -0.02em;
+}
+
+code, pre, kbd, samp, .font-code {
+  font-family: var(--font-code);
+  font-variant-ligatures: contextual;
+}
+
+/* ── Grid backdrop with a fade ───────────────────────────────────────────────
+   Masked so the ruling dissolves toward the edges instead of ending on a hard
+   line. Both the -webkit- and standard mask properties are set; Safari still
+   needs the prefix. */
+.z-grid {
+  position: relative;
+  isolation: isolate;
+}
+/* The ruling has to sit behind the content. A bare ::before paints above
+   non-positioned children, so the pseudo is pinned to layer 0 and the direct
+   children are lifted above it. */
+.z-grid > * {
+  position: relative;
+  z-index: 1;
+}
+.z-grid::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(var(--z-grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--z-grid-line) 1px, transparent 1px);
+  background-size: 34px 34px;
+  -webkit-mask-image: radial-gradient(ellipse 78% 62% at 50% 42%, #000 12%, transparent 76%);
+  mask-image: radial-gradient(ellipse 78% 62% at 50% 42%, #000 12%, transparent 76%);
+}
+
+/* Fine ruling for dense panels. */
+.z-grid-fine::before {
+  background-size: 17px 17px;
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, transparent 68%);
+  mask-image: linear-gradient(180deg, #000 0%, transparent 68%);
+}
+
+/* ── Popovers, menus, tooltips ───────────────────────────────────────────────
+   These were the surfaces still carrying the old warm palette: they are
+   rendered in portals and detached layers, so they miss styles scoped to the
+   workspace subtree. Targeted by role and by the project's own class names. */
+[role='menu'],
+[role='listbox'],
+[role='dialog'],
+[role='tooltip'],
+.dropdown-item,
+.popover-surface,
+.z-popover {
+  background: var(--z-surface-raised) !important;
+  border-color: var(--z-border) !important;
+  color: var(--z-text) !important;
+}
+
+[role='menu'] button:hover,
+[role='listbox'] button:hover,
+.dropdown-item:hover,
+.z-popover button:hover {
+  background: var(--z-accent-soft) !important;
+  color: var(--z-text) !important;
+}
+
+/* The stock hover in index.css nudges and blurs; keep the motion, drop the
+   filter so it does not haze the new flat surfaces. */
+.dropdown-item:hover {
+  filter: none;
+}

@@ -179,10 +179,10 @@ export const MainPromptCard: React.FC<MainPromptCardProps> = ({
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className={`relative z-30 w-full max-w-[580px] bg-white dark:bg-[#1a1a19] rounded-2xl border ${
+      className={`relative z-30 w-full max-w-[580px] bg-white dark:bg-[#17191d] rounded-2xl border ${
         isDragging
           ? 'border-[#d96b43] ring-2 ring-[#d96b43]/20'
-          : 'border-[#e6e4dc] dark:border-[#2d2d2c]'
+          : 'border-[#e6e4dc] dark:border-[#282c33]'
       } shadow-[0_2px_12px_rgba(0,0,0,0.03)] focus-within:shadow-[0_4px_20px_rgba(0,0,0,0.06)] focus-within:border-[#c8c5ba] dark:focus-within:border-[#444] transition-all duration-200`}
     >
       {/* Input Textarea Area */}
@@ -207,7 +207,7 @@ export const MainPromptCard: React.FC<MainPromptCardProps> = ({
           onKeyDown={handleKeyDown}
           placeholder="How can I help you today?"
           rows={2}
-          className="w-full text-xs sm:text-sm text-[#1c1b1a] dark:text-[#f0efe6] placeholder-[#8d897f] dark:placeholder-[#777] outline-none resize-none bg-transparent leading-relaxed"
+          className="w-full text-xs sm:text-sm text-[#16181d] dark:text-[#dce0e5] placeholder-[#8d897f] dark:placeholder-[#777] outline-none resize-none bg-transparent leading-relaxed"
         />
       </div>
 
@@ -221,7 +221,7 @@ export const MainPromptCard: React.FC<MainPromptCardProps> = ({
               setShowAttachPopover(!showAttachPopover);
               setShowModelPopover(false);
             }}
-            className="p-1 rounded-lg text-[#6e6a5e] dark:text-[#a09c94] hover:bg-[#f4f2eb] dark:hover:bg-[#282826] hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] cursor-pointer interactable-btn"
+            className="p-1 rounded-lg text-[#4a5259] dark:text-[#a9afbc] hover:bg-[#f6f8fa] dark:hover:bg-[#1e2128] hover:text-[#16181d] dark:hover:text-[#dce0e5] cursor-pointer interactable-btn"
             title="Add attachment or code"
           >
             <Plus className="w-4.5 h-4.5 stroke-[1.75]" />
@@ -256,10 +256,10 @@ export const MainPromptCard: React.FC<MainPromptCardProps> = ({
                 setShowModelPopover(!showModelPopover);
                 setShowAttachPopover(false);
               }}
-              className="flex items-center gap-1 text-[11px] font-medium text-[#524f47] dark:text-[#b0adab] hover:text-[#1c1b1a] dark:hover:text-[#f0efe6] bg-[#f7f6f1] dark:bg-[#252524] hover:bg-[#f0ede4] dark:hover:bg-[#30302e] border border-[#e4e1d7] dark:border-[#333] rounded-lg px-2 py-0.5 cursor-pointer mr-0.5 interactable-btn"
+              className="flex items-center gap-1 text-[11px] font-medium text-[#524f47] dark:text-[#b0adab] hover:text-[#16181d] dark:hover:text-[#dce0e5] bg-[#f7f6f1] dark:bg-[#1e2128] hover:bg-[#f0ede4] dark:hover:bg-[#30302e] border border-[#e4e1d7] dark:border-[#333] rounded-lg px-2 py-0.5 cursor-pointer mr-0.5 interactable-btn"
             >
               <span>{modelDisplayName}</span>
-              <ChevronDown className="w-3 h-3 text-[#78746a] dark:text-[#999]" />
+              <ChevronDown className="w-3 h-3 text-[#4a5259] dark:text-[#999]" />
             </button>
 
             <AnimatePresence>
@@ -290,7 +290,7 @@ export const MainPromptCard: React.FC<MainPromptCardProps> = ({
             className={`p-1 rounded-lg cursor-pointer interactable-btn ${
               isRecording
                 ? 'bg-red-100 text-red-600 animate-pulse'
-                : 'text-[#6e6a5e] dark:text-[#a09c94] hover:bg-[#f4f2eb] dark:hover:bg-[#282826] hover:text-[#1c1b1a] dark:hover:text-[#f0efe6]'
+                : 'text-[#4a5259] dark:text-[#a9afbc] hover:bg-[#f6f8fa] dark:hover:bg-[#1e2128] hover:text-[#16181d] dark:hover:text-[#dce0e5]'
             }`}
             title={isRecording ? 'Listening...' : 'Voice Dictation'}
           >
@@ -328,8 +328,8 @@ export const MainPromptCard: React.FC<MainPromptCardProps> = ({
 
       {/* Message Limit & Upgrade Banner inside card (only shown if limit reached) */}
       {isLimitReached && (
-        <div className="border-t border-[#f0eee6] dark:border-[#2d2d2c] px-3.5 py-2 flex items-center justify-between text-xs text-[#6e6a5e] dark:text-[#a09c94] bg-[#fcfbf9] dark:bg-[#222221] rounded-b-2xl">
-          <span className="truncate pr-2 font-medium text-[#78746a] dark:text-[#aaa] text-[11px]">
+        <div className="border-t border-[#f0eee6] dark:border-[#282c33] px-3.5 py-2 flex items-center justify-between text-xs text-[#4a5259] dark:text-[#a9afbc] bg-[#fcfbf9] dark:bg-[#222221] rounded-b-2xl">
+          <span className="truncate pr-2 font-medium text-[#4a5259] dark:text-[#aaa] text-[11px]">
             Message limit reached ({MESSAGE_QUOTA}/{MESSAGE_QUOTA})
           </span>
           <LimitTimer targetTime={limitResetTime || null} onReset={onResetLimit} />

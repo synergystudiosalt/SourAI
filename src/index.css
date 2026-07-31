@@ -56,7 +56,7 @@
 
 .agent-active-gradient {
   display: inline-block;
-  color: #8c887d;
+  color: #78828e;
 }
 
 @supports ((background-clip: text) or (-webkit-background-clip: text)) {
@@ -316,8 +316,8 @@ body {
 }
 
 html.dark body {
-  color: #f0efe6;
-  background-color: #121212;
+  color: #dce0e5;
+  background-color: #121316;
 }
 
 html:not(.dark) body {
@@ -327,9 +327,9 @@ html:not(.dark) body {
 }
 
 html.dark body {
-  color: #f0efe6;
-  background-color: #121212;
-  --logo-bg-shade: #121212;
+  color: #dce0e5;
+  background-color: #121316;
+  --logo-bg-shade: #121316;
 }
 
 /* Tactile interactive hover & active click shrink animations */
@@ -458,82 +458,56 @@ html.dark body {
   transform: translateX(2px) scale(0.98);
 }
 
-/* ── Zed-inspired blue-dark workspace chrome ──────────────────────────────────
-   Scoped to .zed-workspace so it restyles the editor surface without touching
-   the rest of the app. Light is the base and .dark is the override, because
-   the theme class sits on the App root div rather than <html>; a
-   `html:not(.dark)` style would match in both themes. */
+/* ── Workspace chrome ────────────────────────────────────────────────────────
+   Depth runs the way Zed's does: the editor is the focal, lightest surface and
+   the chrome recedes darker, so the agent panel and file explorer sit behind
+   the code rather than competing with it.
+
+   Tokens come from styles/zedTheme.css so the workspace and the rest of the
+   site stay one palette. Light is the base and .dark the override, because the
+   theme class sits on the App root div rather than <html>. */
 .zed-workspace {
-  --zed-bg: #f7f9fc;
-  --zed-panel: #eef2f9;
-  --zed-panel-raised: #ffffff;
-  --zed-border: #d8e0ee;
-  --zed-muted: #6b7794;
-  --zed-text: #232a3d;
-  --zed-accent: #3d6fd6;
-  --zed-accent-soft: rgba(61, 111, 214, 0.11);
-  font-family: 'Fira Code', 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
-  font-variant-ligatures: contextual;
+  background: var(--z-bg-deep);
+  color: var(--z-text);
+  font-family: var(--font-body);
 }
 
-.dark .zed-workspace {
-  --zed-bg: #0d111b;
-  --zed-panel: #10141f;
-  --zed-panel-raised: #161c2c;
-  --zed-border: #232b40;
-  --zed-muted: #7d88a8;
-  --zed-text: #c0caf5;
-  --zed-accent: #7aa2f7;
-  --zed-accent-soft: rgba(122, 162, 247, 0.14);
-}
-
-.zed-workspace,
+/* !important beats the Tailwind arbitrary-value utilities already on these
+   elements without rewriting every call site. */
 .zed-editor-surface {
-  background: var(--zed-bg);
-  color: var(--zed-text);
+  background: var(--z-surface-raised) !important;
 }
 
-/* Panel chrome. !important is needed to win over the Tailwind utility classes
-   already on these elements without rewriting every call site. */
 .zed-titlebar,
 .zed-tabbar,
-.zed-statusbar,
-.zed-agent-panel,
-.zed-file-explorer {
-  background: var(--zed-panel) !important;
-  border-color: var(--zed-border) !important;
-  color: var(--zed-text);
+.zed-statusbar {
+  background: var(--z-surface) !important;
+  border-color: var(--z-border) !important;
+  color: var(--z-text-secondary);
 }
 
-.zed-tab {
-  color: var(--zed-muted);
-  border-color: transparent;
-  font-size: 12px;
-  transition: color 120ms ease, background-color 120ms ease;
-}
-.zed-tab:hover {
-  color: var(--zed-text);
-  background: var(--zed-accent-soft);
-}
-.zed-tab[data-active='true'] {
-  color: var(--zed-text);
-  background: var(--zed-bg);
-  border-bottom-color: var(--zed-accent);
+.zed-agent-panel,
+.zed-file-explorer {
+  background: var(--z-bg) !important;
+  border-color: var(--z-border) !important;
+  color: var(--z-text);
 }
 
 .zed-statusbar {
   font-size: 11px;
   letter-spacing: 0.02em;
-  color: var(--zed-muted);
+  color: var(--z-text-muted) !important;
 }
 
-/* Ligatures are the reason to pick Fira Code; make sure the editor keeps them. */
 .zed-workspace .cm-editor,
 .zed-workspace .cm-content {
-  font-family: 'Fira Code', 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
+  font-family: var(--font-code);
   font-variant-ligatures: contextual;
 }
-
 .zed-workspace .cm-editor.cm-focused {
   outline: none;
+}
+
+.zed-shell:has(.zed-workspace) {
+  background: var(--z-bg-deep) !important;
 }

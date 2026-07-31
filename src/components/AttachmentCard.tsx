@@ -46,24 +46,24 @@ export const AttachmentCard: React.FC<AttachmentCardProps> = ({ item, onRemove, 
       {/* Card Content Body */}
       {hasImagePreview ? (
         <div className="flex flex-col h-full justify-between gap-2">
-          <div className="w-full h-20 rounded-lg overflow-hidden border border-[#eae8e0] dark:border-[#2d2d2c] bg-[#f8f7f2] dark:bg-[#252524] flex items-center justify-center">
+          <div className="w-full h-20 rounded-lg overflow-hidden border border-[#eae8e0] dark:border-[#282c33] bg-[#f8f7f2] dark:bg-[#1e2128] flex items-center justify-center">
             <img src={item.dataUrl} alt={item.name} className="w-full h-full object-cover" />
           </div>
           <div className="flex flex-col gap-1">
-            <span className="text-[11px] font-medium text-[#1c1b1a] dark:text-[#f0efe6] truncate leading-tight">
+            <span className="text-[11px] font-medium text-[#16181d] dark:text-[#dce0e5] truncate leading-tight">
               {item.name}
             </span>
-            <span className="self-start text-[9px] font-semibold text-[#524f47] dark:text-[#a09c94] bg-[#f5f3ec] dark:bg-[#282827] border border-[#e0ddd2] dark:border-[#3a3a38] px-1.5 py-0.5 rounded-md uppercase tracking-wider">
+            <span className="self-start text-[9px] font-semibold text-[#524f47] dark:text-[#a9afbc] bg-[#f6f8fa] dark:bg-[#282827] border border-[#e0ddd2] dark:border-[#3a3a38] px-1.5 py-0.5 rounded-md uppercase tracking-wider">
               {ext}
             </span>
           </div>
         </div>
       ) : (
         <div className="flex flex-col justify-between h-full min-h-[80px] gap-3">
-          <span className="text-xs font-medium text-[#1c1b1a] dark:text-[#f0efe6] line-clamp-3 leading-snug break-words">
+          <span className="text-xs font-medium text-[#16181d] dark:text-[#dce0e5] line-clamp-3 leading-snug break-words">
             {item.name}
           </span>
-          <span className="self-start text-[10px] font-semibold text-[#524f47] dark:text-[#a09c94] bg-[#f5f3ec] dark:bg-[#282827] border border-[#e0ddd2] dark:border-[#3a3a38] px-2 py-0.5 rounded-md uppercase tracking-wider">
+          <span className="self-start text-[10px] font-semibold text-[#524f47] dark:text-[#a9afbc] bg-[#f6f8fa] dark:bg-[#282827] border border-[#e0ddd2] dark:border-[#3a3a38] px-2 py-0.5 rounded-md uppercase tracking-wider">
             {ext}
           </span>
         </div>

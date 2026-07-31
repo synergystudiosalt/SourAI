@@ -100,17 +100,17 @@ const DefaultErrorPanel: React.FC<{ error: SourError; label?: string; onReset: (
   return (
     <div
       role="alert"
-      className="flex h-full w-full flex-col items-center justify-center gap-4 p-8 text-center text-[#1c1b1a] dark:text-[#f0efe6]"
+      className="flex h-full w-full flex-col items-center justify-center gap-4 p-8 text-center text-[#16181d] dark:text-[#dce0e5]"
     >
       <div className="max-w-md space-y-3">
         <h2 className="text-base font-semibold">
           {label ? `${label} stopped responding` : 'Something stopped responding'}
         </h2>
-        <p className="text-sm leading-relaxed text-[#706c62] dark:text-[#a09d98]">{error.message}</p>
+        <p className="text-sm leading-relaxed text-[#4a5259] dark:text-[#a9afbc]">{error.message}</p>
         {error.userAction && (
-          <p className="text-sm leading-relaxed text-[#706c62] dark:text-[#a09d98]">{error.userAction}</p>
+          <p className="text-sm leading-relaxed text-[#4a5259] dark:text-[#a9afbc]">{error.userAction}</p>
         )}
-        <p className="font-mono text-[11px] text-[#8c887d] dark:text-[#666]">
+        <p className="font-mono text-[11px] text-[#78828e] dark:text-[#666]">
           {error.causeCategory} · {error.code}
         </p>
       </div>
@@ -119,27 +119,27 @@ const DefaultErrorPanel: React.FC<{ error: SourError; label?: string; onReset: (
         <button
           type="button"
           onClick={onReset}
-          className="rounded-lg bg-[#1c1b1a] px-3 py-1.5 text-xs font-medium text-white dark:bg-[#f0efe6] dark:text-[#1c1b1a]"
+          className="rounded-lg bg-[#16181d] px-3 py-1.5 text-xs font-medium text-white dark:bg-[#dce0e5] dark:text-[#16181d]"
         >
           Try again
         </button>
         <button
           type="button"
           onClick={handleCopy}
-          className="rounded-lg border border-[#e2dec0] px-3 py-1.5 text-xs font-medium dark:border-[#383836]"
+          className="rounded-lg border border-[#dfe3ea] px-3 py-1.5 text-xs font-medium dark:border-[#3b414d]"
         >
           {copied ? 'Copied' : 'Copy error details'}
         </button>
         <button
           type="button"
           onClick={() => window.location.reload()}
-          className="rounded-lg border border-[#e2dec0] px-3 py-1.5 text-xs font-medium dark:border-[#383836]"
+          className="rounded-lg border border-[#dfe3ea] px-3 py-1.5 text-xs font-medium dark:border-[#3b414d]"
         >
           Reload
         </button>
       </div>
 
-      <p className="max-w-md text-[11px] leading-relaxed text-[#8c887d] dark:text-[#666]">
+      <p className="max-w-md text-[11px] leading-relaxed text-[#78828e] dark:text-[#666]">
         Your local projects and conversations are unaffected. Copied details are secret-redacted before they leave this
         screen.
       </p>

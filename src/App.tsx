@@ -146,7 +146,7 @@ export default function App() {
     };
     console.log(
       '%c sour.ai %c Type sourai.reset() in this console to wipe local data while keeping your message quota.',
-      'background:#1c1b1a;color:#fff;padding:2px 6px;border-radius:4px;font-weight:bold;',
+      'background:#16181d;color:#fff;padding:2px 6px;border-radius:4px;font-weight:bold;',
       'color:inherit;'
     );
     return () => {
@@ -559,7 +559,7 @@ export default function App() {
   }, [activeView]);
 
   return (
-    <div className={`h-screen w-screen overflow-hidden flex flex-row ${isDarkMode ? 'dark bg-[#121212] text-[#f0efe6]' : 'bg-[#faf9f6] text-[#1c1b1a]'} antialiased`}>
+    <div className={`zed-shell h-screen w-screen overflow-hidden flex flex-row ${isDarkMode ? 'dark bg-[#121316] text-[#dce0e5]' : 'bg-[#fbfcfd] text-[#16181d]'} antialiased`}>
       {/* Left Icon Sidebar + Drawer */}
       <LeftSidebar
         onNewChat={() => {
@@ -582,7 +582,7 @@ export default function App() {
       />
 
       {/* Main Container Area */}
-      <div className="flex-1 h-screen flex flex-col justify-between overflow-hidden relative bg-[#faf9f6] dark:bg-[#121212] text-[#1c1b1a] dark:text-[#f0efe6] transition-colors duration-200">
+      <div className="zed-shell z-grid flex-1 h-screen flex flex-col justify-between overflow-hidden relative bg-[#fbfcfd] dark:bg-[#121316] text-[#16181d] dark:text-[#dce0e5] transition-colors duration-200">
         {/* Top Bar Navigation */}
         {activeView !== 'code' && (
           <TopBar />
@@ -663,7 +663,7 @@ export default function App() {
 
         {/* Bottom subtle attribution / disclaimer text */}
         {activeView !== 'code' && !activeConversation && (
-          <div className="py-1.5 text-center text-[10px] text-[#8c887d] dark:text-[#666] select-none">
+          <div className="py-1.5 text-center text-[10px] text-[#78828e] dark:text-[#666] select-none">
             sour.ai can make mistakes. Verify important info.
           </div>
         )}
@@ -687,7 +687,7 @@ export default function App() {
             initial={{ opacity: 0, y: -20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -20, scale: 0.95 }}
-            className="fixed top-4 left-1/2 -translate-x-1/2 z-[200] bg-[#1c1b1a] text-white dark:bg-[#f0efe6] dark:text-[#1c1b1a] text-xs font-mono font-medium px-4 py-2 rounded-xl shadow-2xl border border-amber-500/40 flex items-center gap-2 select-none"
+            className="fixed top-4 left-1/2 -translate-x-1/2 z-[200] bg-[#16181d] text-white dark:bg-[#dce0e5] dark:text-[#16181d] text-xs font-mono font-medium px-4 py-2 rounded-xl shadow-2xl border border-amber-500/40 flex items-center gap-2 select-none"
           >
             <span>{devToast}</span>
           </motion.div>
