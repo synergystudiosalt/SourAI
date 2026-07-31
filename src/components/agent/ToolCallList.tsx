@@ -278,7 +278,7 @@ export const ToolCallList: React.FC<ToolCallListProps> = ({
             </span>
             {!isReading && (
               <ChevronDown
-                className={`w-3 h-3 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+                className={`w-3 h-3 transition-transform duration-[var(--z-motion)] ${isOpen ? 'rotate-180' : ''}`}
               />
             )}
           </button>

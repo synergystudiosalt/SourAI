@@ -183,7 +183,7 @@ export const MainPromptCard: React.FC<MainPromptCardProps> = ({
         isDragging
           ? 'border-[#4776d5] ring-2 ring-[#4776d5]/20'
           : 'border-[#dcdfe6] dark:border-[#282c33]'
-      } shadow-[0_2px_12px_rgba(0,0,0,0.03)] focus-within:shadow-[0_4px_20px_rgba(0,0,0,0.06)] focus-within:border-[#bdc0c5] dark:focus-within:border-[#444] transition-all duration-200`}
+      } shadow-[0_2px_12px_rgba(0,0,0,0.03)] focus-within:shadow-[0_4px_20px_rgba(0,0,0,0.06)] focus-within:border-[#bdc0c5] dark:focus-within:border-[#444] transition-all duration-[var(--z-motion)]`}
     >
       {/* Input Textarea Area */}
       <div className="p-3.5">

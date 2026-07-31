@@ -582,7 +582,7 @@ export default function App() {
       />
 
       {/* Main Container Area */}
-      <div className="zed-shell z-grid flex-1 h-screen flex flex-col justify-between overflow-hidden relative bg-[#fbfcfd] dark:bg-[#121316] text-[#16181d] dark:text-[#dce0e5] transition-colors duration-200">
+      <div className="zed-shell z-grid flex-1 h-screen flex flex-col justify-between overflow-hidden relative bg-[#fbfcfd] dark:bg-[#121316] text-[#16181d] dark:text-[#dce0e5] transition-colors duration-[var(--z-motion)]">
         {/* Top Bar Navigation */}
         {activeView !== 'code' && (
           <TopBar />

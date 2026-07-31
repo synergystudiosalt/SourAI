@@ -13,7 +13,7 @@ import { AgentPanel } from './workspace/AgentPanel';
 import { AgentFileOp, WorkspaceFileNode, WorkspaceTab } from '../types';
 import {
   upsertFile, upsertFolder, removeNode, renameNode, updateNode, findNode,
-  listFiles, generateUniquePath, joinPath, isDescendantOrSelf, getBaseName,
+  listFiles, generateUniquePath, joinPath, isDescendantOrSelf, getBaseName, getParentPath,
 } from '../utils/workspaceFs';
 import {
   isDirectoryPickerSupported, pickDirectory, scanDirectoryTree, readRealFile,
@@ -728,6 +728,77 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
     setActiveTabPath((prev) => (isDescendantOrSelf(prev, path) ? newPath + prev.slice(path.length) : prev));
   };
 
+  /**
+   * Moves a node under a new parent, for drag-and-drop in the explorer.
+   *
+   * Rejects the moves that would corrupt the tree rather than letting them
+   * through: a folder cannot be dropped inside itself or its own descendants
+   * (which would detach that whole subtree), and a drop back into the current
+   * parent is a no-op rather than a rename to "name 2".
+   *
+   * Real on-disk projects are refused for the same reason renaming is: there is
+   * no conflict-checked filesystem transaction yet, and a half-applied move
+   * across a directory boundary loses files.
+   */
+  const handleMoveNode = (sourcePath: string, targetFolderPath: string) => {
+    const node = findNode(tree, sourcePath);
+    if (!node) return;
+
+    if (node.type === 'folder' && isDescendantOrSelf(targetFolderPath, sourcePath)) return;
+    if (getParentPath(sourcePath) === targetFolderPath) return;
+    if (targetFolderPath) {
+      const target = findNode(tree, targetFolderPath);
+      if (!target || target.type !== 'folder') return;
+    }
+
+    if (activeProject?.isReal && rootDirHandleRef.current) {
+      alert(
+        'Moving items in a real folder is temporarily disabled until safe, conflict-checked filesystem transactions are available.'
+      );
+      return;
+    }
+
+    const desiredPath = joinPath(targetFolderPath, getBaseName(sourcePath));
+    const newPath = generateUniquePath(removeNode(tree, sourcePath), desiredPath);
+
+    const detached = removeNode(tree, sourcePath);
+    const reattached =
+      node.type === 'folder'
+        ? upsertFolder(detached, newPath)
+        : upsertFile(detached, newPath, node.content ?? '');
+
+    // A folder carries its contents with it; each descendant is re-created at
+    // the path it now sits under.
+    let nextTree = reattached;
+    if (node.type === 'folder') {
+      for (const file of listFiles([node])) {
+        nextTree = upsertFile(
+          nextTree,
+          newPath + file.path.slice(sourcePath.length),
+          file.content ?? ''
+        );
+      }
+    }
+    setTree(nextTree);
+
+    // Open tabs follow the move, or they point at paths that no longer exist.
+    setOpenTabs((prev) =>
+      dedupeWorkspaceTabs(
+        prev.map((t) =>
+          isDescendantOrSelf(t.path, sourcePath)
+            ? { ...t, path: newPath + t.path.slice(sourcePath.length) }
+            : t
+        ),
+        isDescendantOrSelf(activeTabPath, sourcePath)
+          ? newPath + activeTabPath.slice(sourcePath.length)
+          : activeTabPath
+      )
+    );
+    setActiveTabPath((prev) =>
+      isDescendantOrSelf(prev, sourcePath) ? newPath + prev.slice(sourcePath.length) : prev
+    );
+  };
+
   const handleDelete = async (path: string) => {
     const node = findNode(tree, path);
     if (!node) return;
@@ -1343,6 +1414,7 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
               onCreateFile={handleCreateFile}
               onCreateFolder={handleCreateFolder}
               onRename={handleRename}
+              onMoveNode={handleMoveNode}
               onDelete={handleDelete}
               onDownload={handleDownloadFile}
               onUploadFiles={handleUploadFiles}

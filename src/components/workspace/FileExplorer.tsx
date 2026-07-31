@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { WorkspaceFileNode } from '../../types';
 import { getFileIconMeta } from '../../utils/languageMeta';
-import { getBaseName } from '../../utils/workspaceFs';
+import { getBaseName, getParentPath, isDescendantOrSelf } from '../../utils/workspaceFs';
 
 interface FileExplorerProps {
   projectName: string;
@@ -17,6 +17,7 @@ interface FileExplorerProps {
   onCreateFile: (parentPath: string, name: string) => void;
   onCreateFolder: (parentPath: string, name: string) => void;
   onRename: (path: string, newName: string) => void;
+  onMoveNode: (sourcePath: string, targetFolderPath: string) => void;
   onDelete: (path: string) => void;
   onDownload: (path: string) => void;
   onUploadFiles: (parentPath: string, files: File[]) => void;
@@ -44,6 +45,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   onCreateFile,
   onCreateFolder,
   onRename,
+  onMoveNode,
   onDelete,
   onDownload,
   onUploadFiles,
@@ -57,6 +59,8 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   const [pendingCreate, setPendingCreate] = useState<PendingCreate | null>(null);
   const [createValue, setCreateValue] = useState('');
   const [menu, setMenu] = useState<MenuState | null>(null);
+  const [dragPath, setDragPath] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const uploadTargetRef = useRef('');
@@ -196,11 +200,48 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
     return (
       <div key={node.path}>
         <div
+          draggable
+          onDragStart={(e) => {
+            e.stopPropagation();
+            setDragPath(node.path);
+            e.dataTransfer.effectAllowed = 'move';
+            // Some browsers cancel a drag with no payload attached.
+            e.dataTransfer.setData('text/plain', node.path);
+          }}
+          onDragEnd={() => { setDragPath(null); setDropTarget(null); }}
+          onDragOver={(e) => {
+            if (!dragPath) return;
+            // Files drop into their parent folder; folders accept directly.
+            const target = isFolder ? node.path : getParentPath(node.path);
+            if (dragPath === target) return;
+            if (getParentPath(dragPath) === target) return;  // already there
+            if (isDescendantOrSelf(target, dragPath)) return;  // no folder into itself
+            e.preventDefault();
+            e.stopPropagation();
+            e.dataTransfer.dropEffect = 'move';
+            setDropTarget(target);
+          }}
+          onDragLeave={(e) => { e.stopPropagation(); setDropTarget(null); }}
+          onDrop={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const target = isFolder ? node.path : getParentPath(node.path);
+            if (
+              dragPath &&
+              dragPath !== target &&
+              getParentPath(dragPath) !== target &&
+              !isDescendantOrSelf(target, dragPath)
+            ) {
+              onMoveNode(dragPath, target);
+            }
+            setDragPath(null);
+            setDropTarget(null);
+          }}
           onClick={() => (isFolder ? toggleExpand(node.path) : onOpenFile(node.path))}
           onContextMenu={(e) => openNodeMenu(e, node)}
           onDoubleClick={() => beginRename(node)}
           style={{ paddingLeft: depth * 14 + 8 }}
-          className={`group w-full flex items-center justify-between pr-1.5 py-1 text-xs cursor-pointer ws-file-item ws-clickable ${
+          className={`group w-full flex items-center justify-between pr-1.5 py-1 text-xs cursor-pointer ws-file-item ws-clickable ${dragPath === node.path ? 'opacity-40' : ''} ${dropTarget === (isFolder ? node.path : getParentPath(node.path)) ? 'ring-1 ring-inset ring-[#4776d5]' : ''} ${
             isActive
               ? 'bg-[#dde7f7] dark:bg-[#1b2338] text-[#16181d] dark:text-[#dce0e5]'
               : 'text-[#4a5259] dark:text-[#a9afbc] hover:bg-[#e8effb] dark:hover:bg-[#1b2338] hover:text-[#16181d] dark:hover:text-[#dce0e5]'
@@ -289,7 +330,10 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   }
 
   return (
-    <div className="zed-file-explorer z-grid z-grid-fine w-56 border-l border-[#dfe3ea] dark:border-[#282c33] flex flex-col bg-[#fbfcfd] dark:bg-[#1e2128] select-none shrink-0">
+    <div
+      onDragOver={(e) => { if (dragPath && getParentPath(dragPath) !== '') { e.preventDefault(); setDropTarget(''); } }}
+      onDrop={(e) => { e.preventDefault(); if (dragPath && getParentPath(dragPath) !== '') onMoveNode(dragPath, ''); setDragPath(null); setDropTarget(null); }}
+      className="zed-file-explorer z-grid z-grid-fine w-56 border-l border-[#dfe3ea] dark:border-[#282c33] flex flex-col bg-[#fbfcfd] dark:bg-[#1e2128] select-none shrink-0">
       <div className="px-3 py-2 border-b border-[#dfe3ea] dark:border-[#282c33] flex items-center justify-between">
         <span
           className="text-[11px] font-semibold text-[#78828e] dark:text-[#a9afbc] uppercase tracking-wide truncate"

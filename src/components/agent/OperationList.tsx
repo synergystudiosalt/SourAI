@@ -57,7 +57,7 @@ export const OperationList: React.FC<OperationListProps> = ({
             </span>
             {!isCoding && (
               <ChevronDown
-                className={`w-3 h-3 transition-transform duration-200 shrink-0 text-[#78828e] ${isOpen ? 'rotate-180' : ''}`}
+                className={`w-3 h-3 transition-transform duration-[var(--z-motion)] shrink-0 text-[#78828e] ${isOpen ? 'rotate-180' : ''}`}
               />
             )}
           </button>

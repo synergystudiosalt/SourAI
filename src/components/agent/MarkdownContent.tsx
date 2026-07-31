@@ -336,7 +336,7 @@ const ExpandableTag: React.FC<ExpandableTagProps> = ({
           {activeLabel}
         </span>
         <ChevronDown
-          className={`w-3 h-3 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+          className={`w-3 h-3 transition-transform duration-[var(--z-motion)] ${isOpen ? 'rotate-180' : ''}`}
         />
       </button>
       <AnimatePresence>
@@ -403,7 +403,7 @@ export const RawModelResponse: React.FC<RawModelResponseProps> = ({
       >
         <span className="min-w-0 truncate">Raw model response (for diagnosis)</span>
         <ChevronDown
-          className={`w-3 h-3 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+          className={`w-3 h-3 transition-transform duration-[var(--z-motion)] ${isOpen ? 'rotate-180' : ''}`}
         />
       </button>
       <AnimatePresence>

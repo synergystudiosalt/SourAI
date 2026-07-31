@@ -40,6 +40,12 @@
 }
 
 :root {
+  /* One duration for every state change, one for every looping sweep, so
+     nothing in the UI beats at its own tempo. */
+  --z-motion: 130ms;
+  --z-motion-ease: cubic-bezier(0.2, 0, 0, 1);
+  --z-sweep: 2.1s;
+
   --font-heading: 'IBM Plex Serif', Georgia, 'Times New Roman', serif;
   --font-body: 'iA Writer Quattro', ui-sans-serif, system-ui, sans-serif;
   --font-code: 'Fira Code', 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
@@ -165,11 +171,11 @@ code, pre, kbd, samp, .font-code {
 button, a, [role='button'], input, textarea, select,
 .zed-tab, .dropdown-item, .interactable-btn, .ws-toolbar-btn {
   transition:
-    background-color 110ms cubic-bezier(0.2, 0, 0, 1),
-    border-color 110ms cubic-bezier(0.2, 0, 0, 1),
-    color 110ms cubic-bezier(0.2, 0, 0, 1),
-    opacity 110ms cubic-bezier(0.2, 0, 0, 1),
-    transform 130ms cubic-bezier(0.34, 1.4, 0.64, 1);
+    background-color var(--z-motion) var(--z-motion-ease),
+    border-color var(--z-motion) var(--z-motion-ease),
+    color var(--z-motion) var(--z-motion-ease),
+    opacity var(--z-motion) var(--z-motion-ease),
+    transform var(--z-motion) cubic-bezier(0.34, 1.4, 0.64, 1);
 }
 
 button:active, [role='button']:active, .interactable-btn:active {

@@ -199,7 +199,7 @@ export const QuestionBox: React.FC<QuestionBoxProps> = ({ questions, onAnswer, o
                   initial={{ opacity: 0, x: -4 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: idx * 0.03 }}
-                  className={`w-full flex items-center gap-2.5 h-[36px] sm:h-[38px] px-2.5 rounded-lg transition-all duration-150
+                  className={`w-full flex items-center gap-2.5 h-[36px] sm:h-[38px] px-2.5 rounded-lg transition-all duration-[var(--z-motion)]
                     ${isSelectedRow
                       ? 'bg-[#f2f2f2] dark:bg-[#1e2128]'
                       : isHighlighted && !selected
@@ -209,7 +209,7 @@ export const QuestionBox: React.FC<QuestionBoxProps> = ({ questions, onAnswer, o
                     ${isDisabled && !isSelectedRow ? 'opacity-40 cursor-default' : 'cursor-pointer'}
                   `}
                 >
-                  <span className={`w-6 h-6 flex items-center justify-center rounded-md text-[11px] font-semibold shrink-0 transition-all duration-150
+                  <span className={`w-6 h-6 flex items-center justify-center rounded-md text-[11px] font-semibold shrink-0 transition-all duration-[var(--z-motion)]
                     ${isSelectedRow
                       ? 'bg-[#dadbde] dark:bg-[#38393a] text-[#16181d] dark:text-[#dce0e5]'
                       : isHighlighted && !selected
@@ -220,7 +220,7 @@ export const QuestionBox: React.FC<QuestionBoxProps> = ({ questions, onAnswer, o
                     {idx + 1}
                   </span>
 
-                  <span className={`text-[13px] font-medium flex-1 text-left transition-colors duration-150 truncate
+                  <span className={`text-[13px] font-medium flex-1 text-left transition-colors duration-[var(--z-motion)] truncate
                     ${isSelectedRow
                       ? 'text-[#16181d] dark:text-[#dce0e5]'
                       : isHighlighted && !selected

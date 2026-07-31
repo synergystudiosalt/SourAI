@@ -86,7 +86,7 @@ export const ImagePreviewCard: React.FC<ImagePreviewCardProps> = ({ prompt, url,
         <img
           src={url}
           alt={prompt}
-          className={`max-w-full max-h-full object-contain transition-opacity duration-300 ${loaded ? 'opacity-100' : 'opacity-0'}`}
+          className={`max-w-full max-h-full object-contain transition-opacity duration-[var(--z-motion)] ${loaded ? 'opacity-100' : 'opacity-0'}`}
           loading="lazy"
           onLoad={() => setLoaded(true)}
           onError={() => setLoaded(true)}

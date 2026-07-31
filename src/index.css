@@ -77,7 +77,7 @@
     -webkit-background-clip: text;
     color: transparent;
     -webkit-text-fill-color: transparent;
-    animation: agentTextSweep 2.1s linear infinite;
+    animation: agentTextSweep var(--z-sweep) linear infinite;
   }
 
   .dark .agent-active-gradient {
@@ -312,7 +312,7 @@
 body {
   font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
   overflow: hidden;
-  transition: background-color 0.2s ease, color 0.2s ease;
+  transition: background-color var(--z-motion) ease, color 0.2s ease;
 }
 
 html.dark body {
@@ -334,7 +334,7 @@ html.dark body {
 
 /* Tactile interactive hover & active click shrink animations */
 .interactable-btn {
-  transition: transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.1), filter 0.2s ease, opacity 0.2s ease, background-color 0.15s ease, border-color 0.15s ease !important;
+  transition: transform var(--z-motion) cubic-bezier(0.175, 0.885, 0.32, 1.1), filter 0.2s ease, opacity 0.2s ease, background-color 0.15s ease, border-color 0.15s ease !important;
 }
 .interactable-btn:hover {
   filter: brightness(1.02) contrast(1.02);
@@ -345,7 +345,7 @@ html.dark body {
 
 /* Smooth blurry hover effects for interactive elements */
 .blurry-hover {
-  transition: filter 0.22s cubic-bezier(0.4,0,0.2,1), opacity 0.22s ease, transform 0.18s cubic-bezier(0.4,0,0.2,1), background-color 0.18s ease, color 0.18s ease !important;
+  transition: filter var(--z-motion) cubic-bezier(0.4,0,0.2,1), opacity 0.22s ease, transform 0.18s cubic-bezier(0.4,0,0.2,1), background-color 0.18s ease, color 0.18s ease !important;
 }
 .blurry-hover:hover {
   filter: blur(0.2px) brightness(1.03);
@@ -358,7 +358,7 @@ html.dark body {
 
 /* Enhanced smooth blurry animation for workspace clickables */
 .ws-clickable {
-  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+  transition: all var(--z-motion) cubic-bezier(0.34, 1.56, 0.64, 1) !important;
   position: relative;
 }
 .ws-clickable:hover {
@@ -372,7 +372,7 @@ html.dark body {
 
 /* Smooth blur effect for buttons with animation */
 .ws-button-smooth {
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  transition: all var(--z-motion) cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 .ws-button-smooth:hover {
   filter: blur(0.1px) brightness(1.05);
@@ -385,7 +385,7 @@ html.dark body {
 
 /* Workspace tab transitions with smooth blur effects */
 .ws-tab {
-  transition: background-color 0.18s cubic-bezier(0.4, 0, 0.2, 1), color 0.18s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.18s cubic-bezier(0.4, 0, 0.2, 1), filter 0.18s ease !important;
+  transition: background-color var(--z-motion) cubic-bezier(0.4, 0, 0.2, 1), color 0.18s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.18s cubic-bezier(0.4, 0, 0.2, 1), filter 0.18s ease !important;
 }
 .ws-tab:hover {
   filter: blur(0.1px) brightness(1.02);
@@ -396,12 +396,12 @@ html.dark body {
 
 /* File explorer item transitions with smooth blur */
 .ws-file-item {
-  transition: background-color 0.15s cubic-bezier(0.4, 0, 0.2, 1), color 0.15s cubic-bezier(0.4, 0, 0.2, 1), filter 0.15s ease, transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+  transition: background-color var(--z-motion) cubic-bezier(0.4, 0, 0.2, 1), color 0.15s cubic-bezier(0.4, 0, 0.2, 1), filter 0.15s ease, transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
 }
 
 /* Toolbar button transitions */
 .ws-toolbar-btn {
-  transition: background-color 0.15s cubic-bezier(0.4, 0, 0.2, 1), color 0.15s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.15s cubic-bezier(0.4, 0, 0.2, 1), transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.12s ease !important;
+  transition: background-color var(--z-motion) cubic-bezier(0.4, 0, 0.2, 1), color 0.15s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.15s cubic-bezier(0.4, 0, 0.2, 1), transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.12s ease !important;
 }
 .ws-toolbar-btn:hover {
   transform: translateY(-0.5px) scale(1.02);
@@ -447,7 +447,7 @@ html.dark body {
 
 /* Smooth transitions for dropdown and selection items */
 .dropdown-item {
-  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  transition: all var(--z-motion) cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 .dropdown-item:hover {
   filter: blur(0.05px) brightness(1.02);

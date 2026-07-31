@@ -69,7 +69,7 @@ export const GlobalContextMenu: React.FC<GlobalContextMenuProps> = ({ isDarkMode
     <div
       ref={menuRef}
       style={{ position: 'fixed', top: menu.y, left: menu.x }}
-      className="z-[300] w-44 bg-white/95 dark:bg-[#1e2128]/95 backdrop-blur-md border border-[#c3cad6] dark:border-[#3b414d] rounded-xl shadow-xl p-1 space-y-0.5 animate-in fade-in zoom-in-95 duration-150"
+      className="z-[300] w-44 bg-white/95 dark:bg-[#1e2128]/95 backdrop-blur-md border border-[#c3cad6] dark:border-[#3b414d] rounded-xl shadow-xl p-1 space-y-0.5 animate-in fade-in zoom-in-95 duration-[var(--z-motion)]"
     >
       <button
         className={itemClass}

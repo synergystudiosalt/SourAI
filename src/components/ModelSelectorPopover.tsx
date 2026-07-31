@@ -27,7 +27,7 @@ export const ModelSelectorPopover: React.FC<ModelSelectorPopoverProps> = ({
   positionClass = 'top-full mt-2 left-1/2 -translate-x-1/2',
 }) => {
   return (
-    <div className={`absolute ${positionClass} w-60 bg-white/95 dark:bg-[#1e2128]/95 backdrop-blur-md border border-[#dfe3ea] dark:border-[#282c33] rounded-2xl shadow-xl p-1.5 z-[100] animate-in fade-in zoom-in-95 duration-150`}>
+    <div className={`absolute ${positionClass} w-60 bg-white/95 dark:bg-[#1e2128]/95 backdrop-blur-md border border-[#dfe3ea] dark:border-[#282c33] rounded-2xl shadow-xl p-1.5 z-[100] animate-in fade-in zoom-in-95 duration-[var(--z-motion)]`}>
       <div className="space-y-0.5">
         {MODELS.map((model) => {
           const isSelected = selectedModel === model.id;
