@@ -317,6 +317,69 @@ const ExpandableTag: React.FC<ExpandableTagProps> = ({
   );
 };
 
+export const RAW_MODEL_RESPONSE_MAX_CHARS = 4_000;
+
+export function truncateRawModelResponse(
+  text: string,
+  limit = RAW_MODEL_RESPONSE_MAX_CHARS
+): { text: string; truncated: boolean } {
+  return text.length > limit
+    ? { text: text.slice(0, limit), truncated: true }
+    : { text, truncated: false };
+}
+
+interface RawModelResponseProps {
+  text: string;
+  id: string;
+  openSet: Set<string>;
+  onToggle: (id: string) => void;
+}
+
+/** Renders provider output as escaped text, never as Markdown or agent protocol. */
+export const RawModelResponse: React.FC<RawModelResponseProps> = ({
+  text,
+  id,
+  openSet,
+  onToggle,
+}) => {
+  const isOpen = openSet.has(id);
+  const clipped = truncateRawModelResponse(text);
+  return (
+    <div className="select-none">
+      <button
+        type="button"
+        onClick={() => onToggle(id)}
+        className="flex min-w-0 max-w-full items-center gap-1.5 text-[10.5px] font-medium text-[#97948A] hover:text-[#1c1b1a] dark:text-[#97948A] dark:hover:text-[#f0efe6] cursor-pointer ws-button-smooth"
+      >
+        <span className="min-w-0 truncate">Raw model response (for diagnosis)</span>
+        <ChevronDown
+          className={`w-3 h-3 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+        />
+      </button>
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.15 }}
+            className="mt-1.5 pl-2 border-l border-[#e2dec0] dark:border-[#383836] text-[10.5px] text-[#706c62] dark:text-[#a09d98] leading-relaxed max-h-64 overflow-y-auto overflow-x-hidden [overflow-wrap:anywhere] thin-scrollbar"
+          >
+            <pre className="m-0 whitespace-pre-wrap font-mono [overflow-wrap:anywhere]">
+              {clipped.text || '(empty response)'}
+            </pre>
+            {clipped.truncated && (
+              <div className="mt-2 italic">
+                Raw model response truncated after {RAW_MODEL_RESPONSE_MAX_CHARS.toLocaleString()} characters.
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
 export interface AgentContentProps {
   text: string;
   messageId: string;

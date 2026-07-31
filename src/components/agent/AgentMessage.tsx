@@ -3,7 +3,7 @@ import { Check, Loader2, X } from 'lucide-react';
 
 import type { AgentChatMessage, AgentFileOp } from '../../types';
 import Logo from '../Logo';
-import { AgentContent, TypedMarkdown } from './MarkdownContent';
+import { AgentContent, RawModelResponse, TypedMarkdown } from './MarkdownContent';
 import { OperationList } from './OperationList';
 import { ToolCallList } from './ToolCallList';
 import { collapseAgentFileOps } from '../../utils/agentProtocol';
@@ -81,6 +81,15 @@ export const AgentMessage: React.FC<AgentMessageProps> = ({
             <TypedMarkdown text={message.content} enabled={isTyping} />
           )}
         </div>
+      )}
+
+      {message.rawModelResponse !== undefined && (
+        <RawModelResponse
+          text={message.rawModelResponse}
+          id={`${message.id}-raw-model-response`}
+          openSet={openTags}
+          onToggle={onToggleTag}
+        />
       )}
 
       {message.toolCalls && message.toolCalls.length > 0 && (

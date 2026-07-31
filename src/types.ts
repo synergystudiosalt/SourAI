@@ -117,6 +117,8 @@ export interface AgentChatMessage {
   codingPaths?: string[];
   isError?: boolean;
   createdAt: number;
+  /** Provider text shown only as inert, collapsed diagnostics on terminal failures. */
+  rawModelResponse?: string;
   /** Raw <think>...</think> reasoning extracted from the model's response, if any. */
   thinking?: string;
   /** Short, human-friendly label describing what the reasoning above was doing. */

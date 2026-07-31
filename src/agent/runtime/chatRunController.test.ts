@@ -36,7 +36,7 @@ describe('ChatRunController', () => {
     controller.recordWorkspaceRequest('src/main.js', false);
 
     expect(controller.finalText('', 0, false)).toBe(
-      UNRESOLVED_WORKSPACE_REQUEST('index.html')
+      UNRESOLVED_WORKSPACE_REQUEST(['index.html', 'src/main.js'], 2, 2)
     );
   });
 
@@ -46,10 +46,42 @@ describe('ChatRunController', () => {
     );
   });
 
-  it('does not call the whole run unresolved when any workspace request succeeds', () => {
+  it('does not call a tied run mostly unresolved', () => {
     const controller = new ChatRunController();
     controller.recordWorkspaceRequest('missing.ts', false);
     controller.recordWorkspaceRequest('src/App.tsx', true);
+
+    expect(controller.finalText('', 0, false)).toBe(SILENT_MODEL_RESPONSE);
+  });
+
+  it('reports counts and several paths when most workspace requests fail', () => {
+    const controller = new ChatRunController();
+    controller.recordWorkspaceRequest('src/App.tsx', true);
+    controller.recordWorkspaceRequest('package.json', true);
+    for (const path of [
+      'missing/a.ts',
+      'missing/b.ts',
+      'missing/c.ts',
+      'missing/d.ts',
+      'missing/e.ts',
+      'missing/f.ts',
+      'missing/g.ts',
+      'missing/h.ts',
+    ]) {
+      controller.recordWorkspaceRequest(path, false);
+    }
+
+    const result = controller.finalText('', 0, false);
+    expect(result).toContain('8 of 10 workspace requests could not be resolved');
+    expect(result).toContain('"missing/a.ts"');
+    expect(result).toContain('"missing/b.ts"');
+    expect(result).toContain('"missing/c.ts"');
+  });
+
+  it('leaves a fully resolved run unchanged', () => {
+    const controller = new ChatRunController();
+    controller.recordWorkspaceRequest('src/App.tsx', true);
+    controller.recordWorkspaceRequest('package.json', true);
 
     expect(controller.finalText('', 0, false)).toBe(SILENT_MODEL_RESPONSE);
   });

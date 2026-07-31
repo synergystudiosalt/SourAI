@@ -10,8 +10,29 @@ export const CONTINUE_AFTER_REASONING =
   '[Runtime: your previous turn ended after reasoning without a final answer or workspace change. Continue now and complete the requested work. Use workspace tools if needed, then return a concrete final result.]';
 export const RETRY_AFTER_EMPTY =
   '[Runtime: your previous turn returned an empty response. You have all the workspace context you need. Continue now and complete the requested work — output your final answer or file changes.]';
-export const UNRESOLVED_WORKSPACE_REQUEST = (examplePath: string) =>
-  `The model returned no final answer because its workspace requests could not be resolved. One unresolved path was "${examplePath}".`;
+export const UNRESOLVED_WORKSPACE_REQUEST = (
+  paths: string | readonly string[],
+  unresolvedCount?: number,
+  totalCount?: number
+) => {
+  // Preserve the original one-path call shape for callers that only have an
+  // example, while allowing the run controller to provide the useful detail it
+  // now records.
+  if (typeof paths === 'string' || unresolvedCount === undefined || totalCount === undefined) {
+    const examplePath = typeof paths === 'string' ? paths : paths[0] || '';
+    return `The model returned no final answer because its workspace requests could not be resolved. One unresolved path was "${examplePath}".`;
+  }
+
+  const shownPaths = paths.slice(0, 4).map((path) => `"${path}"`);
+  const pathList = shownPaths.length > 1
+    ? `${shownPaths.slice(0, -1).join(', ')}, and ${shownPaths.at(-1)}`
+    : shownPaths[0];
+  return (
+    `The model returned no final answer because ${unresolvedCount} of ${totalCount} ` +
+    `workspace requests could not be resolved.` +
+    (pathList ? ` Missing paths included ${pathList}.` : '')
+  );
+};
 export const SILENT_MODEL_RESPONSE =
   'The model returned no final answer after completing its workspace checks.';
 export const NO_PROGRESS_RESPONSE =
@@ -55,7 +76,7 @@ export class ChatRunController {
   private emptyRetryUsed = false;
   private workspaceRequestCount = 0;
   private resolvedWorkspaceRequestCount = 0;
-  private unresolvedExamplePath = '';
+  private readonly unresolvedPaths: string[] = [];
   private consecutiveDeadTurns = 0;
 
   /**
@@ -80,8 +101,8 @@ export class ChatRunController {
     this.workspaceRequestCount += 1;
     if (resolved) {
       this.resolvedWorkspaceRequestCount += 1;
-    } else if (!this.unresolvedExamplePath) {
-      this.unresolvedExamplePath = path;
+    } else if (!this.unresolvedPaths.includes(path)) {
+      this.unresolvedPaths.push(path);
     }
   }
 
@@ -151,12 +172,16 @@ export class ChatRunController {
     const answer = displayText.trim();
     if (answer) return answer;
     if (operationCount > 0) return 'Changes are ready for review.';
-    if (
-      this.workspaceRequestCount > 0 &&
-      this.resolvedWorkspaceRequestCount === 0 &&
-      this.unresolvedExamplePath
-    ) {
-      return UNRESOLVED_WORKSPACE_REQUEST(this.unresolvedExamplePath);
+    const unresolvedWorkspaceRequestCount =
+      this.workspaceRequestCount - this.resolvedWorkspaceRequestCount;
+    // A strict majority makes unresolved requests the dominant, diagnosable
+    // cause without blaming missing paths when successes and failures are tied.
+    if (unresolvedWorkspaceRequestCount > this.resolvedWorkspaceRequestCount) {
+      return UNRESOLVED_WORKSPACE_REQUEST(
+        this.unresolvedPaths,
+        unresolvedWorkspaceRequestCount,
+        this.workspaceRequestCount
+      );
     }
     // Checked before the budget message: a stalled run is abandoned early and
     // has turns to spare, so "exhausted its budget" would misdescribe it.

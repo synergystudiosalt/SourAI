@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { AgentChatMessage } from '../../types';
 import { AgentMessage } from './AgentMessage';
+import { RAW_MODEL_RESPONSE_MAX_CHARS } from './MarkdownContent';
 
 function MessageHarness({ message }: { message: AgentChatMessage }) {
   const [openTags, setOpenTags] = useState<Set<string>>(new Set());
@@ -193,5 +194,82 @@ describe('AgentMessage', () => {
     fireEvent.click(screen.getByRole('button', { name: /src\/loading\.ts/ }));
     expect(screen.queryByText('const pending = true;')).not.toBeInTheDocument();
     expect(container.querySelector('.animate-spin')).toBeInTheDocument();
+  });
+
+  it('shows raw provider output collapsed and inert beneath a terminal error', () => {
+    render(
+      <MessageHarness
+        message={{
+          id: 'assistant-raw',
+          role: 'assistant',
+          content: 'The model returned no final answer.',
+          rawModelResponse: [
+            'Here is a file:',
+            '```ts path="src/should-not-apply.ts"',
+            'export const unsafe = true;',
+            '```',
+          ].join('\n'),
+          createdAt: 5,
+        }}
+      />
+    );
+
+    expect(screen.getByText('The model returned no final answer.')).toBeInTheDocument();
+    const toggle = screen.getByRole('button', {
+      name: 'Raw model response (for diagnosis)',
+    });
+    expect(screen.queryByText('export const unsafe = true;')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Apply changes' })).not.toBeInTheDocument();
+
+    fireEvent.click(toggle);
+    expect(screen.getByText(/export const unsafe = true/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Apply changes' })).not.toBeInTheDocument();
+  });
+
+  it('does not add raw-response UI to an ordinary successful turn', () => {
+    render(
+      <MessageHarness
+        message={{
+          id: 'assistant-success',
+          role: 'assistant',
+          content: 'The requested answer.',
+          createdAt: 6,
+        }}
+      />
+    );
+
+    expect(screen.getByText('The requested answer.')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Raw model response (for diagnosis)' })
+    ).not.toBeInTheDocument();
+  });
+
+  it('truncates long raw output and retains the thinking-block height and wrap cap', () => {
+    const raw = 'x'.repeat(RAW_MODEL_RESPONSE_MAX_CHARS + 250);
+    const { container } = render(
+      <MessageHarness
+        message={{
+          id: 'assistant-long-raw',
+          role: 'assistant',
+          content: 'The model returned no final answer.',
+          rawModelResponse: raw,
+          createdAt: 7,
+        }}
+      />
+    );
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Raw model response (for diagnosis)' })
+    );
+    const rawText = container.querySelector('pre');
+    expect(rawText).toHaveTextContent('x'.repeat(RAW_MODEL_RESPONSE_MAX_CHARS));
+    expect(rawText?.textContent).toHaveLength(RAW_MODEL_RESPONSE_MAX_CHARS);
+    expect(screen.getByText(/truncated after 4,000 characters/i)).toBeInTheDocument();
+    expect(rawText?.parentElement).toHaveClass(
+      'max-h-64',
+      'overflow-y-auto',
+      'overflow-x-hidden',
+      '[overflow-wrap:anywhere]'
+    );
   });
 });

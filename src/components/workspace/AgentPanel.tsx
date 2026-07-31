@@ -867,6 +867,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       // ── Agent loop: send prompt, resolve tools, repeat until no more tool calls ──
       // History depth scales with effort so higher tiers keep more of the thread.
       const historyStartIndex = Math.max(0, historyBase.length - effort.context.historyMessages);
+      // rawModelResponse is intentionally omitted: it is UI-only diagnostic data
+      // and must never consume provider context on a later turn.
       const toCompactableMessage = (message: AgentChatMessage): CompactableMessage => ({
         role: message.role,
         content:
@@ -983,6 +985,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       let allOps: AgentFileOp[] = [];
       let allToolCalls: AgentToolCall[] = [];
       let finalDisplayText = '';
+      let lastRawModelResponse = '';
       let hadIncompleteFileBlock = false;
       let turnCount = 0;
       let hasMoreTools = true;
@@ -1020,6 +1023,11 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         responseThinking?: string,
         responseThinkingLabel?: string
       ) => {
+        // Keep the last non-empty provider reply for diagnosis. If a later retry
+        // is completely silent, the preceding reply is usually more useful.
+        if (responseText.trim() || !lastRawModelResponse) {
+          lastRawModelResponse = responseText;
+        }
         const separatedResponse = splitThinkingAndText(responseText);
         const filteredRequests = runController.filter(
           parseAgentResponse(
@@ -1367,6 +1375,10 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         }
       }
 
+      // Capture the pre-fallback state. The controller now supplies an error
+      // sentence, so checking after finalText() would incorrectly treat that
+      // diagnostic as a usable model answer.
+      const attachRawModelResponse = !finalDisplayText.trim() && allOps.length === 0;
       finalDisplayText = runController.finalText(
         finalDisplayText,
         allOps.length,
@@ -1397,6 +1409,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
             ? {
                 ...m,
                 content: finalDisplayText,
+                rawModelResponse: attachRawModelResponse ? lastRawModelResponse : undefined,
                 ops: enrichedOps,
                 codingPaths: [],
                 approvalStatus: enrichedOps.length > 0 ? 'pending' : undefined,
