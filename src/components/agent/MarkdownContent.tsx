@@ -59,7 +59,7 @@ export const MiniMarkdown: React.FC<{ text: string }> = ({ text }) => (
         <strong className="font-semibold text-[#16181d] dark:text-[#dce0e5]">{children}</strong>
       ),
       a: ({ children, href }) => (
-        <a href={href} target="_blank" rel="noreferrer" className="text-[#d96b43] underline">
+        <a href={href} target="_blank" rel="noreferrer" className="text-[#4776d5] underline">
           {children}
         </a>
       ),
@@ -67,13 +67,13 @@ export const MiniMarkdown: React.FC<{ text: string }> = ({ text }) => (
       code: ({ children, className }) => {
         if (className) {
           return (
-            <pre className="my-2 p-3 rounded-lg bg-[#efece3] dark:bg-[#141413] overflow-x-auto text-[11px] font-mono leading-relaxed">
+            <pre className="my-2 p-3 rounded-lg bg-[#e3e7ef] dark:bg-[#131314] overflow-x-auto text-[11px] font-mono leading-relaxed">
               <code>{children}</code>
             </pre>
           );
         }
         return (
-          <code className="px-1 py-0.5 rounded bg-[#efece3] dark:bg-[#141413] text-[11px] font-mono">
+          <code className="px-1 py-0.5 rounded bg-[#e3e7ef] dark:bg-[#131314] text-[11px] font-mono">
             {children}
           </code>
         );
@@ -157,26 +157,26 @@ const KNOWN_TAGS: Record<
   check_for_errors: {
     label: 'Error Check',
     color: 'text-[#78828e] dark:text-[#78828e]',
-    bg: 'bg-[#f5f3eb] dark:bg-[#1f1f1e]',
+    bg: 'bg-[#ebeef5] dark:bg-[#1e1e1f]',
     border: 'border-[#78828e] dark:border-[#78828e]',
   },
   function_request: {
     label: 'Function Request',
     color: 'text-[#78828e] dark:text-[#a9afbc]',
-    bg: 'bg-[#f5f3eb] dark:bg-[#1f1f1e]',
+    bg: 'bg-[#ebeef5] dark:bg-[#1e1e1f]',
     border: 'border-[#78828e] dark:border-[#a9afbc]',
   },
   function_result: {
     label: 'Function Result',
     color: 'text-[#78828e] dark:text-[#a9afbc]',
-    bg: 'bg-[#f5f3eb] dark:bg-[#1f1f1e]',
+    bg: 'bg-[#ebeef5] dark:bg-[#1e1e1f]',
     border: 'border-[#78828e] dark:border-[#a9afbc]',
   },
   using_fallback_model: {
     label: 'Using Fallback Model',
-    color: 'text-amber-600 dark:text-amber-400',
-    bg: 'bg-amber-50 dark:bg-amber-950/30',
-    border: 'border-amber-500 dark:border-amber-400',
+    color: 'text-blue-600 dark:text-blue-400',
+    bg: 'bg-blue-50 dark:bg-blue-950/30',
+    border: 'border-blue-500 dark:border-blue-400',
   },
   context_compact: {
     label: 'Context Compacted',
@@ -189,12 +189,12 @@ const KNOWN_TAGS: Record<
 const TAG_COLOR_CYCLE = [
   {
     color: 'text-[#78828e] dark:text-[#a9afbc]',
-    bg: 'bg-[#f5f3eb] dark:bg-[#1f1f1e]',
+    bg: 'bg-[#ebeef5] dark:bg-[#1e1e1f]',
     border: 'border-[#78828e] dark:border-[#a9afbc]',
   },
   {
     color: 'text-[#78828e] dark:text-[#78828e]',
-    bg: 'bg-[#f5f3eb] dark:bg-[#1f1f1e]',
+    bg: 'bg-[#ebeef5] dark:bg-[#1e1e1f]',
     border: 'border-[#78828e] dark:border-[#78828e]',
   },
   {
@@ -208,9 +208,9 @@ const TAG_COLOR_CYCLE = [
     border: 'border-purple-500 dark:border-purple-400',
   },
   {
-    color: 'text-amber-600 dark:text-amber-400',
-    bg: 'bg-amber-50 dark:bg-amber-950/30',
-    border: 'border-amber-500 dark:border-amber-400',
+    color: 'text-blue-600 dark:text-blue-400',
+    bg: 'bg-blue-50 dark:bg-blue-950/30',
+    border: 'border-blue-500 dark:border-blue-400',
   },
   {
     color: 'text-rose-500 dark:text-rose-400',

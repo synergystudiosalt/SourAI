@@ -228,7 +228,7 @@ const TypewriterMessage: React.FC<TypewriterMessageProps> = ({
               ol: ({ children }) => <ol className="list-decimal pl-5 my-2 space-y-1 text-sm">{children}</ol>,
               li: ({ children }) => <li className="leading-relaxed">{children}</li>,
               blockquote: ({ children }) => (
-                <blockquote className="border-l-2 border-[#d96b43] pl-3 italic text-[#666] dark:text-[#aaa] my-3">
+                <blockquote className="border-l-2 border-[#4776d5] pl-3 italic text-[#666] dark:text-[#aaa] my-3">
                   {children}
                 </blockquote>
               ),
@@ -257,20 +257,20 @@ const TypewriterMessage: React.FC<TypewriterMessageProps> = ({
 
                 if (inline) {
                   return (
-                    <code className="bg-[#f2f0ea] dark:bg-[#1e2128] text-[#c7552d] dark:text-[#e07e5d] px-1.5 py-0.5 rounded text-[11px] font-mono">
+                    <code className="bg-[#eaedf2] dark:bg-[#1e2128] text-[#3162c3] dark:text-[#608add] px-1.5 py-0.5 rounded text-[11px] font-mono">
                       {children}
                     </code>
                   );
                 }
                 return (
                   <div className="my-3 overflow-hidden rounded-lg bg-[#f6f8fa] dark:bg-[#17191d] border border-[#dfe3ea] dark:border-[#333] text-[#16181d] dark:text-[#dce0e5] text-xs font-mono shadow-2xs">
-                    <div className="flex items-center justify-between px-3 py-1.5 bg-[#eae6dc] dark:bg-[#1e2128] border-b border-[#dfe3ea] dark:border-[#333] text-[11px] text-[#4a5259] dark:text-[#a9afbc]">
+                    <div className="flex items-center justify-between px-3 py-1.5 bg-[#dce1ea] dark:bg-[#1e2128] border-b border-[#dfe3ea] dark:border-[#333] text-[11px] text-[#4a5259] dark:text-[#a9afbc]">
                       <span>code snippet</span>
                       <div className="flex items-center gap-1">
                         <button
                           type="button"
                           onClick={handleDownloadCode}
-                          className="p-1 hover:text-[#16181d] dark:hover:text-[#dce0e5] transition-colors cursor-pointer rounded hover:bg-[#ded9cc] dark:hover:bg-[#30302e]"
+                          className="p-1 hover:text-[#16181d] dark:hover:text-[#dce0e5] transition-colors cursor-pointer rounded hover:bg-[#ccd2de] dark:hover:bg-[#2e2f30]"
                           title="Download code"
                         >
                           <Download className="w-3.5 h-3.5" />
@@ -278,7 +278,7 @@ const TypewriterMessage: React.FC<TypewriterMessageProps> = ({
                         <button
                           type="button"
                           onClick={handleCopyCode}
-                          className="p-1 hover:text-[#16181d] dark:hover:text-[#dce0e5] transition-colors cursor-pointer rounded hover:bg-[#ded9cc] dark:hover:bg-[#30302e]"
+                          className="p-1 hover:text-[#16181d] dark:hover:text-[#dce0e5] transition-colors cursor-pointer rounded hover:bg-[#ccd2de] dark:hover:bg-[#2e2f30]"
                           title={copied ? "Copied" : "Copy code"}
                         >
                           {copied ? (
@@ -340,7 +340,7 @@ const TypewriterMessage: React.FC<TypewriterMessageProps> = ({
               onClick={onSpeak}
               className={`p-1.5 rounded-lg hover:bg-[#f6f8fa] dark:hover:bg-[#1e2128] cursor-pointer interactable-btn ${
                 isSpeaking
-                  ? 'text-[#d96b43] bg-[#f6f8fa] dark:bg-[#1e2128]'
+                  ? 'text-[#4776d5] bg-[#f6f8fa] dark:bg-[#1e2128]'
                   : 'hover:text-[#16181d] dark:hover:text-[#dce0e5]'
               }`}
               title="Read aloud"
@@ -618,7 +618,7 @@ export const ChatStreamView: React.FC<ChatStreamViewProps> = ({
       className="flex-1 w-full max-w-2xl flex flex-col h-full overflow-hidden mx-auto px-2 sm:px-3 md:px-4"
     >
       {/* Active Header Bar */}
-      <div className="sticky top-0 bg-[#fbfcfd]/95 dark:bg-[#121316]/95 backdrop-blur-md py-2 sm:py-2.5 border-b border-[#e8e7e1] dark:border-[#282c33] flex items-center justify-between shrink-0 z-50 select-none">
+      <div className="sticky top-0 bg-[#fbfcfd]/95 dark:bg-[#121316]/95 backdrop-blur-md py-2 sm:py-2.5 border-b border-[#e3e4e6] dark:border-[#282c33] flex items-center justify-between shrink-0 z-50 select-none">
         <button
           type="button"
           onClick={onBackToHome}
@@ -637,7 +637,7 @@ export const ChatStreamView: React.FC<ChatStreamViewProps> = ({
             <button
               type="button"
               onClick={() => setShowHeaderModelPopover(!showHeaderModelPopover)}
-              className="flex items-center gap-1 text-[10px] bg-[#e8e6df] dark:bg-[#282c33] hover:bg-[#ddd9cf] dark:hover:bg-[#3b414d] text-[#524f47] dark:text-[#b0adab] font-medium px-2 py-0.5 rounded-full cursor-pointer interactable-btn"
+              className="flex items-center gap-1 text-[10px] bg-[#dfe2e8] dark:bg-[#282c33] hover:bg-[#cfd4dd] dark:hover:bg-[#3b414d] text-[#484b51] dark:text-[#acadaf] font-medium px-2 py-0.5 rounded-full cursor-pointer interactable-btn"
               title="Change Model"
             >
               <span>{modelDisplayName}</span>
@@ -706,7 +706,7 @@ export const ChatStreamView: React.FC<ChatStreamViewProps> = ({
                   )}
 
                   {msg.content && (
-                    <div className="max-w-[95%] sm:max-w-[88%] bg-[#f6f8fa] dark:bg-[#1e2128] border border-[#e2dfd5] dark:border-[#333] text-[#16181d] dark:text-[#dce0e5] px-3 sm:px-4 py-2 sm:py-2.5 rounded-2xl rounded-tr-xs text-xs sm:text-sm md:text-base leading-relaxed text-left shadow-2xs">
+                    <div className="max-w-[95%] sm:max-w-[88%] bg-[#f6f8fa] dark:bg-[#1e2128] border border-[#d5d9e2] dark:border-[#333] text-[#16181d] dark:text-[#dce0e5] px-3 sm:px-4 py-2 sm:py-2.5 rounded-2xl rounded-tr-xs text-xs sm:text-sm md:text-base leading-relaxed text-left shadow-2xs">
                       <p className="whitespace-pre-wrap break-words">{msg.content}</p>
                     </div>
                   )}
@@ -775,9 +775,9 @@ export const ChatStreamView: React.FC<ChatStreamViewProps> = ({
           onDrop={handleDrop}
           className={`relative bg-white dark:bg-[#17191d] border ${
             isDragging
-              ? 'border-[#d96b43] ring-2 ring-[#d96b43]/20'
-              : 'border-[#e6e4dc] dark:border-[#282c33]'
-          } rounded-xl sm:rounded-2xl p-2 sm:p-3 shadow-xs focus-within:border-[#c5c2b6] dark:focus-within:border-[#444] transition-all`}
+              ? 'border-[#4776d5] ring-2 ring-[#4776d5]/20'
+              : 'border-[#dcdfe6] dark:border-[#282c33]'
+          } rounded-xl sm:rounded-2xl p-2 sm:p-3 shadow-xs focus-within:border-[#b9bcc2] dark:focus-within:border-[#444] transition-all`}
         >
           {/* Attachments preview row */}
           {attachments.length > 0 && (
@@ -799,7 +799,7 @@ export const ChatStreamView: React.FC<ChatStreamViewProps> = ({
             onKeyDown={handleKeyDown}
             placeholder="Write a message..."
             rows={1}
-            className="w-full text-xs sm:text-sm text-[#16181d] dark:text-[#dce0e5] placeholder-[#8d897f] dark:placeholder-[#777] outline-none resize-none px-1 bg-transparent leading-relaxed"
+            className="w-full text-xs sm:text-sm text-[#16181d] dark:text-[#dce0e5] placeholder-[#81848b] dark:placeholder-[#777] outline-none resize-none px-1 bg-transparent leading-relaxed"
           />
 
           {/* Bottom Toolbar Row: + on left, mic & send on right (NO model selector in prompt box, NO waveform icon) */}
@@ -862,8 +862,8 @@ export const ChatStreamView: React.FC<ChatStreamViewProps> = ({
                 disabled={!isGenerating && (!inputText.trim() && attachments.length === 0)}
                 className={`p-2 rounded-lg cursor-pointer shadow-xs interactable-btn ${
                   isGenerating || inputText.trim() || attachments.length > 0
-                    ? 'bg-[#d96b43] text-white hover:bg-[#c55a33]'
-                    : 'bg-[#d96b43]/30 text-white/50 cursor-not-allowed'
+                    ? 'bg-[#4776d5] text-white hover:bg-[#3765c1]'
+                    : 'bg-[#4776d5]/30 text-white/50 cursor-not-allowed'
                 }`}
                 title={isGenerating ? 'Stop generation' : 'Send message'}
               >

@@ -30,7 +30,7 @@ export const PixelBowlIcon: React.FC<PixelBowlIconProps> = ({ size = 48, classNa
       viewBox={`0 0 ${cols * cell} ${rows * cell}`}
       shapeRendering="crispEdges"
       style={{ imageRendering: 'pixelated' }}
-      className={`select-none text-[#d96b43] ${className}`}
+      className={`select-none text-[#4776d5] ${className}`}
     >
       {GRID.map((row, y) =>
         row.map((val, x) => {

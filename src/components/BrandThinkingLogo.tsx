@@ -22,11 +22,11 @@ export default function BrandThinkingLogo({ className = '' }: { className?: stri
           y2="0"
           gradientUnits="userSpaceOnUse"
         >
-          <stop offset="0" stopColor="#d96b43" />
-          <stop offset="0.4" stopColor="#d96b43" />
-          <stop offset="0.5" stopColor="var(--logo-bg-shade, #fafaf7)" />
-          <stop offset="0.6" stopColor="#d96b43" />
-          <stop offset="1" stopColor="#d96b43" />
+          <stop offset="0" stopColor="#4776d5" />
+          <stop offset="0.4" stopColor="#4776d5" />
+          <stop offset="0.5" stopColor="var(--logo-bg-shade, #f7f8fa)" />
+          <stop offset="0.6" stopColor="#4776d5" />
+          <stop offset="1" stopColor="#4776d5" />
           <animate
             attributeName="x1"
             from="-130"

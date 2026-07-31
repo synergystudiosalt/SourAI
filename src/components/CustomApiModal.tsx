@@ -131,11 +131,11 @@ export const CustomApiModal: React.FC<CustomApiModalProps> = ({
                   className={`px-3 py-2 text-xs font-medium border transition-colors ${
                     selectedProvider === provider
                       ? isDarkMode
-                        ? 'bg-[#1e2128] border-[#d96b43] text-[#dce0e5]'
-                        : 'bg-[#f6f8fa] border-[#d96b43] text-[#16181d]'
+                        ? 'bg-[#1e2128] border-[#4776d5] text-[#dce0e5]'
+                        : 'bg-[#f6f8fa] border-[#4776d5] text-[#16181d]'
                       : isDarkMode
                       ? 'bg-[#1e2128] border-[#282c33] text-[#a9afbc] hover:border-[#666] hover:text-[#dce0e5]'
-                      : 'bg-[#efede4] border-[#dfe3ea] text-[#78828e] hover:border-[#999] hover:text-[#16181d]'
+                      : 'bg-[#e4e8ef] border-[#dfe3ea] text-[#78828e] hover:border-[#999] hover:text-[#16181d]'
                   }`}
                 >
                   {PROVIDER_LABELS[provider]}
@@ -159,9 +159,9 @@ export const CustomApiModal: React.FC<CustomApiModalProps> = ({
                 placeholder={PROVIDER_PLACEHOLDERS[selectedProvider]}
                 className={`flex-1 px-3 py-2 text-xs font-mono border ${
                   isDarkMode
-                    ? 'bg-[#141413] border-[#282c33] text-[#dce0e5] placeholder-[#666]'
+                    ? 'bg-[#131314] border-[#282c33] text-[#dce0e5] placeholder-[#666]'
                     : 'bg-[#fbfcfd] border-[#dfe3ea] text-[#16181d] placeholder-[#999]'
-                } focus:outline-none focus:border-[#d96b43]`}
+                } focus:outline-none focus:border-[#4776d5]`}
               />
               <button
                 onClick={() => setShowApiKey(!showApiKey)}
@@ -185,9 +185,9 @@ export const CustomApiModal: React.FC<CustomApiModalProps> = ({
               placeholder="e.g., llama-3.1-8b-instant"
               className={`w-full px-3 py-2 text-xs border ${
                 isDarkMode
-                  ? 'bg-[#141413] border-[#282c33] text-[#dce0e5] placeholder-[#666]'
+                  ? 'bg-[#131314] border-[#282c33] text-[#dce0e5] placeholder-[#666]'
                   : 'bg-[#fbfcfd] border-[#dfe3ea] text-[#16181d] placeholder-[#999]'
-              } focus:outline-none focus:border-[#d96b43]`}
+              } focus:outline-none focus:border-[#4776d5]`}
             />
           </div>
 
@@ -206,7 +206,7 @@ export const CustomApiModal: React.FC<CustomApiModalProps> = ({
             className={`px-3 py-1.5 text-xs font-medium border cursor-pointer ${
               isDarkMode
                 ? 'bg-transparent border-[#282c33] text-[#a9afbc] hover:bg-[#1e2128]'
-                : 'bg-transparent border-[#dfe3ea] text-[#78828e] hover:bg-[#f9f8f5]'
+                : 'bg-transparent border-[#dfe3ea] text-[#78828e] hover:bg-[#f5f6f9]'
             }`}
           >
             Cancel
@@ -215,8 +215,8 @@ export const CustomApiModal: React.FC<CustomApiModalProps> = ({
             onClick={handleSubmit}
             className={`px-3 py-1.5 text-xs font-medium border cursor-pointer ${
               isDarkMode
-                ? 'bg-[#d96b43] border-[#d96b43] text-white hover:bg-[#c55a32]'
-                : 'bg-[#d96b43] border-[#d96b43] text-white hover:bg-[#c55a32]'
+                ? 'bg-[#4776d5] border-[#4776d5] text-white hover:bg-[#3664c1]'
+                : 'bg-[#4776d5] border-[#4776d5] text-white hover:bg-[#3664c1]'
             }`}
           >
             Add API

@@ -34,7 +34,7 @@ export const AgentMessage: React.FC<AgentMessageProps> = ({
   if (message.role === 'user') {
     return (
       <div className="flex justify-end mb-4">
-        <div className="max-w-[88%] bg-[#f0ede4] dark:bg-[#1e2128] text-[#16181d] dark:text-[#dce0e5] px-2.5 py-1.5 text-[12px] leading-relaxed whitespace-pre-wrap wrap-break-word rounded-lg">
+        <div className="max-w-[88%] bg-[#e4e8f0] dark:bg-[#1e2128] text-[#16181d] dark:text-[#dce0e5] px-2.5 py-1.5 text-[12px] leading-relaxed whitespace-pre-wrap wrap-break-word rounded-lg">
           {message.content}
         </div>
       </div>
@@ -46,7 +46,7 @@ export const AgentMessage: React.FC<AgentMessageProps> = ({
 
   return (
     <div className="space-y-1.5 mb-5">
-      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-[#a39d8f] dark:text-[#767671]">
+      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-[#9297a0] dark:text-[#727375]">
         <Logo size={12} /> sour.ai Agent
       </div>
 
@@ -103,7 +103,7 @@ export const AgentMessage: React.FC<AgentMessageProps> = ({
       )}
 
       {operations.length > 0 && (
-        <div className="overflow-hidden rounded-md border border-[#c3cad6] bg-white dark:border-[#3a3937] dark:bg-[#20201f]">
+        <div className="overflow-hidden rounded-md border border-[#c3cad6] bg-white dark:border-[#37383a] dark:bg-[#1f1f20]">
           <div className="px-2 pt-2">
             <OperationList
               messageId={message.id}
@@ -139,7 +139,7 @@ export const AgentMessage: React.FC<AgentMessageProps> = ({
                   type="button"
                   disabled={message.approvalStatus === 'applying'}
                   onClick={() => onRejectOperations(message.id)}
-                  className="rounded border border-[#c3cad6] px-2 py-1 text-[10px] text-[#4a5259] hover:bg-[#f6f8fa] disabled:opacity-50 dark:border-[#444240] dark:text-[#b8b4ac] dark:hover:bg-[#2a2928]"
+                  className="rounded border border-[#c3cad6] px-2 py-1 text-[10px] text-[#4a5259] hover:bg-[#f6f8fa] disabled:opacity-50 dark:border-[#414244] dark:text-[#aeb1b7] dark:hover:bg-[#28292a]"
                 >
                   Reject
                 </button>
@@ -147,7 +147,7 @@ export const AgentMessage: React.FC<AgentMessageProps> = ({
                   type="button"
                   disabled={message.approvalStatus === 'applying'}
                   onClick={() => onApplyOperations(message.id, operations)}
-                  className="flex items-center gap-1 rounded bg-[#d96b43] px-2 py-1 text-[10px] text-white hover:bg-[#c85f3a] disabled:opacity-60"
+                  className="flex items-center gap-1 rounded bg-[#4776d5] px-2 py-1 text-[10px] text-white hover:bg-[#3e6bc4] disabled:opacity-60"
                 >
                   {message.approvalStatus === 'applying' && <Loader2 className="h-3 w-3 animate-spin" />}
                   Apply changes

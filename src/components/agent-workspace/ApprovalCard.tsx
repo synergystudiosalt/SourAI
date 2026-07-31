@@ -89,7 +89,7 @@ export function ApprovalCard({
   return (
     <section
       aria-label="Review proposed changes"
-      className="rounded-lg border border-[#d96b43]/40 bg-[#d96b43]/5 p-2 text-[11px]"
+      className="rounded-lg border border-[#4776d5]/40 bg-[#4776d5]/5 p-2 text-[11px]"
     >
       <header className="mb-2">
         <h3
@@ -112,7 +112,7 @@ export function ApprovalCard({
       </header>
 
       {review.hasConflict && (
-        <p role="alert" className="mb-2 flex items-start gap-1 text-amber-700 dark:text-amber-500">
+        <p role="alert" className="mb-2 flex items-start gap-1 text-blue-700 dark:text-blue-500">
           <AlertTriangle size={12} className="mt-0.5 shrink-0" />
           <span>
             Some files changed after this was proposed. Those files cannot be applied; ask for a
@@ -173,7 +173,7 @@ export function ApprovalCard({
               </div>
 
               {blocked ? (
-                <p role="alert" className="px-2 py-1 text-amber-700 dark:text-amber-500">
+                <p role="alert" className="px-2 py-1 text-blue-700 dark:text-blue-500">
                   {file.conflict}
                 </p>
               ) : file.truncated ? (
@@ -200,7 +200,7 @@ export function ApprovalCard({
                               return next;
                             })
                           }
-                          className={`rounded px-1.5 py-0.5 text-[9px] ${rejected ? 'bg-black/10 dark:bg-white/10' : 'bg-[#d96b43] text-white'}`}
+                          className={`rounded px-1.5 py-0.5 text-[9px] ${rejected ? 'bg-black/10 dark:bg-white/10' : 'bg-[#4776d5] text-white'}`}
                         >
                           {rejected ? 'Rejected' : 'Keep'}
                         </button>
@@ -238,7 +238,7 @@ export function ApprovalCard({
           type="button"
           onClick={() => onApprove(selection())}
           disabled={busy || nothingKept || review.hasConflict}
-          className="flex items-center gap-1 rounded bg-[#d96b43] px-2 py-1 text-white disabled:opacity-40"
+          className="flex items-center gap-1 rounded bg-[#4776d5] px-2 py-1 text-white disabled:opacity-40"
         >
           <Check size={12} /> Approve {keptCount === review.files.length ? 'all' : 'selected'}
         </button>

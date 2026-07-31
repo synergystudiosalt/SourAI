@@ -57,7 +57,7 @@ export const AttachmentPopover: React.FC<AttachmentPopoverProps> = ({
 
       {isProcessing && (
         <div className="px-2.5 py-1 flex items-center justify-end">
-          <Loader2 className="w-3.5 h-3.5 animate-spin text-[#d96b43]" />
+          <Loader2 className="w-3.5 h-3.5 animate-spin text-[#4776d5]" />
         </div>
       )}
 

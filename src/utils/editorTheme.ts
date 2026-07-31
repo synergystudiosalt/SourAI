@@ -26,7 +26,7 @@ const lightTheme = createTheme({
   styles: [
     { tag: t.comment, color: '#7e8aa8', fontStyle: 'italic' },
     { tag: [t.string, t.special(t.string), t.character], color: '#2e7d5b' },
-    { tag: [t.number, t.atom, t.bool, t.unit], color: '#b06a2c' },
+    { tag: [t.number, t.atom, t.bool, t.unit], color: '#2f59ad' },
     { tag: [t.keyword, t.controlKeyword, t.moduleKeyword, t.operatorKeyword], color: '#7c4dbd' },
     { tag: [t.operator, t.punctuation, t.bracket], color: '#2d7d9a' },
     { tag: [t.variableName], color: '#16181d' },
@@ -34,7 +34,7 @@ const lightTheme = createTheme({
     { tag: [t.className, t.typeName], color: '#1f7a8c' },
     { tag: [t.propertyName], color: '#0f766e' },
     { tag: [t.tagName], color: '#c2405a' },
-    { tag: [t.attributeName], color: '#b06a2c' },
+    { tag: [t.attributeName], color: '#2f59ad' },
     { tag: [t.definition(t.variableName), t.definition(t.propertyName)], color: '#131a2a', fontWeight: '600' },
     { tag: t.invalid, color: '#c8372f', textDecoration: 'underline' },
     { tag: t.link, color: '#3d6fd6', textDecoration: 'underline' },
@@ -48,13 +48,13 @@ const darkTheme = createTheme({
   settings: {
     // Matches --z-surface-raised: the editor is the lightest, focal plane and
     // the chrome around it recedes darker.
-    background: '#1e2128',
+    background: '#17191f',
     foreground: '#dce0e5',
     caret: '#3b6ffa',
     selection: '#2f3644',
     selectionMatch: '#272d38',
     lineHighlight: '#23272fcc',
-    gutterBackground: '#1e2128',
+    gutterBackground: '#17191f',
     gutterForeground: '#5a6472',
     gutterActiveForeground: '#dce0e5',
     gutterBorder: 'transparent',
@@ -63,7 +63,7 @@ const darkTheme = createTheme({
   styles: [
     { tag: t.comment, color: '#565f89', fontStyle: 'italic' },
     { tag: [t.string, t.special(t.string), t.character], color: '#9ece6a' },
-    { tag: [t.number, t.atom, t.bool, t.unit], color: '#ff9e64' },
+    { tag: [t.number, t.atom, t.bool, t.unit], color: '#6a9af9' },
     { tag: [t.keyword, t.controlKeyword, t.moduleKeyword, t.operatorKeyword], color: '#bb9af7' },
     { tag: [t.operator, t.punctuation, t.bracket], color: '#89ddff' },
     { tag: [t.variableName], color: '#dce0e5' },
@@ -71,7 +71,7 @@ const darkTheme = createTheme({
     { tag: [t.className, t.typeName], color: '#2ac3de' },
     { tag: [t.propertyName], color: '#73daca' },
     { tag: [t.tagName], color: '#f7768e' },
-    { tag: [t.attributeName], color: '#e0af68' },
+    { tag: [t.attributeName], color: '#6b91dd' },
     { tag: [t.definition(t.variableName), t.definition(t.propertyName)], color: '#dce0e5', fontWeight: '600' },
     { tag: t.invalid, color: '#ff757f', textDecoration: 'underline' },
     { tag: t.link, color: '#7aa2f7', textDecoration: 'underline' },

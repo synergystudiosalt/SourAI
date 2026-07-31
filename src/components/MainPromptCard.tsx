@@ -181,9 +181,9 @@ export const MainPromptCard: React.FC<MainPromptCardProps> = ({
       onDrop={handleDrop}
       className={`relative z-30 w-full max-w-[580px] bg-white dark:bg-[#17191d] rounded-2xl border ${
         isDragging
-          ? 'border-[#d96b43] ring-2 ring-[#d96b43]/20'
-          : 'border-[#e6e4dc] dark:border-[#282c33]'
-      } shadow-[0_2px_12px_rgba(0,0,0,0.03)] focus-within:shadow-[0_4px_20px_rgba(0,0,0,0.06)] focus-within:border-[#c8c5ba] dark:focus-within:border-[#444] transition-all duration-200`}
+          ? 'border-[#4776d5] ring-2 ring-[#4776d5]/20'
+          : 'border-[#dcdfe6] dark:border-[#282c33]'
+      } shadow-[0_2px_12px_rgba(0,0,0,0.03)] focus-within:shadow-[0_4px_20px_rgba(0,0,0,0.06)] focus-within:border-[#bdc0c5] dark:focus-within:border-[#444] transition-all duration-200`}
     >
       {/* Input Textarea Area */}
       <div className="p-3.5">
@@ -207,7 +207,7 @@ export const MainPromptCard: React.FC<MainPromptCardProps> = ({
           onKeyDown={handleKeyDown}
           placeholder="How can I help you today?"
           rows={2}
-          className="w-full text-xs sm:text-sm text-[#16181d] dark:text-[#dce0e5] placeholder-[#8d897f] dark:placeholder-[#777] outline-none resize-none bg-transparent leading-relaxed"
+          className="w-full text-xs sm:text-sm text-[#16181d] dark:text-[#dce0e5] placeholder-[#81848b] dark:placeholder-[#777] outline-none resize-none bg-transparent leading-relaxed"
         />
       </div>
 
@@ -256,7 +256,7 @@ export const MainPromptCard: React.FC<MainPromptCardProps> = ({
                 setShowModelPopover(!showModelPopover);
                 setShowAttachPopover(false);
               }}
-              className="flex items-center gap-1 text-[11px] font-medium text-[#524f47] dark:text-[#b0adab] hover:text-[#16181d] dark:hover:text-[#dce0e5] bg-[#f7f6f1] dark:bg-[#1e2128] hover:bg-[#f0ede4] dark:hover:bg-[#30302e] border border-[#e4e1d7] dark:border-[#333] rounded-lg px-2 py-0.5 cursor-pointer mr-0.5 interactable-btn"
+              className="flex items-center gap-1 text-[11px] font-medium text-[#484b51] dark:text-[#acadaf] hover:text-[#16181d] dark:hover:text-[#dce0e5] bg-[#f1f3f7] dark:bg-[#1e2128] hover:bg-[#e4e8f0] dark:hover:bg-[#2e2f30] border border-[#d7dbe4] dark:border-[#333] rounded-lg px-2 py-0.5 cursor-pointer mr-0.5 interactable-btn"
             >
               <span>{modelDisplayName}</span>
               <ChevronDown className="w-3 h-3 text-[#4a5259] dark:text-[#999]" />
@@ -312,8 +312,8 @@ export const MainPromptCard: React.FC<MainPromptCardProps> = ({
             disabled={!isGenerating && (!promptInput.trim() && attachments.length === 0 && !isLimitReached)}
             className={`ml-1 p-2 rounded-lg cursor-pointer shadow-xs interactable-btn ${
               isGenerating || promptInput.trim() || attachments.length > 0 || isLimitReached
-                ? 'bg-[#d96b43] text-white hover:bg-[#c55a33]'
-                : 'bg-[#d96b43]/30 text-white/50 cursor-not-allowed'
+                ? 'bg-[#4776d5] text-white hover:bg-[#3765c1]'
+                : 'bg-[#4776d5]/30 text-white/50 cursor-not-allowed'
             }`}
             title={isGenerating ? 'Stop generation' : 'Send Prompt'}
           >
@@ -328,7 +328,7 @@ export const MainPromptCard: React.FC<MainPromptCardProps> = ({
 
       {/* Message Limit & Upgrade Banner inside card (only shown if limit reached) */}
       {isLimitReached && (
-        <div className="border-t border-[#f0eee6] dark:border-[#282c33] px-3.5 py-2 flex items-center justify-between text-xs text-[#4a5259] dark:text-[#a9afbc] bg-[#fcfbf9] dark:bg-[#222221] rounded-b-2xl">
+        <div className="border-t border-[#e6e9f0] dark:border-[#282c33] px-3.5 py-2 flex items-center justify-between text-xs text-[#4a5259] dark:text-[#a9afbc] bg-[#f9fafc] dark:bg-[#212122] rounded-b-2xl">
           <span className="truncate pr-2 font-medium text-[#4a5259] dark:text-[#aaa] text-[11px]">
             Message limit reached ({MESSAGE_QUOTA}/{MESSAGE_QUOTA})
           </span>

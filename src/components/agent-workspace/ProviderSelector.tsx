@@ -164,7 +164,7 @@ export function ProviderSelector({
             type="button"
             onClick={approveCustom}
             disabled={disabled}
-            className="rounded bg-[#d96b43] px-2 py-1 text-white disabled:opacity-40"
+            className="rounded bg-[#4776d5] px-2 py-1 text-white disabled:opacity-40"
           >
             Approve this destination
           </button>

@@ -955,7 +955,7 @@ export function AgentWorkspace({
   return (
     <aside
       aria-label="Professional agent workspace"
-      className={`flex h-full min-w-0 border-r ${isDarkMode ? 'border-[#30302e] bg-[#1d1d1c] text-[#efeee8]' : 'border-[#dedbd1] bg-[#fbfcfd] text-[#24221f]'}`}
+      className={`flex h-full min-w-0 border-r ${isDarkMode ? 'border-[#2e2f30] bg-[#1c1c1d] text-[#e8eaef]' : 'border-[#d1d5de] bg-[#fbfcfd] text-[#202123]'}`}
     >
       <nav aria-label="Agent threads" className="w-36 shrink-0 border-r border-current/10 p-2">
         <div className="mb-2 flex items-center justify-between">
@@ -994,7 +994,7 @@ export function AgentWorkspace({
               key={thread.id}
               onClick={() => setSelectedThread(thread.id)}
               aria-current={selectedThread === thread.id ? 'page' : undefined}
-              className={`mb-1 w-full rounded px-2 py-1.5 text-left text-[11px] ${selectedThread === thread.id ? 'bg-[#d96b43]/15 text-[#d96b43]' : 'hover:bg-black/5 dark:hover:bg-white/5'}`}
+              className={`mb-1 w-full rounded px-2 py-1.5 text-left text-[11px] ${selectedThread === thread.id ? 'bg-[#4776d5]/15 text-[#4776d5]' : 'hover:bg-black/5 dark:hover:bg-white/5'}`}
             >
               <span className="block truncate">{thread.title}</span>
               <span className="text-[9px] opacity-55">{thread.status}</span>
@@ -1075,7 +1075,7 @@ export function AgentWorkspace({
         <div className="flex-1 space-y-3 overflow-y-auto p-3">
           {messages.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center text-center">
-              <ShieldCheck className="mb-3 text-[#d96b43]" size={28} />
+              <ShieldCheck className="mb-3 text-[#4776d5]" size={28} />
               <h2 className="text-sm font-medium">Private coding agent</h2>
               <p className="mt-1 max-w-56 text-[11px] opacity-60">
                 Runs, tools, approvals, and recovery remain in this browser.
@@ -1085,7 +1085,7 @@ export function AgentWorkspace({
             messages.map((message) => (
               <article
                 key={message.id}
-                className={`rounded-lg p-2.5 text-xs ${message.role === 'user' ? 'ml-5 bg-[#d96b43]/10' : message.role === 'status' ? 'border border-dashed border-current/15 opacity-65' : 'mr-3 bg-black/5 dark:bg-white/5'}`}
+                className={`rounded-lg p-2.5 text-xs ${message.role === 'user' ? 'ml-5 bg-[#4776d5]/10' : message.role === 'status' ? 'border border-dashed border-current/15 opacity-65' : 'mr-3 bg-black/5 dark:bg-white/5'}`}
               >
                 <p className="mb-1 text-[9px] font-bold uppercase opacity-50">{message.role}</p>
                 <p className="whitespace-pre-wrap">{message.content}</p>
@@ -1112,7 +1112,7 @@ export function AgentWorkspace({
           )}
 
           {!pendingReview && reviewError && (
-            <p role="alert" className="rounded border border-amber-500/40 p-2 text-[11px]">
+            <p role="alert" className="rounded border border-blue-500/40 p-2 text-[11px]">
               {reviewError}
             </p>
           )}
@@ -1191,7 +1191,7 @@ export function AgentWorkspace({
                 key={value}
                 onClick={() => setMode(value)}
                 aria-pressed={mode === value}
-                className={`rounded px-2 py-1 text-[10px] capitalize ${mode === value ? 'bg-[#d96b43] text-white' : 'bg-black/5 dark:bg-white/5'}`}
+                className={`rounded px-2 py-1 text-[10px] capitalize ${mode === value ? 'bg-[#4776d5] text-white' : 'bg-black/5 dark:bg-white/5'}`}
               >
                 {value}
               </button>
@@ -1220,7 +1220,7 @@ export function AgentWorkspace({
                       : `Message agent in ${mode} mode`
             }
             disabled={!canRun && !running}
-            className="h-20 w-full resize-none rounded-md border border-current/15 bg-transparent p-2 text-xs outline-none focus:border-[#d96b43]"
+            className="h-20 w-full resize-none rounded-md border border-current/15 bg-transparent p-2 text-xs outline-none focus:border-[#4776d5]"
           />
           <div className="flex items-center justify-between">
             <span className="text-[10px] opacity-60">
@@ -1255,7 +1255,7 @@ export function AgentWorkspace({
               <button
                 disabled={!canRun}
                 onClick={() => void submit()}
-                className="rounded bg-[#d96b43] p-1.5 text-white disabled:opacity-40"
+                className="rounded bg-[#4776d5] p-1.5 text-white disabled:opacity-40"
                 title="Run agent"
               >
                 <Play size={13} />

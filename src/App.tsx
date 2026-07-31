@@ -138,7 +138,7 @@ export default function App() {
         const remaining = Math.max(0, MESSAGE_QUOTA - messageUnitsUsed);
         console.log(
           `%c sour.ai %c workspace reset. ${remaining}/${MESSAGE_QUOTA} messages remaining.`,
-          'background:#d96b43;color:#fff;padding:2px 6px;border-radius:4px;font-weight:bold;',
+          'background:#4776d5;color:#fff;padding:2px 6px;border-radius:4px;font-weight:bold;',
           'color:inherit;'
         );
         window.location.reload();
@@ -687,7 +687,7 @@ export default function App() {
             initial={{ opacity: 0, y: -20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -20, scale: 0.95 }}
-            className="fixed top-4 left-1/2 -translate-x-1/2 z-[200] bg-[#16181d] text-white dark:bg-[#dce0e5] dark:text-[#16181d] text-xs font-mono font-medium px-4 py-2 rounded-xl shadow-2xl border border-amber-500/40 flex items-center gap-2 select-none"
+            className="fixed top-4 left-1/2 -translate-x-1/2 z-[200] bg-[#16181d] text-white dark:bg-[#dce0e5] dark:text-[#16181d] text-xs font-mono font-medium px-4 py-2 rounded-xl shadow-2xl border border-blue-500/40 flex items-center gap-2 select-none"
           >
             <span>{devToast}</span>
           </motion.div>

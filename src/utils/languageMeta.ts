@@ -46,11 +46,11 @@ interface IconRule {
 }
 
 const ICON_RULES: IconRule[] = [
-  { test: /\.(html?|vue|svelte)$/i, icon: FileCode, className: 'text-orange-500' },
+  { test: /\.(html?|vue|svelte)$/i, icon: FileCode, className: 'text-blue-500' },
   { test: /\.(css|scss|sass|less)$/i, icon: Palette, className: 'text-blue-500' },
   { test: /\.tsx?$/i, icon: FileCode, className: 'text-blue-600' },
-  { test: /\.(jsx?|mjs|cjs)$/i, icon: FileCode, className: 'text-yellow-500' },
-  { test: /\.(json|jsonc|json5)$/i, icon: FileJson, className: 'text-amber-600' },
+  { test: /\.(jsx?|mjs|cjs)$/i, icon: FileCode, className: 'text-sky-500' },
+  { test: /\.(json|jsonc|json5)$/i, icon: FileJson, className: 'text-blue-600' },
   { test: /\.(ya?ml|toml|ini|cfg|conf|env.*)$/i, icon: Settings2, className: 'text-stone-500' },
   { test: /\.(md|mdx|markdown|txt|rst)$/i, icon: FileText, className: 'text-stone-400' },
   { test: /\.(py|pyw)$/i, icon: FileCode, className: 'text-emerald-600' },
@@ -58,7 +58,7 @@ const ICON_RULES: IconRule[] = [
   { test: /\.(c|h|cpp|cc|cxx|hpp|h\+\+)$/i, icon: FileCode, className: 'text-indigo-500' },
   { test: /\.cs$/i, icon: FileCode, className: 'text-purple-600' },
   { test: /\.go$/i, icon: FileCode, className: 'text-cyan-600' },
-  { test: /\.rs$/i, icon: FileCode, className: 'text-orange-700' },
+  { test: /\.rs$/i, icon: FileCode, className: 'text-blue-700' },
   { test: /\.rb$/i, icon: FileCode, className: 'text-rose-600' },
   { test: /\.php\d?$/i, icon: FileCode, className: 'text-violet-600' },
   { test: /\.sql$/i, icon: Database, className: 'text-sky-600' },

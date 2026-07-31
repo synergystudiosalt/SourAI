@@ -13,7 +13,7 @@ export default function Logo({ className = '', size = 32 }: LogoProps) {
       viewBox="0 0 100 100"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
-      className={`select-none text-[#d96b43] ${className}`}
+      className={`select-none text-[#4776d5] ${className}`}
       id="custom-soup-logo"
     >
       {/* Dynamic minimalist bowl with steam and spoon angled right */}

@@ -77,16 +77,16 @@ export const ImagePreviewCard: React.FC<ImagePreviewCardProps> = ({ prompt, url,
       <div className="relative aspect-square overflow-hidden flex items-center justify-center">
         {/* Loading skeleton */}
         {!loaded && (
-          <div className="absolute inset-0 flex items-center justify-center overflow-hidden bg-[#f0eee8] dark:bg-[#222221]">
+          <div className="absolute inset-0 flex items-center justify-center overflow-hidden bg-[#e8ebf0] dark:bg-[#212122]">
             <div
               className="absolute inset-0"
               style={{
-                background: 'linear-gradient(110deg, #e8e6e0 30%, #f5f4ef 50%, #e8e6e0 70%)',
+                background: 'linear-gradient(110deg, #e2e3e6 30%, #eff1f5 50%, #e2e3e6 70%)',
                 backgroundSize: '200% 100%',
                 animation: 'shimmer 1.5s ease-in-out infinite',
               }}
             />
-            <Loader2 className="relative w-6 h-6 text-[#a09a8e] dark:text-[#666] animate-spin" />
+            <Loader2 className="relative w-6 h-6 text-[#90959e] dark:text-[#666] animate-spin" />
           </div>
         )}
 
@@ -117,7 +117,7 @@ export const ImagePreviewCard: React.FC<ImagePreviewCardProps> = ({ prompt, url,
           <button
             onClick={handleCopy}
             disabled={copied}
-            className="p-2 rounded-md hover:bg-[#e8e6e0] dark:hover:bg-[#1e2128] transition-colors flex items-center gap-1.5 disabled:opacity-50"
+            className="p-2 rounded-md hover:bg-[#e2e3e6] dark:hover:bg-[#1e2128] transition-colors flex items-center gap-1.5 disabled:opacity-50"
             title="Copy image to clipboard"
             aria-label="Copy image"
           >
@@ -137,7 +137,7 @@ export const ImagePreviewCard: React.FC<ImagePreviewCardProps> = ({ prompt, url,
           <button
             onClick={handleDownload}
             disabled={downloading}
-            className="p-2 rounded-md hover:bg-[#e8e6e0] dark:hover:bg-[#1e2128] transition-colors flex items-center gap-1.5 disabled:opacity-50"
+            className="p-2 rounded-md hover:bg-[#e2e3e6] dark:hover:bg-[#1e2128] transition-colors flex items-center gap-1.5 disabled:opacity-50"
             title="Download image"
             aria-label="Download image"
           >

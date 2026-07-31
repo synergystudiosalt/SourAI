@@ -63,13 +63,13 @@
   .agent-active-gradient {
     background-image: linear-gradient(
       100deg,
-      #77736a 0%,
-      #77736a 35%,
-      #d96b43 46%,
-      #ffd0aa 50%,
-      #d96b43 54%,
-      #77736a 65%,
-      #77736a 100%
+      #6c6f75 0%,
+      #6c6f75 35%,
+      #4776d5 46%,
+      #adc7fc 50%,
+      #4776d5 54%,
+      #6c6f75 65%,
+      #6c6f75 100%
     );
     background-size: 240% 100%;
     background-position: 180% 50%;
@@ -83,13 +83,13 @@
   .dark .agent-active-gradient {
     background-image: linear-gradient(
       100deg,
-      #8f8b83 0%,
-      #8f8b83 35%,
-      #e07a52 46%,
-      #ffe0c7 50%,
-      #e07a52 54%,
-      #8f8b83 65%,
-      #8f8b83 100%
+      #84888e 0%,
+      #84888e 35%,
+      #5683dc 46%,
+      #c9dafd 50%,
+      #5683dc 54%,
+      #84888e 65%,
+      #84888e 100%
     );
   }
 }
@@ -250,7 +250,7 @@
   width: 16px;
   height: 20px;
   border-radius: 6px;
-  background: #5f5b52;
+  background: #54575d;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18), 0 2px 7px rgba(0, 0, 0, 0.22);
   /* `left` is derived from --effort-percent, which is already transitioned on
      the control. Transitioning it here too would chase a moving value and
@@ -259,7 +259,7 @@
 }
 
 .dark .agent-effort-thumb {
-  background: #d8d4c6;
+  background: #c6ccd8;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.28), 0 2px 7px rgba(0, 0, 0, 0.35);
 }
 
@@ -282,7 +282,7 @@
   .agent-active-gradient {
     animation: none;
     background: none;
-    color: #d96b43;
+    color: #4776d5;
     -webkit-text-fill-color: currentColor;
   }
   .agent-effort-control,
@@ -321,9 +321,9 @@ html.dark body {
 }
 
 html:not(.dark) body {
-  color: #1a1a18;
-  background-color: #fafaf7;
-  --logo-bg-shade: #fafaf7;
+  color: #18191a;
+  background-color: #f7f8fa;
+  --logo-bg-shade: #f7f8fa;
 }
 
 html.dark body {
@@ -475,7 +475,7 @@ html.dark body {
 /* !important beats the Tailwind arbitrary-value utilities already on these
    elements without rewriting every call site. */
 .zed-editor-surface {
-  background: var(--z-surface-raised) !important;
+  background: var(--z-editor) !important;
 }
 
 .zed-titlebar,

@@ -41,7 +41,7 @@ const CHIPS: ChipItem[] = [
   {
     id: 'sourschoice',
     label: "Sour's choice",
-    icon: <Lightbulb className="w-3 h-3 text-[#d96b43]" />,
+    icon: <Lightbulb className="w-3 h-3 text-[#4776d5]" />,
     prompt: 'Surprise me with a fascinating visual thought experiment or puzzle!',
   },
 ];
@@ -58,7 +58,7 @@ export const PromptChips: React.FC<PromptChipsProps> = ({ onSelectPrompt }) => {
         <button
           key={chip.id}
           onClick={() => onSelectPrompt(chip.prompt)}
-          className="bg-white dark:bg-[#17191d] hover:bg-[#f6f8fa] dark:hover:bg-[#1e2128] border border-[#dfe3ea] dark:border-[#282c33] text-[#3b414d] dark:text-[#dfe3ea] text-[11px] font-medium px-3 py-1 rounded-full shadow-2xs hover:shadow-xs cursor-pointer flex items-center gap-1.5 hover:border-[#c8c5ba] dark:hover:border-[#444] blurry-hover"
+          className="bg-white dark:bg-[#17191d] hover:bg-[#f6f8fa] dark:hover:bg-[#1e2128] border border-[#dfe3ea] dark:border-[#282c33] text-[#3b414d] dark:text-[#dfe3ea] text-[11px] font-medium px-3 py-1 rounded-full shadow-2xs hover:shadow-xs cursor-pointer flex items-center gap-1.5 hover:border-[#bdc0c5] dark:hover:border-[#444] blurry-hover"
         >
           {chip.icon}
           <span>{chip.label}</span>

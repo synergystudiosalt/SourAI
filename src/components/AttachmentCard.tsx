@@ -26,7 +26,7 @@ export const AttachmentCard: React.FC<AttachmentCardProps> = ({ item, onRemove, 
 
   return (
     <div
-      className={`relative w-36 sm:w-40 bg-white dark:bg-[#1f1f1e] border border-[#e3e0d5] dark:border-[#333] rounded-xl p-3 shadow-[0_2px_8px_rgba(0,0,0,0.04)] flex flex-col justify-between transition-all select-none ${className}`}
+      className={`relative w-36 sm:w-40 bg-white dark:bg-[#1e1e1f] border border-[#d5dae3] dark:border-[#333] rounded-xl p-3 shadow-[0_2px_8px_rgba(0,0,0,0.04)] flex flex-col justify-between transition-all select-none ${className}`}
     >
       {/* Remove Button if provided */}
       {onRemove && (
@@ -36,7 +36,7 @@ export const AttachmentCard: React.FC<AttachmentCardProps> = ({ item, onRemove, 
             e.stopPropagation();
             onRemove();
           }}
-          className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-[#d96b43] hover:bg-[#c55a33] text-white rounded-full flex items-center justify-center hover:scale-110 transition-transform shadow-sm z-10 cursor-pointer"
+          className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-[#4776d5] hover:bg-[#3765c1] text-white rounded-full flex items-center justify-center hover:scale-110 transition-transform shadow-sm z-10 cursor-pointer"
           title="Remove attachment"
         >
           <X className="w-3 h-3" />
@@ -46,14 +46,14 @@ export const AttachmentCard: React.FC<AttachmentCardProps> = ({ item, onRemove, 
       {/* Card Content Body */}
       {hasImagePreview ? (
         <div className="flex flex-col h-full justify-between gap-2">
-          <div className="w-full h-20 rounded-lg overflow-hidden border border-[#eae8e0] dark:border-[#282c33] bg-[#f8f7f2] dark:bg-[#1e2128] flex items-center justify-center">
+          <div className="w-full h-20 rounded-lg overflow-hidden border border-[#e0e3ea] dark:border-[#282c33] bg-[#f2f4f8] dark:bg-[#1e2128] flex items-center justify-center">
             <img src={item.dataUrl} alt={item.name} className="w-full h-full object-cover" />
           </div>
           <div className="flex flex-col gap-1">
             <span className="text-[11px] font-medium text-[#16181d] dark:text-[#dce0e5] truncate leading-tight">
               {item.name}
             </span>
-            <span className="self-start text-[9px] font-semibold text-[#524f47] dark:text-[#a9afbc] bg-[#f6f8fa] dark:bg-[#282827] border border-[#e0ddd2] dark:border-[#3a3a38] px-1.5 py-0.5 rounded-md uppercase tracking-wider">
+            <span className="self-start text-[9px] font-semibold text-[#484b51] dark:text-[#a9afbc] bg-[#f6f8fa] dark:bg-[#272728] border border-[#d2d7e0] dark:border-[#38393a] px-1.5 py-0.5 rounded-md uppercase tracking-wider">
               {ext}
             </span>
           </div>
@@ -63,7 +63,7 @@ export const AttachmentCard: React.FC<AttachmentCardProps> = ({ item, onRemove, 
           <span className="text-xs font-medium text-[#16181d] dark:text-[#dce0e5] line-clamp-3 leading-snug break-words">
             {item.name}
           </span>
-          <span className="self-start text-[10px] font-semibold text-[#524f47] dark:text-[#a9afbc] bg-[#f6f8fa] dark:bg-[#282827] border border-[#e0ddd2] dark:border-[#3a3a38] px-2 py-0.5 rounded-md uppercase tracking-wider">
+          <span className="self-start text-[10px] font-semibold text-[#484b51] dark:text-[#a9afbc] bg-[#f6f8fa] dark:bg-[#272728] border border-[#d2d7e0] dark:border-[#38393a] px-2 py-0.5 rounded-md uppercase tracking-wider">
             {ext}
           </span>
         </div>

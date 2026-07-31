@@ -43,8 +43,8 @@ export const UpgradeModal: React.FC<UpgradeModalProps> = ({ isOpen, onClose, lim
             </button>
 
             {/* Header */}
-            <div className="w-12 h-12 rounded-2xl bg-[#f4ece3] dark:bg-[#2c2b28] flex items-center justify-center mx-auto mb-3">
-              <Sparkles className="w-6 h-6 text-[#d96b43]" />
+            <div className="w-12 h-12 rounded-2xl bg-[#e3e9f4] dark:bg-[#292a2c] flex items-center justify-center mx-auto mb-3">
+              <Sparkles className="w-6 h-6 text-[#4776d5]" />
             </div>
 
             <h2 className="font-instrument text-2xl font-normal text-[#16181d] dark:text-[#dce0e5] tracking-tight mb-2">
@@ -58,7 +58,7 @@ export const UpgradeModal: React.FC<UpgradeModalProps> = ({ isOpen, onClose, lim
 
             <button
               onClick={onClose}
-              className="w-full bg-[#16181d] dark:bg-[#dce0e5] text-white dark:text-[#16181d] hover:bg-[#33312e] dark:hover:bg-white text-xs font-semibold py-2.5 rounded-xl transition-all cursor-pointer shadow-xs"
+              className="w-full bg-[#16181d] dark:bg-[#dce0e5] text-white dark:text-[#16181d] hover:bg-[#2f3032] dark:hover:bg-white text-xs font-semibold py-2.5 rounded-xl transition-all cursor-pointer shadow-xs"
             >
               Got it
             </button>

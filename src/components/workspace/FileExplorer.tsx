@@ -178,7 +178,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
             if (e.key === 'Escape') setPendingCreate(null);
           }}
           placeholder={pendingCreate.type === 'folder' ? 'folder name' : 'file.ext'}
-          className="flex-1 min-w-0 text-xs bg-white dark:bg-[#141413] border border-[#d96b43] px-1.5 py-0.5 outline-none text-[#16181d] dark:text-[#dce0e5]"
+          className="flex-1 min-w-0 text-xs bg-white dark:bg-[#131314] border border-[#4776d5] px-1.5 py-0.5 outline-none text-[#16181d] dark:text-[#dce0e5]"
         />
       </div>
     );
@@ -228,12 +228,12 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
                   if (e.key === 'Enter') commitRename();
                   if (e.key === 'Escape') setRenamingPath(null);
                 }}
-                className="flex-1 min-w-0 text-xs bg-white dark:bg-[#141413] border border-[#d96b43] px-1.5 py-0.5 outline-none text-[#16181d] dark:text-[#dce0e5]"
+                className="flex-1 min-w-0 text-xs bg-white dark:bg-[#131314] border border-[#4776d5] px-1.5 py-0.5 outline-none text-[#16181d] dark:text-[#dce0e5]"
               />
             ) : (
               <span className="truncate">{node.name}</span>
             )}
-            {isDirty && !isRenaming && <span className="w-1.5 h-1.5 bg-[#d96b43] shrink-0" title="Unsaved changes" />}
+            {isDirty && !isRenaming && <span className="w-1.5 h-1.5 bg-[#4776d5] shrink-0" title="Unsaved changes" />}
           </div>
 
           {!isRenaming && (

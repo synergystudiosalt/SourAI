@@ -37,7 +37,7 @@ const ToolCallDetails: React.FC<{ toolCall: AgentToolCall }> = ({ toolCall }) =>
       return (
         <div className="flex items-center gap-1.5">
           {toolCall.found ? (
-            <Check className="w-3 h-3 text-amber-600 shrink-0" />
+            <Check className="w-3 h-3 text-blue-600 shrink-0" />
           ) : (
             <span className="w-3 h-3 text-red-400 shrink-0 font-bold leading-3 text-center">!</span>
           )}
@@ -75,7 +75,7 @@ const ToolCallDetails: React.FC<{ toolCall: AgentToolCall }> = ({ toolCall }) =>
         <div className="space-y-1">
           <div className="font-mono truncate">{toolCall.path}</div>
           {toolCall.applied ? (
-            <div className="text-amber-600">
+            <div className="text-blue-600">
               Applied ({toolCall.search.length} → {toolCall.replace.length} chars)
             </div>
           ) : toolCall.found ? (
@@ -125,7 +125,7 @@ const ToolCallDetails: React.FC<{ toolCall: AgentToolCall }> = ({ toolCall }) =>
           {toolCall.entries.slice(0, 20).map((entry, index) => (
             <div key={index} className="pl-3 font-mono text-[9.5px]">
               {entry.endsWith('/') ? (
-                <span className="text-amber-600 dark:text-amber-400">{entry}</span>
+                <span className="text-blue-600 dark:text-blue-400">{entry}</span>
               ) : (
                 <span>{entry}</span>
               )}
@@ -211,7 +211,7 @@ export const ToolCallList: React.FC<ToolCallListProps> = ({
           ) : missing > 0 && successfulReads === 0 ? (
             <CircleX className="h-3 w-3 shrink-0 text-red-400" />
           ) : (
-            <Check className="h-3 w-3 shrink-0 text-amber-600" />
+            <Check className="h-3 w-3 shrink-0 text-blue-600" />
           )}
           <span
             className={`min-w-0 truncate ${isReading ? 'agent-active-gradient' : ''}`}
@@ -261,7 +261,7 @@ export const ToolCallList: React.FC<ToolCallListProps> = ({
               <Loader2 className="w-3 h-3 animate-spin shrink-0" />
             ) : toolCall.type === 'readfile' ? (
               toolCall.found ? (
-                <Check className="w-3 h-3 text-amber-600 shrink-0" />
+                <Check className="w-3 h-3 text-blue-600 shrink-0" />
               ) : (
                 <CircleX className="w-3 h-3 shrink-0 text-red-400" />
               )

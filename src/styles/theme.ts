@@ -11,27 +11,27 @@ export const theme = {
       bg: {
         primary: '#fbfcfd',
         secondary: '#f6f8fa',
-        tertiary: '#eeebe3',
-        overlay: '#fcfbf9',
+        tertiary: '#e3e7ee',
+        overlay: '#f9fafc',
       },
       // Primary text
       text: {
         primary: '#16181d',
-        secondary: '#524f47',
+        secondary: '#484b51',
         tertiary: '#78828e',
-        disabled: '#a39d8f',
+        disabled: '#9297a0',
       },
       // Borders
       border: {
-        light: '#e8e7e1',
-        medium: '#e2dfd5',
+        light: '#e3e4e6',
+        medium: '#d5d9e2',
         dark: '#c3cad6',
       },
       // Semantic colors
-      accent: '#d96b43', // Burnt orange/coral
+      accent: '#4776d5', // Burnt orange/coral
       success: '#10b981',
       error: '#ef4444',
-      warning: '#f59e0b',
+      warning: '#115bef',
       info: '#3b82f6',
     },
     dark: {
@@ -45,21 +45,21 @@ export const theme = {
       // Primary text
       text: {
         primary: '#dce0e5',
-        secondary: '#b0adab',
+        secondary: '#acadaf',
         tertiary: '#a9afbc',
-        disabled: '#767671',
+        disabled: '#727375',
       },
       // Borders
       border: {
         light: '#282c33',
-        medium: '#333231',
+        medium: '#313233',
         dark: '#3b414d',
       },
       // Semantic colors
-      accent: '#ff8a65', // Lighter orange for dark mode
+      accent: '#6b9af9', // Lighter orange for dark mode
       success: '#6ee7b7',
       error: '#f87171',
-      warning: '#fbbf24',
+      warning: '#296df6',
       info: '#60a5fa',
     },
   },
@@ -158,29 +158,29 @@ export const theme = {
     // Button styles
     button: {
       base: 'inline-flex items-center justify-center font-medium rounded-lg transition-all duration-150 cursor-pointer',
-      primary: 'bg-[#d96b43] text-white hover:bg-[#c85a35] active:bg-[#b84a27] disabled:opacity-50 disabled:cursor-not-allowed',
-      secondary: 'bg-[#eeebe3] dark:bg-[#282c33] text-[#16181d] dark:text-[#dce0e5] hover:bg-[#e4e0d5] dark:hover:bg-[#3b414d] active:bg-[#ddd9cf] dark:active:bg-[#424240]',
-      ghost: 'text-[#4a5259] dark:text-[#a3a099] hover:bg-[#f2f4f7] dark:hover:bg-[#1e2128] hover:text-[#16181d] dark:hover:text-[#dce0e5]',
+      primary: 'bg-[#4776d5] text-white hover:bg-[#3967c4] active:bg-[#2b59b4] disabled:opacity-50 disabled:cursor-not-allowed',
+      secondary: 'bg-[#e3e7ee] dark:bg-[#282c33] text-[#16181d] dark:text-[#dce0e5] hover:bg-[#d5dae4] dark:hover:bg-[#3b414d] active:bg-[#cfd4dd] dark:active:bg-[#404142]',
+      ghost: 'text-[#4a5259] dark:text-[#9a9da2] hover:bg-[#f2f4f7] dark:hover:bg-[#1e2128] hover:text-[#16181d] dark:hover:text-[#dce0e5]',
       danger: 'bg-red-600 text-white hover:bg-red-700 active:bg-red-800 disabled:opacity-50',
     },
 
     // Input styles
     input: {
-      base: 'w-full px-3 py-2 rounded-lg bg-white dark:bg-[#17191d] border border-[#e6e4dc] dark:border-[#282c33] text-[#16181d] dark:text-[#dce0e5] placeholder-[#78828e] dark:placeholder-[#767671] outline-none transition-colors',
-      focus: 'focus:border-[#c5c2b6] dark:focus:border-[#444] focus:ring-2 focus:ring-[#d96b43]/20',
+      base: 'w-full px-3 py-2 rounded-lg bg-white dark:bg-[#17191d] border border-[#dcdfe6] dark:border-[#282c33] text-[#16181d] dark:text-[#dce0e5] placeholder-[#78828e] dark:placeholder-[#727375] outline-none transition-colors',
+      focus: 'focus:border-[#b9bcc2] dark:focus:border-[#444] focus:ring-2 focus:ring-[#4776d5]/20',
     },
 
     // Card styles with subtle shadows and borders
     card: {
-      base: 'rounded-lg border border-[#e8e7e1] dark:border-[#282c33] bg-white dark:bg-[#1e2128] shadow-sm',
+      base: 'rounded-lg border border-[#e3e4e6] dark:border-[#282c33] bg-white dark:bg-[#1e2128] shadow-sm',
       hover: 'hover:shadow-md transition-shadow',
     },
 
     // Badge styles
     badge: {
       base: 'inline-flex items-center px-2 py-1 rounded-full text-xs font-medium',
-      primary: 'bg-[#d96b43] text-white',
-      secondary: 'bg-[#e8e6df] dark:bg-[#282c33] text-[#524f47] dark:text-[#b0adab]',
+      primary: 'bg-[#4776d5] text-white',
+      secondary: 'bg-[#dfe2e8] dark:bg-[#282c33] text-[#484b51] dark:text-[#acadaf]',
       success: 'bg-emerald-100 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-200',
       error: 'bg-red-100 dark:bg-red-950/30 text-red-800 dark:text-red-200',
     },

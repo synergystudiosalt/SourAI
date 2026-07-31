@@ -42,7 +42,7 @@ export const ModelSelectorPopover: React.FC<ModelSelectorPopoverProps> = ({
               className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-left cursor-pointer blurry-hover ${
                 isSelected
                   ? 'bg-[#f6f8fa] dark:bg-[#1e2128] text-[#16181d] dark:text-[#dce0e5]'
-                  : 'text-[#42403a] dark:text-[#c4c1b9] hover:bg-[#f8f7f2] dark:hover:bg-[#232322]'
+                  : 'text-[#3b3d41] dark:text-[#babdc3] hover:bg-[#f2f4f8] dark:hover:bg-[#222223]'
               }`}
             >
               <div className="flex-1 pr-2 min-w-0">
@@ -51,7 +51,7 @@ export const ModelSelectorPopover: React.FC<ModelSelectorPopoverProps> = ({
                     {model.name}
                   </span>
                   {model.badge && (
-                    <span className="text-[9px] px-1.5 py-0.2 rounded-md font-medium bg-[#e8e6df] dark:bg-[#282c33] text-[#636056] dark:text-[#a9afbc] shrink-0">
+                    <span className="text-[9px] px-1.5 py-0.2 rounded-md font-medium bg-[#dfe2e8] dark:bg-[#282c33] text-[#585b61] dark:text-[#a9afbc] shrink-0">
                       {model.badge}
                     </span>
                   )}

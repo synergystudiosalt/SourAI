@@ -42,7 +42,7 @@ export const OperationList: React.FC<OperationListProps> = ({
           <button
             type="button"
             onClick={() => !isCoding && onToggle(operationId)}
-            className="w-full flex items-center gap-1.5 px-2.5 py-1.5 bg-[#f5f3eb] dark:bg-[#1e2128] border-b border-[#dfe3ea] dark:border-[#282c33] text-[10.5px] text-[#4a5259] dark:text-[#a9afbc] hover:bg-[#efece3] dark:hover:bg-[#2a2a29] cursor-pointer ws-button-smooth"
+            className="w-full flex items-center gap-1.5 px-2.5 py-1.5 bg-[#ebeef5] dark:bg-[#1e2128] border-b border-[#dfe3ea] dark:border-[#282c33] text-[10.5px] text-[#4a5259] dark:text-[#a9afbc] hover:bg-[#e3e7ef] dark:hover:bg-[#29292a] cursor-pointer ws-button-smooth"
           >
             {isCoding ? (
               <Loader2 className="w-3 h-3 animate-spin shrink-0 text-[#78828e]" />
@@ -89,7 +89,7 @@ export const OperationList: React.FC<OperationListProps> = ({
                           className={`flex-1 px-2.5 py-[1px] font-mono text-[10px] leading-[1.7] whitespace-pre ${
                             addedLines.has(index)
                               ? 'bg-emerald-100/60 dark:bg-emerald-900/20 text-emerald-900 dark:text-emerald-200'
-                              : 'text-[#16181d] dark:text-[#e0dcd4]'
+                              : 'text-[#16181d] dark:text-[#d4d8e0]'
                           }`}
                         >
                           {line || ' '}

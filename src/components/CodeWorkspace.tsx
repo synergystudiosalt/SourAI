@@ -982,7 +982,7 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
 
   if (!activeProject) {
     return (
-      <div className={`zed-workspace flex-1 h-full flex flex-col overflow-hidden relative ${isDarkMode ? 'bg-[#17191d] text-[#dce0e5]' : 'bg-[#fbfcfd] text-[#16181d]'}`}>
+      <div className={`zed-workspace z-grid flex-1 h-full flex flex-col overflow-hidden relative ${isDarkMode ? 'bg-[#17191d] text-[#dce0e5]' : 'bg-[#fbfcfd] text-[#16181d]'}`}>
         <div className="flex-1 flex flex-col items-center justify-center p-6 select-none relative">
           <div className="flex flex-col items-center text-center max-w-lg w-full">
             <div className="flex items-center justify-center gap-3.5 mb-8">
@@ -1005,7 +1005,7 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
               <div className="space-y-1 w-full text-left">
                 <button
                   onClick={handleNewEmptyWorkspace}
-                  className="w-full flex items-center justify-between text-xs px-3 py-1.5 text-[#3b414d] dark:text-[#dfe3ea] hover:bg-[#efede4] dark:hover:bg-[#232322] hover:text-[#16181d] dark:hover:text-[#dce0e5] group cursor-pointer text-left blurry-hover"
+                  className="w-full flex items-center justify-between text-xs px-3 py-1.5 text-[#3b414d] dark:text-[#dfe3ea] hover:bg-[#e4e8ef] dark:hover:bg-[#222223] hover:text-[#16181d] dark:hover:text-[#dce0e5] group cursor-pointer text-left blurry-hover"
                 >
                   <span className="flex items-center gap-2.5">
                     <Plus className="w-3.5 h-3.5 text-[#78828e] dark:text-[#888]" />
@@ -1018,7 +1018,7 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
                   onClick={handleOpenLocalDirectory}
                   disabled={!isDirectoryPickerSupported() || isScanning}
                   title={isDirectoryPickerSupported() ? undefined : 'Opening real folders needs a Chromium-based browser (Chrome or Edge).'}
-                  className="w-full flex items-center justify-between text-xs px-3 py-1.5 text-[#3b414d] dark:text-[#dfe3ea] hover:bg-[#efede4] dark:hover:bg-[#232322] hover:text-[#16181d] dark:hover:text-[#dce0e5] group cursor-pointer text-left disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent blurry-hover"
+                  className="w-full flex items-center justify-between text-xs px-3 py-1.5 text-[#3b414d] dark:text-[#dfe3ea] hover:bg-[#e4e8ef] dark:hover:bg-[#222223] hover:text-[#16181d] dark:hover:text-[#dce0e5] group cursor-pointer text-left disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent blurry-hover"
                 >
                   <span className="flex items-center gap-2.5">
                     <Folder className="w-3.5 h-3.5 text-[#78828e] dark:text-[#888]" />
@@ -1030,7 +1030,7 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
                 {hasSavedVirtualProject && (
                   <button
                     onClick={handleRestoreVirtualProject}
-                    className="w-full flex items-center justify-between text-xs px-3 py-1.5 text-[#3b414d] dark:text-[#dfe3ea] hover:bg-[#efede4] dark:hover:bg-[#232322] hover:text-[#16181d] dark:hover:text-[#dce0e5] group cursor-pointer text-left blurry-hover"
+                    className="w-full flex items-center justify-between text-xs px-3 py-1.5 text-[#3b414d] dark:text-[#dfe3ea] hover:bg-[#e4e8ef] dark:hover:bg-[#222223] hover:text-[#16181d] dark:hover:text-[#dce0e5] group cursor-pointer text-left blurry-hover"
                   >
                     <span className="flex items-center gap-2.5">
                       <RefreshCw className="w-3.5 h-3.5 text-[#78828e] dark:text-[#888]" />
@@ -1158,13 +1158,13 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
                       className={`h-full pl-3 pr-2 text-xs flex items-center gap-1.5 cursor-pointer shrink-0 group border-r border-[#dfe3ea] dark:border-[#282c33] ws-tab ${
                         isActive
                           ? 'bg-white dark:bg-[#1e2128] text-[#16181d] dark:text-[#dce0e5] font-medium'
-                          : 'text-[#78828e] dark:text-[#a9afbc] hover:bg-[#efede4] dark:hover:bg-[#2a2a2a] hover:text-[#16181d] dark:hover:text-[#dce0e5]'
+                          : 'text-[#78828e] dark:text-[#a9afbc] hover:bg-[#e4e8ef] dark:hover:bg-[#2a2a2a] hover:text-[#16181d] dark:hover:text-[#dce0e5]'
                       }`}
                     >
                       <TabIcon className={`w-3.5 h-3.5 shrink-0 ${tabIconClass}`} />
                       <span className="truncate max-w-35">{node.name}</span>
                       {tab.isDirty ? (
-                        <span className="w-1.5 h-1.5 bg-[#d96b43] shrink-0" />
+                        <span className="w-1.5 h-1.5 bg-[#4776d5] shrink-0" />
                       ) : (
                         <X
                           onClick={(e) => handleCloseTab(tab.path, e)}
@@ -1181,8 +1181,8 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
                   title="Toggle live preview for this file"
                   className={`flex items-center gap-1.5 px-3 text-[11px] font-medium border-l border-[#dfe3ea] dark:border-[#282c33] shrink-0 cursor-pointer ws-toolbar-btn ${
                     showPreview
-                      ? 'bg-white dark:bg-[#1e2128] text-[#d96b43]'
-                      : 'text-[#78828e] dark:text-[#a9afbc] hover:bg-[#efede4] dark:hover:bg-[#2a2a2a] hover:text-[#16181d] dark:hover:text-[#dce0e5]'
+                      ? 'bg-white dark:bg-[#1e2128] text-[#4776d5]'
+                      : 'text-[#78828e] dark:text-[#a9afbc] hover:bg-[#e4e8ef] dark:hover:bg-[#2a2a2a] hover:text-[#16181d] dark:hover:text-[#dce0e5]'
                   }`}
                 >
                   {showPreview ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
@@ -1200,7 +1200,7 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
                       <span>Preview isn't available for this file type.</span>
                       <button
                         onClick={() => handleDownloadFile(activeNode.path)}
-                        className="text-xs px-3 py-1.5 bg-[#f6f8fa] dark:bg-[#1e2128] border border-[#dfe3ea] dark:border-[#282c33] hover:bg-[#f2f4f7] dark:hover:bg-[#30302e] cursor-pointer"
+                        className="text-xs px-3 py-1.5 bg-[#f6f8fa] dark:bg-[#1e2128] border border-[#dfe3ea] dark:border-[#282c33] hover:bg-[#f2f4f7] dark:hover:bg-[#2e2f30] cursor-pointer"
                       >
                         Download file
                       </button>
@@ -1282,7 +1282,7 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
                     />
                   )}
                   {previewKind === 'markdown' && (
-                    <div key={previewNonce} className="flex-1 w-full overflow-y-auto bg-white dark:bg-[#141413] px-5 py-4 text-sm leading-relaxed text-[#16181d] dark:text-[#dce0e5] space-y-2">
+                    <div key={previewNonce} className="flex-1 w-full overflow-y-auto bg-white dark:bg-[#131314] px-5 py-4 text-sm leading-relaxed text-[#16181d] dark:text-[#dce0e5] space-y-2">
                       <ReactMarkdown components={{ img: WorkspaceMarkdownImage }}>
                         {htmlEntry.content || ''}
                       </ReactMarkdown>
@@ -1313,7 +1313,7 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
                     </span>
                     <button
                       onClick={() => setWordWrap((v) => !v)}
-                      className={`flex items-center gap-1 cursor-pointer hover:text-[#16181d] dark:hover:text-[#dce0e5] ${wordWrap ? 'text-[#d96b43]' : ''}`}
+                      className={`flex items-center gap-1 cursor-pointer hover:text-[#16181d] dark:hover:text-[#dce0e5] ${wordWrap ? 'text-[#4776d5]' : ''}`}
                       title="Toggle word wrap"
                     >
                       <WrapText className="w-3 h-3" /> Wrap
