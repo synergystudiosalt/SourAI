@@ -1,14 +1,18 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { WorkspaceFileNode } from '../types';
 import {
+  PreviewRuntimeCollector,
   SandboxedPreviewFrame,
   WorkspaceMarkdownImage,
   buildSandboxedPreviewDocument,
   dedupeWorkspaceTabs,
   getRenameBlockReason,
   openSafePreviewInNewTab,
+  planPreviewRuntimeCollection,
+  type PreviewRuntimeCollectionRequest,
 } from './CodeWorkspace';
 import {
   PREVIEW_LOG_MESSAGE,
@@ -72,6 +76,98 @@ describe('CodeWorkspace preview security', () => {
 
     rerender(<SandboxedPreviewFrame source="second" title="runtime preview" />);
     expect(getPreviewLogs()).toEqual([]);
+  });
+
+  it('mounts a live off-screen frame only for the collection window', async () => {
+    vi.useFakeTimers();
+    const submit = vi.spyOn(HTMLFormElement.prototype, 'submit').mockImplementation(() => undefined);
+
+    const Harness = () => {
+      const [request, setRequest] = useState<PreviewRuntimeCollectionRequest | null>({
+        id: 7,
+        source: '<script>console.error("headless boom")</script>',
+        useHeadlessFrame: true,
+      });
+      return (
+        <PreviewRuntimeCollector
+          request={request}
+          settleMs={10_000}
+          onComplete={() => setRequest(null)}
+        />
+      );
+    };
+
+    render(<Harness />);
+    const frame = screen.getByTitle('Headless runtime preview collector') as HTMLIFrameElement;
+    expect(frame).toHaveStyle({
+      position: 'fixed',
+      left: '-10000px',
+      width: '1px',
+      height: '1px',
+      opacity: '0',
+    });
+    expect(frame.style.display).not.toBe('none');
+    expect(frame).toHaveAttribute('sandbox', 'allow-scripts');
+    expect(submit).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: frame.contentWindow,
+          data: { type: PREVIEW_LOG_MESSAGE, level: 'error', text: 'headless boom' },
+        })
+      );
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByTitle('Headless runtime preview collector')).not.toBeInTheDocument();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('reuses an open visible preview instead of mounting a second frame', () => {
+    vi.spyOn(HTMLFormElement.prototype, 'submit').mockImplementation(() => undefined);
+    const request: PreviewRuntimeCollectionRequest = {
+      id: 8,
+      source: '<p>same preview</p>',
+      useHeadlessFrame: false,
+    };
+
+    const { container } = render(
+      <>
+        <SandboxedPreviewFrame source={request.source} title="Visible preview" />
+        <PreviewRuntimeCollector request={request} onComplete={vi.fn()} />
+      </>
+    );
+
+    expect(container.querySelectorAll('iframe')).toHaveLength(1);
+    expect(screen.getByTitle('Visible preview')).toHaveAttribute('data-preview-frame', 'visible');
+  });
+
+  it('plans a hidden collector only when HTML exists and no HTML preview is open', () => {
+    const htmlTree: WorkspaceFileNode[] = [
+      {
+        id: 'index.html',
+        name: 'index.html',
+        path: 'index.html',
+        type: 'file',
+        content: '<script src="game.js"></script>',
+      },
+      {
+        id: 'game.js',
+        name: 'game.js',
+        path: 'game.js',
+        type: 'file',
+        content: 'console.log("ready")',
+      },
+    ];
+
+    expect(planPreviewRuntimeCollection(htmlTree, 'game.js', new Set())?.useHeadlessFrame).toBe(true);
+    expect(
+      planPreviewRuntimeCollection(htmlTree, 'index.html', new Set(['index.html']))?.useHeadlessFrame
+    ).toBe(false);
+    expect(
+      planPreviewRuntimeCollection([htmlTree[1]], 'game.js', new Set())
+    ).toBeNull();
   });
 
   it('allows the runtime CDNs the preview builders actually use', () => {

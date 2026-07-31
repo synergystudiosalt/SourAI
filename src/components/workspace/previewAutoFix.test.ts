@@ -1,11 +1,37 @@
-import { describe, expect, it } from 'vitest';
-import type { PreviewLogEntry } from '../../security/previewIsolation';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { PREVIEW_LOG_MESSAGE, type PreviewLogEntry } from '../../security/previewIsolation';
 import {
   MAX_PREVIEW_AUTO_FIX_ATTEMPTS,
   PreviewAutoFixLoop,
+  waitForPreviewRuntimeError,
 } from './previewAutoFix';
+import { collectPreviewMessage, resetPreviewLogs } from './previewLogStore';
 
 const entry = (level: PreviewLogEntry['level'], text: string): PreviewLogEntry => ({ level, text });
+
+afterEach(() => {
+  vi.useRealTimers();
+  resetPreviewLogs();
+});
+
+describe('preview runtime settle wait', () => {
+  it('short-circuits as soon as a new error-level entry arrives', async () => {
+    vi.useFakeTimers();
+    const previewWindow = {} as Window;
+    const waiting = waitForPreviewRuntimeError(10_000);
+
+    collectPreviewMessage(
+      {
+        source: previewWindow,
+        data: { type: PREVIEW_LOG_MESSAGE, level: 'error', text: 'early failure' },
+      },
+      previewWindow
+    );
+
+    await expect(waiting).resolves.toBe('error');
+    expect(vi.getTimerCount()).toBe(0);
+  });
+});
 
 describe('PreviewAutoFixLoop', () => {
   it('starts a follow-up only for new error-level entries and deduplicates them', () => {

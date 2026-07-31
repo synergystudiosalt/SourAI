@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import {
   Plus, Folder, ArrowLeft, Save, AlertCircle, CheckCircle2, X, Loader2,
@@ -21,9 +21,17 @@ import {
   projectPathReservationKey, reserveUniqueProjectPath,
 } from '../utils/realFs';
 import { getLanguageName, isLikelyBinary, getFileIconMeta } from '../utils/languageMeta';
-import { buildPreviewDocument, getPreviewKind, buildReactPreview, isReactProject } from '../utils/webPreview';
+import { buildPreviewDocument, findHtmlEntry, getPreviewKind, buildReactPreview, isReactProject } from '../utils/webPreview';
 import { buildSandboxedPreviewDocument, PREVIEW_ENDPOINT } from '../security/previewIsolation';
-import { collectPreviewMessage, resetPreviewLogs } from './workspace/previewLogStore';
+import type { PreviewLogEntry } from '../security/previewIsolation';
+import {
+  collectPreviewMessage,
+  getPreviewLogs,
+  registerPreviewLogFrame,
+  resetPreviewLogs,
+  type PreviewLogFramePriority,
+} from './workspace/previewLogStore';
+import { PREVIEW_RUNTIME_SETTLE_MS, waitForPreviewRuntimeError } from './workspace/previewAutoFix';
 import { useFlag } from '../features/flags';
 
 export { buildSandboxedPreviewDocument } from '../security/previewIsolation';
@@ -143,22 +151,30 @@ export const SandboxedPreviewFrame: React.FC<{
   source: string;
   title: string;
   className?: string;
-}> = ({ source, title, className }) => {
+  style?: React.CSSProperties;
+  logPriority?: PreviewLogFramePriority;
+}> = ({ source, title, className, style, logPriority = 'visible' }) => {
   const reactId = React.useId();
   // useId embeds ':' which is not valid in a browsing-context name.
   const frameName = React.useMemo(() => `preview-${reactId.replace(/[^a-zA-Z0-9_-]/g, '')}`, [reactId]);
   const frameRef = React.useRef<HTMLIFrameElement>(null);
   const formRef = React.useRef<HTMLFormElement>(null);
   const fieldRef = React.useRef<HTMLInputElement>(null);
+  const logFrameTokenRef = React.useRef(Symbol('preview-log-frame'));
 
   React.useEffect(() => {
-    resetPreviewLogs();
+    const token = logFrameTokenRef.current;
+    const unregister = registerPreviewLogFrame(token, logPriority);
+    resetPreviewLogs(token);
     const handleMessage = (event: MessageEvent) => {
-      collectPreviewMessage(event, frameRef.current?.contentWindow ?? null);
+      collectPreviewMessage(event, frameRef.current?.contentWindow ?? null, token);
     };
     window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, [source]);
+    return () => {
+      window.removeEventListener('message', handleMessage);
+      unregister();
+    };
+  }, [source, logPriority]);
 
   // Navigating the frame to /api/preview is what gives the document its own
   // CSP; a srcdoc frame would inherit the app's strict script-src instead.
@@ -176,7 +192,11 @@ export const SandboxedPreviewFrame: React.FC<{
         sandbox="allow-scripts"
         referrerPolicy="no-referrer"
         className={className}
+        style={style}
         title={title}
+        aria-hidden={logPriority === 'headless' ? true : undefined}
+        tabIndex={logPriority === 'headless' ? -1 : undefined}
+        data-preview-frame={logPriority}
       />
       <form ref={formRef} method="POST" action={PREVIEW_ENDPOINT} target={frameName} hidden>
         <input ref={fieldRef} type="hidden" name="html" />
@@ -184,6 +204,86 @@ export const SandboxedPreviewFrame: React.FC<{
     </>
   );
 };
+
+/**
+ * The iframe remains a real, non-display:none, non-zero browsing context so its
+ * POST navigation and project scripts execute. Fixed positioning removes it
+ * from layout, and the distant coordinate plus opacity keep it imperceptible.
+ */
+export const HEADLESS_PREVIEW_FRAME_STYLE: React.CSSProperties = {
+  position: 'fixed',
+  left: '-10000px',
+  top: 0,
+  width: 1,
+  height: 1,
+  border: 0,
+  opacity: 0,
+  pointerEvents: 'none',
+};
+
+export interface PreviewRuntimeCollectionRequest {
+  readonly id: number;
+  readonly source: string;
+  readonly useHeadlessFrame: boolean;
+}
+
+export const PreviewRuntimeCollector: React.FC<{
+  request: PreviewRuntimeCollectionRequest | null;
+  onComplete: (requestId: number, logs: readonly PreviewLogEntry[]) => void;
+  settleMs?: number;
+}> = ({ request, onComplete, settleMs = PREVIEW_RUNTIME_SETTLE_MS }) => {
+  useEffect(() => {
+    if (!request) return;
+    const abortController = new AbortController();
+    void waitForPreviewRuntimeError(settleMs, abortController.signal).then((result) => {
+      if (result !== 'aborted') onComplete(request.id, getPreviewLogs());
+    });
+    return () => abortController.abort();
+  }, [onComplete, request, settleMs]);
+
+  if (!request?.useHeadlessFrame) return null;
+  return (
+    <SandboxedPreviewFrame
+      key={request.id}
+      source={request.source}
+      title="Headless runtime preview collector"
+      style={HEADLESS_PREVIEW_FRAME_STYLE}
+      logPriority="headless"
+    />
+  );
+};
+
+export function buildWorkspaceHtmlPreview(
+  tree: WorkspaceFileNode[],
+  htmlEntry: WorkspaceFileNode
+): string {
+  return isReactProject(listFiles(tree))
+    ? buildReactPreview(tree, htmlEntry)
+    : buildPreviewDocument(tree, htmlEntry);
+}
+
+/** Returns null for projects that have no executable HTML preview entry. */
+export function planPreviewRuntimeCollection(
+  tree: WorkspaceFileNode[],
+  activeTabPath: string,
+  previewOpenPaths: ReadonlySet<string>
+): Omit<PreviewRuntimeCollectionRequest, 'id'> | null {
+  const activeNode = findNode(tree, activeTabPath);
+  const activeHtmlEntry =
+    activeNode && activeNode.type === 'file' && getPreviewKind(activeNode.name) === 'html'
+      ? activeNode
+      : null;
+  const htmlEntry = activeHtmlEntry ?? findHtmlEntry(tree);
+  if (!htmlEntry) return null;
+
+  const visiblePreviewRunning = Boolean(
+    activeHtmlEntry && activeTabPath && previewOpenPaths.has(activeTabPath)
+  );
+  return {
+    source: buildWorkspaceHtmlPreview(tree, htmlEntry),
+    useHeadlessFrame: !visiblePreviewRunning,
+  };
+}
 
 /**
  * Opens the same CSP-restricted preview document in a separate tab.
@@ -289,8 +389,20 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
   // independently without one global preview stomping on another.
   const [previewOpenPaths, setPreviewOpenPaths] = useState<Set<string>>(new Set());
   const [previewNonce, setPreviewNonce] = useState(0);
+  const [previewRuntimeRequest, setPreviewRuntimeRequest] =
+    useState<PreviewRuntimeCollectionRequest | null>(null);
 
   const rootDirHandleRef = useRef<FileSystemDirectoryHandle | null>(null);
+  const treeRef = useRef(tree);
+  const activeTabPathRef = useRef(activeTabPath);
+  const previewOpenPathsRef = useRef(previewOpenPaths);
+  const previewRuntimeRequestIdRef = useRef(0);
+  const previewRuntimeResolversRef = useRef(
+    new Map<number, (logs: readonly PreviewLogEntry[]) => void>()
+  );
+  treeRef.current = tree;
+  activeTabPathRef.current = activeTabPath;
+  previewOpenPathsRef.current = previewOpenPaths;
   // Keyed by file path so autosaving one file never cancels another's pending save (e.g. after switching tabs).
   const saveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const lastManualSaveRef = useRef(0);
@@ -354,6 +466,45 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showPreview, htmlEntry, isReactPreview, previewKind, tree, previewNonce]);
+
+  const handlePreviewRuntimeCollectionComplete = useCallback(
+    (requestId: number, logs: readonly PreviewLogEntry[]) => {
+      const resolve = previewRuntimeResolversRef.current.get(requestId);
+      if (!resolve) return;
+      previewRuntimeResolversRef.current.delete(requestId);
+      setPreviewRuntimeRequest((current) => (current?.id === requestId ? null : current));
+      resolve(logs);
+    },
+    []
+  );
+
+  const collectPreviewLogsAfterApply = useCallback((): Promise<readonly PreviewLogEntry[]> => {
+    let plan: Omit<PreviewRuntimeCollectionRequest, 'id'> | null;
+    try {
+      plan = planPreviewRuntimeCollection(
+        treeRef.current,
+        activeTabPathRef.current,
+        previewOpenPathsRef.current
+      );
+    } catch (error) {
+      console.error('Failed to build runtime-check preview document', error);
+      return Promise.resolve(getPreviewLogs());
+    }
+    // There is nothing executable to collect for a project without an HTML entry.
+    if (!plan) return Promise.resolve(getPreviewLogs());
+
+    const id = ++previewRuntimeRequestIdRef.current;
+    return new Promise((resolve) => {
+      previewRuntimeResolversRef.current.set(id, resolve);
+      setPreviewRuntimeRequest({ id, ...plan });
+    });
+  }, []);
+
+  useEffect(() => () => {
+    const logs = getPreviewLogs();
+    for (const resolve of previewRuntimeResolversRef.current.values()) resolve(logs);
+    previewRuntimeResolversRef.current.clear();
+  }, []);
 
   // ---------------------------------------------------------------------
   // Project lifecycle
@@ -792,6 +943,7 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
           ? removeNode(next, op.path)
           : upsertFile(next, op.path, op.content ?? '');
     }
+    treeRef.current = next;
     setTree(next);
 
     const writes = ops.filter((op) => op.type === 'write');
@@ -809,8 +961,14 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
         writes[writes.length - 1]?.path
       );
     });
-    if (writes.length > 0) setActiveTabPath(writes[writes.length - 1].path);
-    else if (deleted.has(activeTabPath)) setActiveTabPath('');
+    if (writes.length > 0) {
+      const nextActivePath = writes[writes.length - 1].path;
+      activeTabPathRef.current = nextActivePath;
+      setActiveTabPath(nextActivePath);
+    } else if (deleted.has(activeTabPathRef.current)) {
+      activeTabPathRef.current = '';
+      setActiveTabPath('');
+    }
     return true;
   };
 
@@ -886,6 +1044,10 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
 
   return (
     <div className={`flex-1 h-full flex flex-col overflow-hidden relative ${isDarkMode ? 'bg-[#181817] text-[#f0efe6]' : 'bg-[#faf9f6] text-[#1c1b1a]'}`}>
+      <PreviewRuntimeCollector
+        request={previewRuntimeRequest}
+        onComplete={handlePreviewRuntimeCollectionComplete}
+      />
       <div className="flex-1 flex flex-col h-full overflow-hidden">
         <div className="h-9 border-b border-[#e5e3db] dark:border-[#2d2d2c] flex items-center justify-between px-3 select-none bg-[#f4f2eb] dark:bg-[#1a1a19] shrink-0">
           <div className="flex items-center gap-3">
@@ -970,6 +1132,7 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
                     : null
                 }
                 onApplyOps={handleLegacyAgentOps}
+                onCollectPreviewLogsAfterApply={collectPreviewLogsAfterApply}
                 onOpenFile={openFile}
               />
             )}

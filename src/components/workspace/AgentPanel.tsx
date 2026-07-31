@@ -34,7 +34,8 @@ import { splitThinkingAndText } from '../../../functions/shared/responseFormatti
 import { ChatRunController } from '../../agent/runtime/chatRunController';
 import { migrateModelId, MODEL_IDS, MODEL_ROUTES } from '../../../functions/shared/ai';
 import { getPreviewLogs } from './previewLogStore';
-import { PREVIEW_RUNTIME_SETTLE_MS, PreviewAutoFixLoop } from './previewAutoFix';
+import { PreviewAutoFixLoop, waitForPreviewRuntimeError } from './previewAutoFix';
+import type { PreviewLogEntry } from '../../security/previewIsolation';
 import {
   applyCompaction,
   buildCompactionRequest,
@@ -114,6 +115,7 @@ interface AgentPanelProps {
   files: WorkspaceFileNode[];
   activeFile: { path: string; content: string } | null;
   onApplyOps: (ops: AgentFileOp[]) => Promise<boolean>;
+  onCollectPreviewLogsAfterApply?: () => Promise<readonly PreviewLogEntry[]>;
   onOpenFile: (path: string) => void;
 }
 
@@ -164,6 +166,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   files,
   activeFile,
   onApplyOps,
+  onCollectPreviewLogsAfterApply,
   onOpenFile,
 }) => {
   const [messages, setMessages] = useState<AgentChatMessage[]>([]);
@@ -440,9 +443,11 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     );
     if (await onApplyOps(ops)) {
       markApplied(messageId, ops.map((o) => o.path));
-      await new Promise<void>((resolve) => window.setTimeout(resolve, PREVIEW_RUNTIME_SETTLE_MS));
+      const previewAfterApply = onCollectPreviewLogsAfterApply
+        ? await onCollectPreviewLogsAfterApply()
+        : (await waitForPreviewRuntimeError(), getPreviewLogs());
       if (userTurnSequence !== userTurnSequenceRef.current) return;
-      const decision = previewAutoFixRef.current.afterApply(previewBeforeApply, getPreviewLogs());
+      const decision = previewAutoFixRef.current.afterApply(previewBeforeApply, previewAfterApply);
       if (decision.kind === 'follow-up') {
         await handleSendRef.current(decision.prompt, { automaticRuntimeRepair: true });
       } else if (decision.kind === 'limit-reached') {

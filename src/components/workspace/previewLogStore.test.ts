@@ -3,6 +3,7 @@ import { PREVIEW_LOG_MESSAGE } from '../../security/previewIsolation';
 import {
   collectPreviewMessage,
   getPreviewLogs,
+  registerPreviewLogFrame,
   resetPreviewLogs,
   subscribeToPreviewLogs,
 } from './previewLogStore';
@@ -21,6 +22,40 @@ describe('previewLogStore', () => {
       level: 'error',
       text: 'boom',
     });
+  });
+
+  it('allows only the highest-priority registered frame to write', () => {
+    const headlessToken = Symbol('headless');
+    const visibleToken = Symbol('visible');
+    const headlessWindow = {} as Window;
+    const visibleWindow = {} as Window;
+    const releaseHeadless = registerPreviewLogFrame(headlessToken, 'headless');
+    const releaseVisible = registerPreviewLogFrame(visibleToken, 'visible');
+
+    expect(
+      collectPreviewMessage(
+        {
+          source: headlessWindow,
+          data: { type: PREVIEW_LOG_MESSAGE, level: 'error', text: 'hidden error' },
+        },
+        headlessWindow,
+        headlessToken
+      )
+    ).toBeNull();
+    expect(
+      collectPreviewMessage(
+        {
+          source: visibleWindow,
+          data: { type: PREVIEW_LOG_MESSAGE, level: 'error', text: 'visible error' },
+        },
+        visibleWindow,
+        visibleToken
+      )
+    ).toEqual({ level: 'error', text: 'visible error' });
+    expect(getPreviewLogs()).toEqual([{ level: 'error', text: 'visible error' }]);
+
+    releaseVisible();
+    releaseHeadless();
   });
 
   it('clears entries and notifies subscribers when the preview source resets', () => {

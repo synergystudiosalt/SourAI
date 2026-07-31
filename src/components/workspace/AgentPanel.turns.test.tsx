@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { WorkspaceFileNode } from '../../types';
 import { AgentPanel } from './AgentPanel';
 import { PREVIEW_LOG_MESSAGE } from '../../security/previewIsolation';
-import { collectPreviewMessage, resetPreviewLogs } from './previewLogStore';
+import { collectPreviewMessage, getPreviewLogs, resetPreviewLogs } from './previewLogStore';
 
 function streamedTurn(text: string): Response {
   const body = new ReadableStream({
@@ -121,7 +121,7 @@ describe('AgentPanel completed-turn parity', () => {
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
   });
 
-  it('labels and sends a runtime-error follow-up after applied operations', async () => {
+  it('labels and sends a runtime-error follow-up collected with the preview pane closed', async () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce(
         streamedTurn('Created the fix.\n\n```ts path="src/a.ts"\nexport const value = 2;\n```')
@@ -129,7 +129,8 @@ describe('AgentPanel completed-turn parity', () => {
       .mockResolvedValueOnce(streamedTurn('The runtime error is fixed.'));
 
     const previewWindow = {} as Window;
-    const onApplyOps = vi.fn().mockImplementation(async () => {
+    const onApplyOps = vi.fn().mockResolvedValue(true);
+    const onCollectPreviewLogsAfterApply = vi.fn().mockImplementation(async () => {
       collectPreviewMessage(
         {
           source: previewWindow,
@@ -141,7 +142,7 @@ describe('AgentPanel completed-turn parity', () => {
         },
         previewWindow
       );
-      return true;
+      return getPreviewLogs();
     });
 
     render(
@@ -162,6 +163,7 @@ describe('AgentPanel completed-turn parity', () => {
         ]}
         activeFile={null}
         onApplyOps={onApplyOps}
+        onCollectPreviewLogsAfterApply={onCollectPreviewLogsAfterApply}
         onOpenFile={vi.fn()}
       />
     );
@@ -170,7 +172,8 @@ describe('AgentPanel completed-turn parity', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Apply changes' }));
 
     await waitFor(() => expect(onApplyOps).toHaveBeenCalledOnce());
-    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2), { timeout: 4_000 });
+    expect(onCollectPreviewLogsAfterApply).toHaveBeenCalledOnce();
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
     expect(
       screen.getByText((content) =>
         content.includes('Automatic runtime repair · attempt 1/2')

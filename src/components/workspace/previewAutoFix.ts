@@ -1,9 +1,47 @@
 import type { PreviewLogEntry } from '../../security/previewIsolation';
+import { subscribeToPreviewLogs } from './previewLogStore';
 
 export const PREVIEW_RUNTIME_SETTLE_MS = 1_500;
 export const MAX_PREVIEW_AUTO_FIX_ATTEMPTS = 2;
 export const MAX_PREVIEW_ERRORS_PER_TURN = 5;
 export const MAX_PREVIEW_ERROR_CHARS = 700;
+
+export type PreviewRuntimeWaitResult = 'error' | 'timeout' | 'aborted';
+
+/**
+ * Waits for the preview to settle, but releases the caller as soon as a newly
+ * collected error arrives. Warnings and ordinary console output do not shorten
+ * the window because a later asynchronous runtime failure may still follow.
+ */
+export function waitForPreviewRuntimeError(
+  timeoutMs = PREVIEW_RUNTIME_SETTLE_MS,
+  signal?: AbortSignal
+): Promise<PreviewRuntimeWaitResult> {
+  return new Promise((resolve) => {
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const finish = (result: PreviewRuntimeWaitResult) => {
+      if (settled) return;
+      settled = true;
+      if (timer !== undefined) clearTimeout(timer);
+      unsubscribe();
+      signal?.removeEventListener('abort', handleAbort);
+      resolve(result);
+    };
+    const handleAbort = () => finish('aborted');
+    const unsubscribe = subscribeToPreviewLogs((entry) => {
+      if (entry?.level === 'error') finish('error');
+    });
+
+    if (signal?.aborted) {
+      finish('aborted');
+      return;
+    }
+    signal?.addEventListener('abort', handleAbort, { once: true });
+    timer = setTimeout(() => finish('timeout'), timeoutMs);
+  });
+}
 
 export type PreviewAutoFixDecision =
   | { readonly kind: 'none' }
