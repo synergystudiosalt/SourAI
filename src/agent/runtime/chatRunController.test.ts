@@ -5,6 +5,9 @@ import {
   ChatRunController,
   CONTINUE_AFTER_REASONING,
   FINISH_WITH_EXISTING_RESULTS,
+  LAST_TURN_NOTICE,
+  lastTurnNotice,
+  NO_PROGRESS_RESPONSE,
   SILENT_MODEL_RESPONSE,
   UNRESOLVED_WORKSPACE_REQUEST,
 } from './chatRunController';
@@ -58,5 +61,58 @@ describe('ChatRunController', () => {
     expect(controller.consumeIncomplete(true, '', 0, 2, 6)).toBeNull();
     expect(new ChatRunController().consumeIncomplete(false, '', 0, 1, 6)).toBeNull();
     expect(new ChatRunController().consumeIncomplete(true, 'Done.', 0, 1, 6)).toBeNull();
+  });
+});
+
+describe('stalled runs', () => {
+  const productive = (c: ChatRunController) => c.recordTurnOutcome(true);
+  const dead = (c: ChatRunController) => c.recordTurnOutcome(false);
+
+  it('is not stalled while turns keep producing something', () => {
+    const controller = new ChatRunController();
+    for (let i = 0; i < 10; i++) productive(controller);
+    expect(controller.stalled).toBe(false);
+  });
+
+  it('stalls only after consecutive dead turns', () => {
+    const controller = new ChatRunController();
+    dead(controller);
+    expect(controller.stalled).toBe(false);
+    dead(controller);
+    expect(controller.stalled).toBe(true);
+  });
+
+  // A model that recovers must not be punished for one wasted turn.
+  it('resets the count when a turn produces something', () => {
+    const controller = new ChatRunController();
+    dead(controller);
+    productive(controller);
+    dead(controller);
+    expect(controller.stalled).toBe(false);
+  });
+
+  it('warns the model on its final turn so the work is not discarded', () => {
+    expect(lastTurnNotice(0, 6)).toBeNull();
+    expect(lastTurnNotice(4, 6)).toBeNull();
+    expect(lastTurnNotice(5, 6)).toBe(LAST_TURN_NOTICE);
+    expect(lastTurnNotice(6, 6)).toBe(LAST_TURN_NOTICE);
+    expect(LAST_TURN_NOTICE).toMatch(/final turn/i);
+  });
+
+  it('reports lost progress rather than a spent budget', () => {
+    const controller = new ChatRunController();
+    dead(controller);
+    dead(controller);
+    expect(controller.finalText('', 0, false)).toBe(NO_PROGRESS_RESPONSE);
+    // Even when the turn cap was also reached, the cause was the stall.
+    expect(controller.finalText('', 0, true)).toBe(NO_PROGRESS_RESPONSE);
+  });
+
+  it('never overrides real work', () => {
+    const controller = new ChatRunController();
+    dead(controller);
+    dead(controller);
+    expect(controller.finalText('Here is the answer.', 0, false)).toBe('Here is the answer.');
+    expect(controller.finalText('', 3, false)).toBe('Changes are ready for review.');
   });
 });

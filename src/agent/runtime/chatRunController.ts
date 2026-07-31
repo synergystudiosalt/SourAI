@@ -12,6 +12,34 @@ export const UNRESOLVED_WORKSPACE_REQUEST = (examplePath: string) =>
   `The model returned no final answer because its workspace requests could not be resolved. One unresolved path was "${examplePath}".`;
 export const SILENT_MODEL_RESPONSE =
   'The model returned no final answer after completing its workspace checks.';
+export const NO_PROGRESS_RESPONSE =
+  'The model stopped making progress: consecutive turns produced no answer, no file changes, and no workspace requests that had not already been made.';
+export const LAST_TURN_NOTICE =
+  '[Runtime: this is your final turn — no further workspace tools will be run. Answer now using what you already have. If you were mid-investigation, state what you found, what you believe the cause is, and the change you would make.]';
+
+/**
+ * Appended to the turn before the budget runs out.
+ *
+ * Investigating a bug legitimately costs several turns, and a run that spent
+ * them all was cut off with an error rather than an answer — the work was done
+ * and then discarded. Warning the model that its last turn has arrived converts
+ * that into a usable reply.
+ */
+export function lastTurnNotice(turn: number, maxTurns: number): string | null {
+  return turn >= maxTurns - 1 ? LAST_TURN_NOTICE : null;
+}
+
+/**
+ * Consecutive turns yielding nothing before the run is abandoned.
+ *
+ * A model that keeps re-requesting what it already asked for has its repeats
+ * stripped by the duplicate filter, leaving turns that do nothing at all. The
+ * recovery nudge fires once; when that is ignored nothing else intervened, so a
+ * run ground through its whole turn budget and reported an exhausted budget —
+ * one observed case spent twelve turns on five tool calls. Two dead turns is
+ * enough to conclude it is not going to recover.
+ */
+export const MAX_DEAD_TURNS = 2;
 
 /**
  * Owns progress and terminal-state policy for the chat agent. Provider output
@@ -25,6 +53,21 @@ export class ChatRunController {
   private workspaceRequestCount = 0;
   private resolvedWorkspaceRequestCount = 0;
   private unresolvedExamplePath = '';
+  private consecutiveDeadTurns = 0;
+
+  /**
+   * Records whether a turn achieved anything: an answer, a file operation, or a
+   * workspace request that had not already been made. Repeats do not count —
+   * they are exactly what a stalled model produces.
+   */
+  recordTurnOutcome(productive: boolean): void {
+    this.consecutiveDeadTurns = productive ? 0 : this.consecutiveDeadTurns + 1;
+  }
+
+  /** True once the run should be abandoned rather than spending more turns. */
+  get stalled(): boolean {
+    return this.consecutiveDeadTurns >= MAX_DEAD_TURNS;
+  }
 
   filter(response: ParsedAgentResponse): FilteredAgentRequests {
     return filterRepeatedAgentRequests(response, this.seenRequests);
@@ -80,6 +123,9 @@ export class ChatRunController {
     ) {
       return UNRESOLVED_WORKSPACE_REQUEST(this.unresolvedExamplePath);
     }
+    // Checked before the budget message: a stalled run is abandoned early and
+    // has turns to spare, so "exhausted its budget" would misdescribe it.
+    if (this.stalled) return NO_PROGRESS_RESPONSE;
     return exhausted
       ? 'The model exhausted its workspace-tool budget without returning a final answer.'
       : SILENT_MODEL_RESPONSE;

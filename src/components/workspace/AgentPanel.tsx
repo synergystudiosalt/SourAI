@@ -31,7 +31,7 @@ import {
   selectProjectMemory,
 } from '../../agent/context/projectMemory';
 import { splitThinkingAndText } from '../../../functions/shared/responseFormatting';
-import { ChatRunController } from '../../agent/runtime/chatRunController';
+import { ChatRunController, lastTurnNotice } from '../../agent/runtime/chatRunController';
 import { migrateModelId, MODEL_IDS, MODEL_ROUTES } from '../../../functions/shared/ai';
 import { getPreviewLogs } from './previewLogStore';
 import { PreviewAutoFixLoop, waitForPreviewRuntimeError } from './previewAutoFix';
@@ -443,9 +443,13 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     );
     if (await onApplyOps(ops)) {
       markApplied(messageId, ops.map((o) => o.path));
-      const previewAfterApply = onCollectPreviewLogsAfterApply
-        ? await onCollectPreviewLogsAfterApply()
-        : (await waitForPreviewRuntimeError(), getPreviewLogs());
+      let previewAfterApply: readonly PreviewLogEntry[];
+      if (onCollectPreviewLogsAfterApply) {
+        previewAfterApply = await onCollectPreviewLogsAfterApply();
+      } else {
+        await waitForPreviewRuntimeError();
+        previewAfterApply = getPreviewLogs();
+      }
       if (userTurnSequence !== userTurnSequenceRef.current) return;
       const decision = previewAutoFixRef.current.afterApply(previewBeforeApply, previewAfterApply);
       if (decision.kind === 'follow-up') {
@@ -1027,6 +1031,19 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         hadIncompleteFileBlock ||= parsed.incompleteFileBlock;
         allOps = [...allOps, ...parsed.ops];
 
+        // A turn earns its place by producing an answer, a file operation, or a
+        // request that had not already been made. Repeats are stripped by the
+        // duplicate filter and are what a genuinely stuck model emits.
+        //
+        // Recorded at the end of the turn, not here, because a recovery nudge
+        // counts as progress too: reasoning-only turns exist precisely so
+        // consumeIncomplete can prompt for an answer, and calling those dead
+        // would cut the run off before the nudge could work.
+        let turnWasProductive =
+          Boolean(parsed.displayText.trim())
+            || parsed.ops.length > 0
+            || filteredRequests.newRequestCount > 0;
+
         appendThinking(responseThinking);
         appendThinking(separatedResponse.thinking);
         if (responseThinkingLabel) accumulatedThinkingLabel = responseThinkingLabel;
@@ -1147,10 +1164,15 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
             )
           );
 
+          // Warn the model when this is its last chance to answer. Investigating
+          // a bug legitimately takes several turns, and a run that used them all
+          // was cut off with an error instead of a reply — the work was done and
+          // then thrown away.
+          const notice = lastTurnNotice(turnCount, maxAgentTurns);
           conversationHistory = [
             ...conversationHistory,
             { role: 'assistant', content: responseText },
-            { role: 'user', content: resultText },
+            { role: 'user', content: notice ? `${resultText}\n\n${notice}` : resultText },
           ];
           hasMoreTools = true;
         } else {
@@ -1169,6 +1191,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
               ];
               finalDisplayText = '';
               hasMoreTools = true;
+              turnWasProductive = true;
             }
           }
           if (!hasMoreTools) {
@@ -1187,9 +1210,11 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
               ];
               finalDisplayText = '';
               hasMoreTools = true;
+              turnWasProductive = true;
             }
           }
         }
+        runController.recordTurnOutcome(turnWasProductive);
       };
 
       // Create the message placeholder immediately
@@ -1209,7 +1234,10 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       freshMessageIdsRef.current.add(msgId);
       setMessages((prev) => [...prev, assistantMsg]);
 
-      while (hasMoreTools && turnCount < maxAgentTurns) {
+      // `stalled` ends the run early rather than spending the remaining turns.
+      // Each one costs a full request, so grinding to the cap on a model that
+      // has stopped progressing is expensive and tells the user nothing.
+      while (hasMoreTools && turnCount < maxAgentTurns && !runController.stalled) {
         turnCount++;
         hasMoreTools = false;
 
