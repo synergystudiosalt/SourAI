@@ -29,6 +29,15 @@ interface FileExplorerProps {
 type MenuTarget = { kind: 'node'; node: WorkspaceFileNode } | { kind: 'background' };
 interface MenuState { x: number; y: number; target: MenuTarget; }
 interface PendingCreate { parentPath: string; type: 'file' | 'folder'; }
+interface PointerDragCandidate {
+  path: string;
+  pointerId: number;
+  startX: number;
+  startY: number;
+  captureElement: HTMLElement;
+}
+
+const DRAG_START_DISTANCE = 5;
 
 const menuItemClass =
   'w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-left cursor-pointer text-[#3b414d] dark:text-[#dfe3ea] hover:bg-[#f6f8fa] dark:hover:bg-[#1e2128] ws-button-smooth';
@@ -59,13 +68,18 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   const [pendingCreate, setPendingCreate] = useState<PendingCreate | null>(null);
   const [createValue, setCreateValue] = useState('');
   const [menu, setMenu] = useState<MenuState | null>(null);
-  // A ref, not state: native drag events fire faster than React re-attaches
-  // handlers, so a state read inside onDragOver can still be null and skip the
-  // preventDefault that makes a drop legal. The state copy drives styling only.
+  // Pointer events are used instead of native HTML5 drag-and-drop. Native drag
+  // hit-testing is unreliable inside the zoomed workspace, while pointer
+  // coordinates and document.elementFromPoint describe the painted UI.
+  const pointerCandidateRef = useRef<PointerDragCandidate | null>(null);
   const dragPathRef = useRef<string | null>(null);
-  const dragHoverTimer = useRef<Record<string, number>>({});
+  const dropTargetRef = useRef<string | null>(null);
+  const dragHoverTimerRef = useRef<number | null>(null);
+  const dragHoverPathRef = useRef<string | null>(null);
+  const suppressNextClickRef = useRef(false);
   const [dragPath, setDragPath] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const explorerRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const uploadTargetRef = useRef('');
@@ -101,6 +115,10 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
       window.removeEventListener('keydown', onKey);
     };
   }, [menu]);
+
+  useEffect(() => () => {
+    if (dragHoverTimerRef.current !== null) window.clearTimeout(dragHoverTimerRef.current);
+  }, []);
 
   const toggleExpand = (path: string) => {
     setExpanded((prev) => {
@@ -168,6 +186,149 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
     if (window.confirm(`Are you sure you want to delete ${label}?`)) onDelete(node.path);
   };
 
+  const clearFolderHover = () => {
+    if (dragHoverTimerRef.current !== null) window.clearTimeout(dragHoverTimerRef.current);
+    dragHoverTimerRef.current = null;
+    dragHoverPathRef.current = null;
+  };
+
+  const setPointerDropTarget = (target: string | null) => {
+    if (dropTargetRef.current === target) return;
+    dropTargetRef.current = target;
+    setDropTarget(target);
+  };
+
+  const canMoveTo = (sourcePath: string, targetFolderPath: string) =>
+    sourcePath !== targetFolderPath &&
+    getParentPath(sourcePath) !== targetFolderPath &&
+    !isDescendantOrSelf(targetFolderPath, sourcePath);
+
+  const queueFolderExpand = (folderPath: string | null) => {
+    if (folderPath === dragHoverPathRef.current) return;
+    clearFolderHover();
+    if (!folderPath || expanded.has(folderPath)) return;
+
+    dragHoverPathRef.current = folderPath;
+    dragHoverTimerRef.current = window.setTimeout(() => {
+      setExpanded((prev) => new Set(prev).add(folderPath));
+      dragHoverTimerRef.current = null;
+    }, 550);
+  };
+
+  const updatePointerDropTarget = (
+    clientX: number,
+    clientY: number,
+    fallbackTarget: EventTarget | null
+  ) => {
+    const sourcePath = dragPathRef.current;
+    const explorer = explorerRef.current;
+    if (!sourcePath || !explorer) return;
+
+    const pointTarget = document.elementFromPoint?.(clientX, clientY);
+    const hit = pointTarget instanceof Element
+      ? pointTarget
+      : fallbackTarget instanceof Element
+        ? fallbackTarget
+        : null;
+
+    if (!hit || !explorer.contains(hit)) {
+      queueFolderExpand(null);
+      setPointerDropTarget(null);
+      return;
+    }
+
+    const row = hit.closest<HTMLElement>('[data-explorer-row]');
+    const hoveredFolderPath = row?.dataset.nodeType === 'folder'
+      ? row.dataset.path || null
+      : null;
+    const targetFolderPath = row
+      ? hoveredFolderPath ?? getParentPath(row.dataset.path || '')
+      : '';
+
+    if (!canMoveTo(sourcePath, targetFolderPath)) {
+      queueFolderExpand(null);
+      setPointerDropTarget(null);
+      return;
+    }
+
+    queueFolderExpand(hoveredFolderPath);
+    setPointerDropTarget(targetFolderPath);
+  };
+
+  const finishPointerDrag = () => {
+    const candidate = pointerCandidateRef.current;
+    if (candidate) {
+      try {
+        if (candidate.captureElement.hasPointerCapture?.(candidate.pointerId)) {
+          candidate.captureElement.releasePointerCapture(candidate.pointerId);
+        }
+      } catch {
+        // The browser may already have released capture during pointercancel.
+      }
+    }
+    clearFolderHover();
+    pointerCandidateRef.current = null;
+    dragPathRef.current = null;
+    dropTargetRef.current = null;
+    setDragPath(null);
+    setDropTarget(null);
+  };
+
+  const handleRowPointerDown = (e: React.PointerEvent<HTMLDivElement>, path: string) => {
+    // If the prior drag did not synthesize a click, this is a genuinely new
+    // gesture and its eventual click must be allowed through.
+    suppressNextClickRef.current = false;
+    if (!e.isPrimary || e.button !== 0) return;
+    if ((e.target as Element).closest('button, input, textarea, select, a')) return;
+
+    pointerCandidateRef.current = {
+      path,
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      captureElement: e.currentTarget,
+    };
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+  };
+
+  const handleRowPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const candidate = pointerCandidateRef.current;
+    if (!candidate || candidate.pointerId !== e.pointerId) return;
+
+    if (!dragPathRef.current) {
+      const distance = Math.hypot(e.clientX - candidate.startX, e.clientY - candidate.startY);
+      if (distance < DRAG_START_DISTANCE) return;
+      dragPathRef.current = candidate.path;
+      setDragPath(candidate.path);
+      setMenu(null);
+    }
+
+    e.preventDefault();
+    updatePointerDropTarget(e.clientX, e.clientY, e.target);
+  };
+
+  const handleRowPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    const candidate = pointerCandidateRef.current;
+    if (!candidate || candidate.pointerId !== e.pointerId) return;
+
+    const sourcePath = dragPathRef.current;
+    if (sourcePath) {
+      updatePointerDropTarget(e.clientX, e.clientY, e.target);
+      const targetFolderPath = dropTargetRef.current;
+      if (targetFolderPath !== null && canMoveTo(sourcePath, targetFolderPath)) {
+        if (targetFolderPath) {
+          setExpanded((prev) => new Set(prev).add(targetFolderPath));
+        }
+        onMoveNode(sourcePath, targetFolderPath);
+      }
+
+      // Some browsers synthesize click well after pointerup. Keep the guard
+      // until that click arrives; a genuinely new pointerdown clears it above.
+      suppressNextClickRef.current = true;
+    }
+    finishPointerDrag();
+  };
+
   const renderCreateRow = (parentPath: string, depth: number) => {
     if (!pendingCreate || pendingCreate.parentPath !== parentPath) return null;
     return (
@@ -205,76 +366,27 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
     return (
       <div key={node.path}>
         <div
-          draggable
-          onDragStart={(e) => {
-            e.stopPropagation();
-            dragPathRef.current = node.path;
-            setDragPath(node.path);
-            e.dataTransfer.effectAllowed = 'move';
-            // Some browsers cancel a drag with no payload attached.
-            e.dataTransfer.setData('text/plain', node.path);
-          }}
-          onDragEnd={() => { dragPathRef.current = null; setDragPath(null); setDropTarget(null); }}
-          onDragEnter={(e) => {
-            const entering = dragPathRef.current;
-            if (!entering) return;
-            const target = isFolder ? node.path : getParentPath(node.path);
-            if (entering === target || getParentPath(entering) === target) return;
-            if (isDescendantOrSelf(target, entering)) return;
-            // Native drag needs dragenter to accept as well; without it some
-            // browsers never deliver a usable dragover and the drop is refused.
-            e.preventDefault();
-            e.stopPropagation();
-            // Hovering a closed folder opens it, so its inside can be reached
-            // mid-drag. Dropping just below a closed folder otherwise lands on
-            // empty space and reads as a move to the top level.
-            if (isFolder && !expanded.has(node.path) && !dragHoverTimer.current[node.path]) {
-              dragHoverTimer.current[node.path] = window.setTimeout(() => {
-                setExpanded((prev) => new Set(prev).add(node.path));
-              }, 550);
+          data-explorer-row
+          data-path={node.path}
+          data-node-type={node.type}
+          onPointerDown={(e) => handleRowPointerDown(e, node.path)}
+          onClick={(e) => {
+            if (suppressNextClickRef.current) {
+              e.preventDefault();
+              e.stopPropagation();
+              suppressNextClickRef.current = false;
+              return;
             }
+            if (isFolder) toggleExpand(node.path);
+            else onOpenFile(node.path);
           }}
-          onDragOver={(e) => {
-            const dragging = dragPathRef.current;
-            if (!dragging) return;
-            // Files drop into their parent folder; folders accept directly.
-            const target = isFolder ? node.path : getParentPath(node.path);
-            if (dragging === target) return;
-            if (getParentPath(dragging) === target) return;  // already there
-            if (isDescendantOrSelf(target, dragging)) return;  // no folder into itself
-            e.preventDefault();
-            e.stopPropagation();
-            e.dataTransfer.dropEffect = 'move';
-            setDropTarget(target);
-          }}
-          onDragLeave={(e) => {
-            e.stopPropagation();
-            window.clearTimeout(dragHoverTimer.current[node.path]);
-            delete dragHoverTimer.current[node.path];
-            setDropTarget(null);
-          }}
-          onDrop={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            const target = isFolder ? node.path : getParentPath(node.path);
-            const dropped = dragPathRef.current;
-            if (
-              dropped &&
-              dropped !== target &&
-              getParentPath(dropped) !== target &&
-              !isDescendantOrSelf(target, dropped)
-            ) {
-              onMoveNode(dropped, target);
-            }
-            dragPathRef.current = null;
-            setDragPath(null);
-            setDropTarget(null);
-          }}
-          onClick={() => (isFolder ? toggleExpand(node.path) : onOpenFile(node.path))}
           onContextMenu={(e) => openNodeMenu(e, node)}
           onDoubleClick={() => beginRename(node)}
-          style={{ paddingLeft: depth * 14 + 8 }}
-          className={`group w-full flex items-center justify-between pr-1.5 py-1 text-xs cursor-pointer ws-file-item ws-clickable ${dragPath === node.path ? 'opacity-40' : ''} ${dropTarget === (isFolder ? node.path : getParentPath(node.path)) ? 'ring-1 ring-inset ring-[#4776d5]' : ''} ${
+          style={{
+            paddingLeft: depth * 14 + 8,
+            '--file-drop-indent': `${(depth + 1) * 14 + 8}px`,
+          } as React.CSSProperties}
+          className={`group relative w-full flex items-center justify-between pr-1.5 py-1 text-xs ws-file-item ws-clickable ${dragPath ? 'cursor-grabbing' : 'cursor-pointer'} ${dragPath === node.path ? 'opacity-40' : ''} ${isFolder && dropTarget === node.path ? 'ws-file-drop-target' : ''} ${
             isActive
               ? 'bg-[#dde7f7] dark:bg-[#1b2338] text-[#16181d] dark:text-[#dce0e5]'
               : 'text-[#4a5259] dark:text-[#a9afbc] hover:bg-[#e8effb] dark:hover:bg-[#1b2338] hover:text-[#16181d] dark:hover:text-[#dce0e5]'
@@ -372,9 +484,11 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
 
   return (
     <div
-      onDragOver={(e) => { const d = dragPathRef.current; if (d && getParentPath(d) !== '') { e.preventDefault(); setDropTarget(''); } }}
-      onDrop={(e) => { e.preventDefault(); const d = dragPathRef.current; if (d && getParentPath(d) !== '') onMoveNode(d, ''); dragPathRef.current = null; setDragPath(null); setDropTarget(null); }}
-      className="zed-file-explorer z-grid z-grid-fine w-56 border-l border-[#dfe3ea] dark:border-[#282c33] flex flex-col bg-[#fbfcfd] dark:bg-[#1e2128] select-none shrink-0">
+      ref={explorerRef}
+      onPointerMove={handleRowPointerMove}
+      onPointerUp={handleRowPointerUp}
+      onPointerCancel={finishPointerDrag}
+      className="zed-file-explorer z-grid z-grid-fine w-56 h-full border-l border-[#dfe3ea] dark:border-[#282c33] flex flex-col bg-[#fbfcfd] dark:bg-[#1e2128] select-none shrink-0">
       <div className="px-3 py-2 border-b border-[#dfe3ea] dark:border-[#282c33] flex items-center justify-between">
         <span
           className="text-[11px] font-semibold text-[#78828e] dark:text-[#a9afbc] uppercase tracking-wide truncate"

@@ -192,6 +192,15 @@ interface CachedCompaction {
  */
 const REASONING_OPTIONS = EFFORT_ORDER.map((id) => EFFORT_PROFILES[id]);
 
+/** Trailing version numbers are noise on the composer chip: the name alone
+ *  identifies the model, and the number is what pushed the label out of its
+ *  control. The picker list keeps them. */
+export function modelDisplayName(id: string): string {
+  const label = (MODEL_ROUTES as Record<string, { label?: string } | undefined>)[id]?.label;
+  if (!label) return id.startsWith('custom_') ? 'API' : id;
+  return label.replace(/\s+v?\d+(?:\.\d+)*\s*$/i, '');
+}
+
 export const AgentPanel: React.FC<AgentPanelProps> = ({
   isDarkMode,
   isCollapsed,
@@ -1876,7 +1885,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
             </div>
             <div className="relative" ref={modelPopoverRef}>
               <button onClick={() => setShowModelPopover((v) => !v)} className="flex items-center justify-center p-1.5 sm:p-0 gap-0.5 sm:gap-1 hover:text-[#16181d] dark:hover:text-[#dce0e5] cursor-pointer ws-button-smooth transition-colors text-[9px] sm:text-[11px] min-w-[44px] sm:min-w-auto h-[44px] sm:h-auto">
-                <span className="hidden sm:inline truncate max-w-[104px]">{MODEL_ROUTES[selectedModel]?.label || (selectedModel.startsWith('custom_') ? 'API' : selectedModel)}</span>
+                <span className="hidden sm:inline truncate max-w-[104px]">{modelDisplayName(selectedModel)}</span>
                 <span className="sm:hidden">M</span>
               </button>
               {showModelPopover && (

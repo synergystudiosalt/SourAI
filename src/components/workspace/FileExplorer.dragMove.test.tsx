@@ -47,28 +47,25 @@ function renderExplorer(onMoveNode = vi.fn()) {
   return onMoveNode;
 }
 
-/** The row element carrying the drag handlers for a given label. */
+/** The row element carrying the pointer handlers for a given label. */
 function rowFor(label: string): HTMLElement {
   const labelNode = screen.getByText(label);
-  const row = labelNode.closest('[draggable]');
-  if (!row) throw new Error(`no draggable row for ${label}`);
+  const row = labelNode.closest('[data-explorer-row]');
+  if (!row) throw new Error(`no explorer row for ${label}`);
   return row as HTMLElement;
 }
 
-const dataTransfer = () => ({
-  effectAllowed: '',
-  dropEffect: '',
-  setData: vi.fn(),
-  getData: vi.fn(),
-});
+function pointerDrag(source: HTMLElement, target: HTMLElement) {
+  fireEvent.pointerDown(source, { pointerId: 1, isPrimary: true, button: 0, clientX: 10, clientY: 10 });
+  fireEvent.pointerMove(target, { pointerId: 1, isPrimary: true, buttons: 1, clientX: 30, clientY: 30 });
+  fireEvent.pointerUp(target, { pointerId: 1, isPrimary: true, button: 0, clientX: 30, clientY: 30 });
+}
 
 describe('file explorer drag-to-move', () => {
   it('moves a file into a folder it is dropped on', () => {
     const onMoveNode = renderExplorer();
 
-    fireEvent.dragStart(rowFor('top.ts'), { dataTransfer: dataTransfer() });
-    fireEvent.dragOver(rowFor('src'), { dataTransfer: dataTransfer() });
-    fireEvent.drop(rowFor('src'), { dataTransfer: dataTransfer() });
+    pointerDrag(rowFor('top.ts'), rowFor('src'));
 
     expect(onMoveNode).toHaveBeenCalledWith('top.ts', 'src');
   });
@@ -79,8 +76,7 @@ describe('file explorer drag-to-move', () => {
     const onMoveNode = renderExplorer();
 
     fireEvent.click(screen.getByText('src'));           // expand to reveal inner
-    fireEvent.dragStart(rowFor('src'), { dataTransfer: dataTransfer() });
-    fireEvent.drop(rowFor('inner'), { dataTransfer: dataTransfer() });
+    pointerDrag(rowFor('src'), rowFor('inner'));
 
     expect(onMoveNode).not.toHaveBeenCalled();
   });
@@ -89,9 +85,42 @@ describe('file explorer drag-to-move', () => {
     const onMoveNode = renderExplorer();
 
     fireEvent.click(screen.getByText('src'));
-    fireEvent.dragStart(rowFor('a.ts'), { dataTransfer: dataTransfer() });
-    fireEvent.drop(rowFor('src'), { dataTransfer: dataTransfer() });
+    pointerDrag(rowFor('a.ts'), rowFor('src'));
 
     expect(onMoveNode).not.toHaveBeenCalled();
+  });
+
+  it('moves a nested file back to the project root', () => {
+    const onMoveNode = renderExplorer();
+    fireEvent.click(screen.getByText('src'));
+    const explorer = document.querySelector('.zed-file-explorer');
+    if (!explorer) throw new Error('no explorer root');
+
+    pointerDrag(rowFor('a.ts'), explorer as HTMLElement);
+
+    expect(onMoveNode).toHaveBeenCalledWith('src/a.ts', '');
+  });
+
+  it('shows an indented snap line while a folder is the valid destination', () => {
+    renderExplorer();
+    const source = rowFor('top.ts');
+    const folder = rowFor('src');
+
+    fireEvent.pointerDown(source, { pointerId: 1, isPrimary: true, button: 0, clientX: 10, clientY: 10 });
+    fireEvent.pointerMove(folder, { pointerId: 1, isPrimary: true, buttons: 1, clientX: 30, clientY: 30 });
+
+    expect(folder).toHaveClass('ws-file-drop-target');
+    expect(folder.style.getPropertyValue('--file-drop-indent')).toBe('22px');
+  });
+
+  it('does not collapse the destination on the click synthesized after a drag', () => {
+    renderExplorer();
+    const folder = rowFor('src');
+
+    pointerDrag(rowFor('top.ts'), folder);
+    expect(screen.getByText('a.ts')).toBeInTheDocument();
+
+    fireEvent.click(folder);
+    expect(screen.getByText('a.ts')).toBeInTheDocument();
   });
 });
