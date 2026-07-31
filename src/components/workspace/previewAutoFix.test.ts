@@ -15,6 +15,18 @@ afterEach(() => {
 });
 
 describe('preview runtime settle wait', () => {
+  it('gives a clean preview the full bounded settle window', async () => {
+    vi.useFakeTimers();
+    const waiting = waitForPreviewRuntimeError(2_000);
+    let result: string | undefined;
+    void waiting.then((value) => { result = value; });
+
+    await vi.advanceTimersByTimeAsync(1_999);
+    expect(result).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(waiting).resolves.toBe('timeout');
+  });
+
   it('short-circuits as soon as a new error-level entry arrives', async () => {
     vi.useFakeTimers();
     const previewWindow = {} as Window;

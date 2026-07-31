@@ -1,7 +1,7 @@
 import type { PreviewLogEntry } from '../../security/previewIsolation';
 import { subscribeToPreviewLogs } from './previewLogStore';
 
-export const PREVIEW_RUNTIME_SETTLE_MS = 1_500;
+export const PREVIEW_RUNTIME_SETTLE_MS = 5_000;
 export const MAX_PREVIEW_AUTO_FIX_ATTEMPTS = 2;
 export const MAX_PREVIEW_ERRORS_PER_TURN = 5;
 export const MAX_PREVIEW_ERROR_CHARS = 700;
