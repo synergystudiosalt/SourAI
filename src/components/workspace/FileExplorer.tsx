@@ -59,6 +59,11 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   const [pendingCreate, setPendingCreate] = useState<PendingCreate | null>(null);
   const [createValue, setCreateValue] = useState('');
   const [menu, setMenu] = useState<MenuState | null>(null);
+  // A ref, not state: native drag events fire faster than React re-attaches
+  // handlers, so a state read inside onDragOver can still be null and skip the
+  // preventDefault that makes a drop legal. The state copy drives styling only.
+  const dragPathRef = useRef<string | null>(null);
+  const dragHoverTimer = useRef<Record<string, number>>({});
   const [dragPath, setDragPath] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -203,37 +208,65 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
           draggable
           onDragStart={(e) => {
             e.stopPropagation();
+            dragPathRef.current = node.path;
             setDragPath(node.path);
             e.dataTransfer.effectAllowed = 'move';
             // Some browsers cancel a drag with no payload attached.
             e.dataTransfer.setData('text/plain', node.path);
           }}
-          onDragEnd={() => { setDragPath(null); setDropTarget(null); }}
+          onDragEnd={() => { dragPathRef.current = null; setDragPath(null); setDropTarget(null); }}
+          onDragEnter={(e) => {
+            const entering = dragPathRef.current;
+            if (!entering) return;
+            const target = isFolder ? node.path : getParentPath(node.path);
+            if (entering === target || getParentPath(entering) === target) return;
+            if (isDescendantOrSelf(target, entering)) return;
+            // Native drag needs dragenter to accept as well; without it some
+            // browsers never deliver a usable dragover and the drop is refused.
+            e.preventDefault();
+            e.stopPropagation();
+            // Hovering a closed folder opens it, so its inside can be reached
+            // mid-drag. Dropping just below a closed folder otherwise lands on
+            // empty space and reads as a move to the top level.
+            if (isFolder && !expanded.has(node.path) && !dragHoverTimer.current[node.path]) {
+              dragHoverTimer.current[node.path] = window.setTimeout(() => {
+                setExpanded((prev) => new Set(prev).add(node.path));
+              }, 550);
+            }
+          }}
           onDragOver={(e) => {
-            if (!dragPath) return;
+            const dragging = dragPathRef.current;
+            if (!dragging) return;
             // Files drop into their parent folder; folders accept directly.
             const target = isFolder ? node.path : getParentPath(node.path);
-            if (dragPath === target) return;
-            if (getParentPath(dragPath) === target) return;  // already there
-            if (isDescendantOrSelf(target, dragPath)) return;  // no folder into itself
+            if (dragging === target) return;
+            if (getParentPath(dragging) === target) return;  // already there
+            if (isDescendantOrSelf(target, dragging)) return;  // no folder into itself
             e.preventDefault();
             e.stopPropagation();
             e.dataTransfer.dropEffect = 'move';
             setDropTarget(target);
           }}
-          onDragLeave={(e) => { e.stopPropagation(); setDropTarget(null); }}
+          onDragLeave={(e) => {
+            e.stopPropagation();
+            window.clearTimeout(dragHoverTimer.current[node.path]);
+            delete dragHoverTimer.current[node.path];
+            setDropTarget(null);
+          }}
           onDrop={(e) => {
             e.preventDefault();
             e.stopPropagation();
             const target = isFolder ? node.path : getParentPath(node.path);
+            const dropped = dragPathRef.current;
             if (
-              dragPath &&
-              dragPath !== target &&
-              getParentPath(dragPath) !== target &&
-              !isDescendantOrSelf(target, dragPath)
+              dropped &&
+              dropped !== target &&
+              getParentPath(dropped) !== target &&
+              !isDescendantOrSelf(target, dropped)
             ) {
-              onMoveNode(dragPath, target);
+              onMoveNode(dropped, target);
             }
+            dragPathRef.current = null;
             setDragPath(null);
             setDropTarget(null);
           }}
@@ -312,8 +345,16 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
     );
   };
 
-  const menuX = menu ? Math.min(menu.x, window.innerWidth - 200) : 0;
-  const menuY = menu ? Math.min(menu.y, window.innerHeight - 240) : 0;
+  // The panel is drawn inside a zoomed subtree, and a position:fixed child of a
+  // zoomed element has its coordinates scaled by that zoom — so the menu drifts
+  // further off-screen the further right it is opened. Dividing the factor back
+  // out keeps it in the viewport. Both edges are clamped, since the old
+  // single-sided Math.min could still push it off the top-left.
+  const ZOOM = 1.04;
+  const clampAxis = (value: number, max: number) =>
+    Math.max(8, Math.min(value / ZOOM, max));
+  const menuX = menu ? clampAxis(menu.x, window.innerWidth / ZOOM - 208) : 0;
+  const menuY = menu ? clampAxis(menu.y, window.innerHeight / ZOOM - 248) : 0;
 
   if (isCollapsed) {
     return (
@@ -331,8 +372,8 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
 
   return (
     <div
-      onDragOver={(e) => { if (dragPath && getParentPath(dragPath) !== '') { e.preventDefault(); setDropTarget(''); } }}
-      onDrop={(e) => { e.preventDefault(); if (dragPath && getParentPath(dragPath) !== '') onMoveNode(dragPath, ''); setDragPath(null); setDropTarget(null); }}
+      onDragOver={(e) => { const d = dragPathRef.current; if (d && getParentPath(d) !== '') { e.preventDefault(); setDropTarget(''); } }}
+      onDrop={(e) => { e.preventDefault(); const d = dragPathRef.current; if (d && getParentPath(d) !== '') onMoveNode(d, ''); dragPathRef.current = null; setDragPath(null); setDropTarget(null); }}
       className="zed-file-explorer z-grid z-grid-fine w-56 border-l border-[#dfe3ea] dark:border-[#282c33] flex flex-col bg-[#fbfcfd] dark:bg-[#1e2128] select-none shrink-0">
       <div className="px-3 py-2 border-b border-[#dfe3ea] dark:border-[#282c33] flex items-center justify-between">
         <span

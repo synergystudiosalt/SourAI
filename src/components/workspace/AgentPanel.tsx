@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Plus, ChevronRight, AtSign, Check, Square, Loader2,
-  ArrowLeft, Settings, Mic, MicOff, X, Image as ImageIcon, Brain, CircleHelp,
+  ArrowLeft, Settings, Mic, MicOff, X, Image as ImageIcon, Zap, CircleHelp,
 } from 'lucide-react';
 import { AttachmentPopover } from '../AttachmentPopover';
 import { AttachmentItem } from '../../types';
@@ -1661,7 +1661,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
 
   return (
     <div className="zed-agent-panel z-grid z-grid-fine w-full lg:w-72 h-full border-r border-[#dfe3ea] dark:border-[#282c33] flex flex-col bg-[#fbfcfd] dark:bg-[#1e2128] select-none shrink-0 relative">
-      <div className="h-8 sm:h-9 border-b border-[#dfe3ea] dark:border-[#282c33] flex items-center justify-between px-2 sm:px-3 text-xs text-[#78828e] dark:text-[#a9afbc] shrink-0">
+      <div className="zed-panel-bar h-8 sm:h-9 border-b border-[#dfe3ea] dark:border-[#282c33] flex items-center justify-between px-2 sm:px-3 text-xs text-[#78828e] dark:text-[#a9afbc] shrink-0">
         <span className="flex items-center gap-1 sm:gap-1.5 truncate text-[11px] sm:text-xs">
           <Logo size={12} className="sm:w-4" />
           <span className="hidden sm:inline">New sour.ai Agent Thread</span>
@@ -1813,7 +1813,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                 title={`Reasoning: ${REASONING_OPTIONS.find((option) => option.id === reasoningEffort)?.label}`}
                 className="flex min-w-[44px] items-center justify-center gap-1 p-1.5 text-[9px] transition-colors hover:text-[#16181d] dark:hover:text-[#dce0e5] sm:h-auto sm:min-w-0 sm:p-0 sm:text-[11px]"
               >
-                <Brain className="h-3.5 w-3.5" />
+                <Zap className="h-3.5 w-3.5" />
               </button>
               {showReasoningPopover && (
                 <div className="fixed bottom-11 left-2 z-50 w-56 max-w-[calc(100vw-1rem)] rounded-xl border border-[#c3cad6] bg-[#eef0f5] p-3 shadow-xl dark:border-[#37383a] dark:bg-[#1e2128]">
@@ -1876,7 +1876,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
             </div>
             <div className="relative" ref={modelPopoverRef}>
               <button onClick={() => setShowModelPopover((v) => !v)} className="flex items-center justify-center p-1.5 sm:p-0 gap-0.5 sm:gap-1 hover:text-[#16181d] dark:hover:text-[#dce0e5] cursor-pointer ws-button-smooth transition-colors text-[9px] sm:text-[11px] min-w-[44px] sm:min-w-auto h-[44px] sm:h-auto">
-                <span className="hidden sm:inline">{MODEL_ROUTES[selectedModel]?.label || (selectedModel.startsWith('custom_') ? 'API' : selectedModel)}</span>
+                <span className="hidden sm:inline truncate max-w-[104px]">{MODEL_ROUTES[selectedModel]?.label || (selectedModel.startsWith('custom_') ? 'API' : selectedModel)}</span>
                 <span className="sm:hidden">M</span>
               </button>
               {showModelPopover && (

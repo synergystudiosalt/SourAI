@@ -266,3 +266,42 @@ button:active, [role='button']:active, .interactable-btn:active {
 .zed-workspace {
   zoom: 1.04;
 }
+
+/* Panel chrome sits on top of the grid rather than letting it read through.
+   The ruling belongs behind the transcript, not behind the title or composer,
+   where it competes with the text. */
+.zed-panel-bar,
+.zed-agent-panel > form,
+.zed-agent-panel > div:last-child {
+  background: var(--z-bg);
+  position: relative;
+  z-index: 1;
+}
+
+/* Model name and other composer labels stay inside their control. */
+.zed-agent-panel button > span {
+  min-width: 0;
+}
+
+/* The ultracode track's base was a hardcoded dark, so it read as a black bar in
+   light mode. Driven from the theme instead. */
+:root { --z-effort-base: rgba(28, 46, 92, 0.16); }
+.dark { --z-effort-base: rgba(10, 14, 24, 0.92); }
+
+/* zoom scales the workspace's own box too, so a 100%-height panel overflows by
+   exactly the zoom factor and clips its bottom row — which is what cut off the
+   model name. Shrinking the pre-zoom height by the same factor makes it land
+   back at 100%. */
+.zed-workspace {
+  height: calc(100% / 1.04);
+}
+
+/* A scrolling flex child defaults to min-height:auto and refuses to shrink
+   below its content, pushing the composer past the bottom of the panel — which
+   is what clipped the model name. Letting it shrink keeps the composer in view. */
+.zed-agent-panel {
+  overflow: hidden;
+}
+.zed-agent-panel > [class*='overflow-y'] {
+  min-height: 0;
+}
