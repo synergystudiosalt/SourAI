@@ -31,7 +31,42 @@ import {
   selectProjectMemory,
 } from '../../agent/context/projectMemory';
 import { splitThinkingAndText } from '../../../functions/shared/responseFormatting';
-import { ChatRunController, lastTurnNotice } from '../../agent/runtime/chatRunController';
+import {
+  ChatRunController,
+  FALLBACK_MODEL_NOTICE,
+  lastTurnNotice,
+  MAX_AUTO_RETRIES,
+  RETRY_ATTEMPT_NOTICE,
+  retryGapMs,
+} from '../../agent/runtime/chatRunController';
+
+/**
+ * Where a run goes when its own model will not answer.
+ *
+ * Omni-Flash is the default route and the most consistently responsive; if the
+ * user was already on it, the next most reliable takes over. Never a Gemini
+ * route, since those produced the empty replies this path exists to escape.
+ */
+function pickFallbackModel(current: AIModel): AIModel {
+  return current === 'sour-omni-flash' ? 'sour-intelligence' : 'sour-omni-flash';
+}
+
+/**
+ * Sleeps unless the run is stopped first. A retry wait is long enough that an
+ * unabortable one would leave Stop looking broken.
+ */
+function waitUnlessAborted(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal.aborted) return resolve();
+    const timer = window.setTimeout(finish, ms);
+    function finish() {
+      window.clearTimeout(timer);
+      signal.removeEventListener('abort', finish);
+      resolve();
+    }
+    signal.addEventListener('abort', finish, { once: true });
+  });
+}
 import { migrateModelId, MODEL_IDS, MODEL_ROUTES } from '../../../functions/shared/ai';
 import { getPreviewLogs } from './previewLogStore';
 import { PreviewAutoFixLoop, waitForPreviewRuntimeError } from './previewAutoFix';
@@ -852,8 +887,22 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
 
     try {
       const maxAgentTurns = effort.maxTurns;
+      /**
+       * The model this run is currently talking to.
+       *
+       * Starts as the user's choice and switches to the fallback once a resend
+       * is needed. Resending to a model that just returned nothing usually
+       * returns nothing again; a different one is what actually changes the
+       * outcome. Restored per run, never persisted — the user's selection is
+       * unchanged for the next message.
+       */
+      let activeModel: AIModel = selectedModel;
+      /** Prepended to the final answer so the switch is visible in the transcript. */
+      let fallbackNotice = '';
       const basePayload = {
-        model: selectedModel,
+        get model() {
+          return activeModel;
+        },
         mode,
         reasoningEffort,
         activeFile: activeFile
@@ -1241,6 +1290,59 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
               turnWasProductive = true;
             }
           }
+          if (!hasMoreTools) {
+            // Last resort once every targeted recovery is spent: resend the
+            // request unchanged. Nothing is appended to the conversation —
+            // there is no diagnosable cause left to describe, and a transient
+            // failure is what remains.
+            const attempt = runController.consumeAutoRetry(
+              finalDisplayText,
+              parsed.ops.length,
+              filteredRequests.newRequestCount + filteredRequests.repeatedRequestCount,
+              turnCount,
+              maxAgentTurns
+            );
+            if (attempt) {
+              const waitMs = retryGapMs(estimateTokens(conversationHistory.map((m) => m.content).join('')));
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === msgId
+                    ? { ...m, content: '', thinking: composeThinking(), thinkingLabel: RETRY_ATTEMPT_NOTICE(attempt, MAX_AUTO_RETRIES) }
+                    : m
+                )
+              );
+              // Pacing derives from request size: a flat gap would bill the
+              // whole request again inside the same minute and provoke the
+              // rate limit it is recovering from.
+              await waitUnlessAborted(waitMs, controller.signal);
+              if (controller.signal.aborted) return;
+              finalDisplayText = '';
+              hasMoreTools = true;
+              turnWasProductive = true;
+            }
+          }
+          if (!hasMoreTools) {
+            // Only once every resend is spent. A model silent three times over
+            // will very likely be silent again, so the model itself is the last
+            // variable left to change.
+            const switchModel = runController.consumeModelFallback(
+              finalDisplayText,
+              parsed.ops.length,
+              turnCount,
+              maxAgentTurns
+            );
+            if (switchModel) {
+              const previous = activeModel;
+              activeModel = pickFallbackModel(previous);
+              fallbackNotice = FALLBACK_MODEL_NOTICE(
+                MODEL_ROUTES[previous]?.label ?? previous,
+                MODEL_ROUTES[activeModel]?.label ?? activeModel
+              );
+              finalDisplayText = '';
+              hasMoreTools = true;
+              turnWasProductive = true;
+            }
+          }
         }
         runController.recordTurnOutcome(turnWasProductive);
       };
@@ -1384,6 +1486,10 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         allOps.length,
         hasMoreTools && turnCount >= maxAgentTurns
       );
+      // Kept whatever the outcome: if the fallback answered, the user should
+      // know the reply came from a different model than the one they picked;
+      // if it also failed, the attempt is still worth showing.
+      if (fallbackNotice) finalDisplayText = `${fallbackNotice}\n\n${finalDisplayText}`;
 
       // Enrich ops with original content and diff info for highlighting
       const enrichedOps = (hadIncompleteFileBlock ? [] : collapseAgentFileOps(allOps)).map((op) => {

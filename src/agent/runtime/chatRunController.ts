@@ -65,6 +65,47 @@ export function lastTurnNotice(turn: number, maxTurns: number): string | null {
 export const MAX_DEAD_TURNS = 2;
 
 /**
+ * Last-resort resends after every targeted recovery has been spent.
+ *
+ * The targeted recoveries each address a known cause and each fire once. This
+ * covers what is left: a failure with no diagnosable cause, most often a
+ * transient one. The request is resent unchanged, because there is nothing
+ * specific left to say to the model.
+ */
+export const MAX_AUTO_RETRIES = 4;
+
+/** Floor between resends. */
+export const MIN_RETRY_GAP_MS = 30_000;
+/** Tokens per minute the retry pacing must stay under. */
+export const RETRY_TPM_BUDGET = 8000;
+
+/**
+ * Spacing between resends, derived from request size.
+ *
+ * A flat gap ignores that a resend costs the whole request again. At 30s a
+ * Standard request bills ~12,900 tokens per minute against an 8,000 limit, so
+ * the retry would itself provoke the rate limit it is recovering from. Pacing
+ * to the budget keeps the resends inside it; the floor keeps small requests
+ * from hammering.
+ */
+export function retryGapMs(requestTokens: number): number {
+  const paced = Math.ceil((requestTokens / RETRY_TPM_BUDGET) * 60_000);
+  return Math.max(MIN_RETRY_GAP_MS, paced);
+}
+
+export const RETRY_ATTEMPT_NOTICE = (attempt: number, total: number): string =>
+  `No response from the model. Retrying (${attempt}/${total})…`;
+export const RETRIES_EXHAUSTED = (total: number): string =>
+  `The model did not respond after ${total} attempts. It may be out of service or rate limited — try again shortly, or switch model.`;
+
+/**
+ * Rendered as an XML tag so the existing collapsible tag renderer shows it
+ * inline, the same way reasoning and tool sections appear.
+ */
+export const FALLBACK_MODEL_NOTICE = (from: string, to: string): string =>
+  `<using_fallback_model>${from} did not respond after ${MAX_AUTO_RETRIES} attempts. Continuing with ${to}.</using_fallback_model>`;
+
+/**
  * Owns progress and terminal-state policy for the chat agent. Provider output
  * can request work, but it cannot decide whether a duplicate runs or whether a
  * silent response is presented as success.
@@ -78,6 +119,8 @@ export class ChatRunController {
   private resolvedWorkspaceRequestCount = 0;
   private readonly unresolvedPaths: string[] = [];
   private consecutiveDeadTurns = 0;
+  private autoRetries = 0;
+  private modelFallbackUsed = false;
 
   /**
    * Records whether a turn achieved anything: an answer, a file operation, or a
@@ -91,6 +134,65 @@ export class ChatRunController {
   /** True once the run should be abandoned rather than spending more turns. */
   get stalled(): boolean {
     return this.consecutiveDeadTurns >= MAX_DEAD_TURNS;
+  }
+
+  /**
+   * Grants a plain resend once the targeted recoveries are spent.
+   *
+   * Returns the attempt number, or null when the turn produced something, the
+   * allowance is used up, or no turns remain. Unlike the targeted recoveries
+   * this adds nothing to the conversation — the same request goes again, since
+   * a transient failure is all that is left to explain it.
+   */
+  consumeAutoRetry(
+    displayText: string,
+    operationCount: number,
+    requestCount: number,
+    turn: number,
+    maxTurns: number
+  ): number | null {
+    if (displayText.trim() || operationCount > 0) return null;
+    if (this.autoRetries >= MAX_AUTO_RETRIES || turn >= maxTurns) return null;
+    // Only when the model said nothing at all. A turn that emitted requests
+    // did respond — even repeats — and the stall and unresolved-request
+    // messages describe those better than a resend would. Resending an
+    // identical request that produced a diagnosable failure just fails the
+    // same way, having spent a full request and made the user wait for it.
+    if (requestCount > 0 || this.stalled) return null;
+    const unresolved = this.workspaceRequestCount - this.resolvedWorkspaceRequestCount;
+    if (unresolved > this.resolvedWorkspaceRequestCount) return null;
+    this.autoRetries += 1;
+    return this.autoRetries;
+  }
+
+  /** Resends already spent, for the terminal message. */
+  get autoRetriesUsed(): number {
+    return this.autoRetries;
+  }
+
+  /**
+   * Grants one attempt on a different model, only once every resend is spent.
+   *
+   * A model that has returned nothing several times in a row is unlikely to
+   * answer on the next identical request, so changing model is the only
+   * remaining variable. Deliberately last: switching earlier would hide a
+   * problem with the model the user actually chose.
+   */
+  consumeModelFallback(
+    displayText: string,
+    operationCount: number,
+    turn: number,
+    maxTurns: number
+  ): boolean {
+    if (displayText.trim() || operationCount > 0) return false;
+    if (this.modelFallbackUsed || this.autoRetries < MAX_AUTO_RETRIES) return false;
+    if (turn >= maxTurns) return false;
+    this.modelFallbackUsed = true;
+    return true;
+  }
+
+  get modelFallbackTried(): boolean {
+    return this.modelFallbackUsed;
   }
 
   filter(response: ParsedAgentResponse): FilteredAgentRequests {
@@ -172,6 +274,9 @@ export class ChatRunController {
     const answer = displayText.trim();
     if (answer) return answer;
     if (operationCount > 0) return 'Changes are ready for review.';
+    // Checked first: resends are the last thing tried, so exhausting them is
+    // the most recent and most specific thing that happened.
+    if (this.autoRetries >= MAX_AUTO_RETRIES) return RETRIES_EXHAUSTED(this.autoRetries);
     const unresolvedWorkspaceRequestCount =
       this.workspaceRequestCount - this.resolvedWorkspaceRequestCount;
     // A strict majority makes unresolved requests the dominant, diagnosable

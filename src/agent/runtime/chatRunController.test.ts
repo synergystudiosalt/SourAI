@@ -6,6 +6,12 @@ import {
   CONTINUE_AFTER_REASONING,
   FINISH_WITH_EXISTING_RESULTS,
   LAST_TURN_NOTICE,
+  MAX_AUTO_RETRIES,
+  MIN_RETRY_GAP_MS,
+  RETRIES_EXHAUSTED,
+  RETRY_ATTEMPT_NOTICE,
+  RETRY_TPM_BUDGET,
+  retryGapMs,
   lastTurnNotice,
   NO_PROGRESS_RESPONSE,
   RETRY_AFTER_EMPTY,
@@ -200,5 +206,63 @@ describe('empty response retry', () => {
     const controller = new ChatRunController();
     controller.recordWorkspaceRequest('src/App.tsx', true);
     expect(controller.consumeEmptyRetry('', 0, false, 0, 6, 6)).toBeNull();
+  });
+});
+
+describe('auto retry', () => {
+  const spent = (c: ChatRunController) => {
+    c.consumeRecovery(1, 1, 12);
+    c.consumeIncomplete(true, '', 0, 1, 12);
+  };
+
+  it('resends up to the cap, then stops', () => {
+    const controller = new ChatRunController();
+    spent(controller);
+    expect(controller.consumeAutoRetry('', 0, 0, 1, 12)).toBe(1);
+    expect(controller.consumeAutoRetry('', 0, 0, 2, 12)).toBe(2);
+    expect(controller.consumeAutoRetry('', 0, 0, 3, 12)).toBe(3);
+    expect(controller.consumeAutoRetry('', 0, 0, 4, 12)).toBe(4);
+    expect(controller.consumeAutoRetry('', 0, 0, 5, 12)).toBeNull();
+  });
+
+  it('never fires when the turn produced something', () => {
+    const controller = new ChatRunController();
+    expect(controller.consumeAutoRetry('Here you go.', 0, 0, 1, 12)).toBeNull();
+    expect(controller.consumeAutoRetry('', 2, 0, 1, 12)).toBeNull();
+  });
+
+  it('does not fire with no turns left', () => {
+    expect(new ChatRunController().consumeAutoRetry('', 0, 0, 12, 12)).toBeNull();
+  });
+
+  it('reports being out of service once the resends are spent', () => {
+    const controller = new ChatRunController();
+    for (let i = 0; i < MAX_AUTO_RETRIES; i++) controller.consumeAutoRetry('', 0, 0, i, 12);
+    const text = controller.finalText('', 0, false);
+    expect(text).toBe(RETRIES_EXHAUSTED(MAX_AUTO_RETRIES));
+    expect(text).toMatch(/out of service|rate limited/i);
+  });
+
+  it('still prefers a real answer over the retry message', () => {
+    const controller = new ChatRunController();
+    for (let i = 0; i < MAX_AUTO_RETRIES; i++) controller.consumeAutoRetry('', 0, 0, i, 12);
+    expect(controller.finalText('Done.', 0, false)).toBe('Done.');
+    expect(controller.finalText('', 4, false)).toBe('Changes are ready for review.');
+  });
+
+  // A flat 30s gap bills the whole request again inside the minute: a Standard
+  // request would reach ~12,900 tokens/min against an 8,000 limit and provoke
+  // the very rate limit the retry is recovering from.
+  it('paces resends against the token budget, with a floor', () => {
+    expect(retryGapMs(100)).toBe(MIN_RETRY_GAP_MS);
+    expect(retryGapMs(6439)).toBeGreaterThan(MIN_RETRY_GAP_MS);
+    expect(retryGapMs(6439)).toBeLessThanOrEqual(60_000);
+    // Never bills more than the budget per minute.
+    const gap = retryGapMs(9339);
+    expect((9339 / gap) * 60_000).toBeLessThanOrEqual(RETRY_TPM_BUDGET + 1);
+  });
+
+  it('counts up for the progress label', () => {
+    expect(RETRY_ATTEMPT_NOTICE(2, 3)).toContain('(2/3)');
   });
 });

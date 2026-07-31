@@ -75,18 +75,27 @@ describe('AgentPanel completed-turn parity', () => {
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
   });
 
-  it('keeps the genuinely silent terminal result when no request was issued', async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(streamedTurn(''));
+  // A silent model is resent to rather than reported immediately, then tried
+  // once on a different model. Timers are faked because the resends are paced
+  // against the token budget and would otherwise take minutes.
+  it('resends a silent turn, then falls back to another model', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.mocked(fetch).mockResolvedValue(streamedTurn(''));
 
     renderPanel();
     sendPrompt();
 
-    expect(
-      await screen.findByText(
-        'The model returned no final answer after completing its workspace checks.'
-      )
-    ).toBeInTheDocument();
-    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    // Four resends on the chosen model, then one attempt on the fallback.
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.length).toBeGreaterThan(1));
+
+    const models = vi.mocked(fetch).mock.calls.map(
+      ([, init]) => JSON.parse(String((init as RequestInit).body)).model
+    );
+    // The switch happens only after the resends are spent, never before.
+    expect(models[0]).toBe(models[1]);
+    expect(models[models.length - 1]).not.toBe(models[0]);
+    vi.useRealTimers();
   });
 
   it('surfaces a first-turn SSE processing failure instead of discarding the turn', async () => {

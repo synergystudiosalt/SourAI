@@ -172,6 +172,12 @@ const KNOWN_TAGS: Record<
     bg: 'bg-[#f5f3eb] dark:bg-[#1f1f1e]',
     border: 'border-[#8c887d] dark:border-[#a09c94]',
   },
+  using_fallback_model: {
+    label: 'Using Fallback Model',
+    color: 'text-amber-600 dark:text-amber-400',
+    bg: 'bg-amber-50 dark:bg-amber-950/30',
+    border: 'border-amber-500 dark:border-amber-400',
+  },
   context_compact: {
     label: 'Context Compacted',
     color: 'text-purple-500 dark:text-purple-400',
