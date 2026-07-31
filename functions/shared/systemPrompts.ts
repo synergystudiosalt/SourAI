@@ -75,7 +75,11 @@ export function buildAgentSystemPrompt(options: AgentSystemPromptOptions): strin
     ? [
         'Editing:',
         'For an existing file, prefer an exact replacement: @@replace: path ||| exact old text ||| complete new text. The old text must occur once; include a neighbouring line when needed.',
-        'For a new file or extensive rewrite, emit one fenced block containing the COMPLETE file: ```language path="path/to/file.ext". Never use ellipses.',
+        // Shown as a real fence rather than described. The path attribute is
+        // what turns a block into an applicable operation, and with only a
+        // prose description models omit it — the reply then renders as plain
+        // code with no Apply button, which reads as the feature being broken.
+        'For a new file or extensive rewrite, emit one fenced block holding the COMPLETE file. The path attribute is required — without it the block cannot be applied:\n```javascript path="src/utils/helper.js"\nexport function helper(input) { return input; }\n```\nNever use ellipses or partial files.',
         'Other mutations: @@rename: old ||| new; @@delete: path. Use <check_for_errors>paths</check_for_errors> at most once when verification is warranted.',
       ]
     : [];

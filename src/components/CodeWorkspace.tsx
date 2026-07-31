@@ -986,12 +986,12 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
         <div className="flex-1 flex flex-col items-center justify-center p-6 select-none relative">
           <div className="flex flex-col items-center text-center max-w-lg w-full">
             <div className="flex items-center justify-center gap-3.5 mb-8">
-              <Logo size={42} />
+              <Logo size={52} />
               <div className="text-left">
-                <h1 className="text-xl font-medium tracking-tight font-instrument text-[#16181d] dark:text-[#dce0e5]">
+                <h1 className="text-[34px] leading-[1.15] font-light tracking-tight font-heading text-[#16181d] dark:text-[#dce0e5]">
                   Welcome back to sour.ai
                 </h1>
-                <p className="text-xs text-[#4a5259] dark:text-[#a9afbc] font-medium tracking-wide font-sans">
+                <p className="text-[13px] mt-1 text-[#4a5259] dark:text-[#a9afbc] tracking-wide">
                   The workspace for what's next
                 </p>
               </div>

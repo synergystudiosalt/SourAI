@@ -1668,14 +1668,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           <span className="sm:hidden">Agent</span>
         </span>
         <div className="flex items-center gap-1.5 sm:gap-2.5">
-          <button
-            onClick={() => setShowSlash((visible) => !visible)}
-            title="Open coding tools"
-            className="flex items-center gap-1 hover:text-[#16181d] dark:hover:text-[#dce0e5] cursor-pointer ws-button-smooth transition-colors"
-          >
-            <Settings className="w-3 sm:w-3.5 h-3 sm:h-3.5" />
-            <span className="hidden sm:inline text-[10px]">Tools</span>
-          </button>
           <button onClick={handleNewThread} title="New thread" className="hover:text-[#16181d] dark:hover:text-[#dce0e5] cursor-pointer ws-button-smooth transition-colors">
             <Plus className="w-3 sm:w-3.5 h-3 sm:h-3.5" />
           </button>
@@ -1693,9 +1685,9 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center gap-2 sm:gap-3 text-center py-6 sm:py-10">
             <PixelBowlIcon size={28} className="sm:size-10 opacity-80" />
-            <span className="font-pixel text-[10px] sm:text-[11px] leading-relaxed text-[#78828e] dark:text-[#a9afbc]">
+            <h2 className="font-heading text-[19px] sm:text-[22px] font-light italic leading-tight text-[#4a5259] dark:text-[#dce0e5]">
               Code with me
-            </span>
+            </h2>
             <span className="text-[9.5px] sm:text-[10.5px] text-[#9297a0] dark:text-[#727375] max-w-[85%] leading-relaxed">
               @ to include context · / for commands
             </span>

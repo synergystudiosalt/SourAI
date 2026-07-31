@@ -77,15 +77,8 @@ export const ImagePreviewCard: React.FC<ImagePreviewCardProps> = ({ prompt, url,
       <div className="relative aspect-square overflow-hidden flex items-center justify-center">
         {/* Loading skeleton */}
         {!loaded && (
-          <div className="absolute inset-0 flex items-center justify-center overflow-hidden bg-[#e8ebf0] dark:bg-[#212122]">
-            <div
-              className="absolute inset-0"
-              style={{
-                background: 'linear-gradient(110deg, #e2e3e6 30%, #eff1f5 50%, #e2e3e6 70%)',
-                backgroundSize: '200% 100%',
-                animation: 'shimmer 1.5s ease-in-out infinite',
-              }}
-            />
+          <div className="absolute inset-0 flex items-center justify-center overflow-hidden bg-[var(--z-shimmer-base)]">
+            <div className="absolute inset-0 z-shimmer" />
             <Loader2 className="relative w-6 h-6 text-[#90959e] dark:text-[#666] animate-spin" />
           </div>
         )}

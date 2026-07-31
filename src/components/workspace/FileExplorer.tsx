@@ -289,7 +289,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   }
 
   return (
-    <div className="zed-file-explorer w-56 border-l border-[#dfe3ea] dark:border-[#282c33] flex flex-col bg-[#fbfcfd] dark:bg-[#1e2128] select-none shrink-0">
+    <div className="zed-file-explorer z-grid z-grid-fine w-56 border-l border-[#dfe3ea] dark:border-[#282c33] flex flex-col bg-[#fbfcfd] dark:bg-[#1e2128] select-none shrink-0">
       <div className="px-3 py-2 border-b border-[#dfe3ea] dark:border-[#282c33] flex items-center justify-between">
         <span
           className="text-[11px] font-semibold text-[#78828e] dark:text-[#a9afbc] uppercase tracking-wide truncate"

@@ -229,3 +229,34 @@ button:active, [role='button']:active, .interactable-btn:active {
 .zed-agent-panel pre {
   font-family: var(--font-code);
 }
+
+/* ── Loading shimmer ─────────────────────────────────────────────────────────
+   Was an inline style with hardcoded light greys, so it could not respond to
+   the theme at all — inline styles carry no dark: variant, leaving a bright
+   band over a dark card. Driven by tokens instead. */
+.z-shimmer {
+  background: linear-gradient(
+    110deg,
+    var(--z-shimmer-base) 30%,
+    var(--z-shimmer-highlight) 50%,
+    var(--z-shimmer-base) 70%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+:root {
+  --z-shimmer-base: #e4e8ef;
+  --z-shimmer-highlight: #f2f5fa;
+}
+.dark {
+  --z-shimmer-base: #191c22;
+  --z-shimmer-highlight: #242833;
+}
+
+/* ── Workspace scale ─────────────────────────────────────────────────────────
+   The workspace chrome is drawn at fixed pixel sizes, so a rem change would
+   not move it. zoom reflows rather than transforming, which keeps hit targets
+   aligned with what is painted. */
+.zed-workspace {
+  zoom: 1.04;
+}

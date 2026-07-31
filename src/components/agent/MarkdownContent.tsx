@@ -103,12 +103,56 @@ function repairReasoningTags(text: string): string {
   );
 }
 
+/**
+ * Blanks fenced and inline code, preserving offsets.
+ *
+ * Tag extraction must not reach inside code. A generated HTML file contains
+ * <head> and <body>, and pulling those out as segments splits the fence around
+ * them — the reply renders as a broken code block with "Head" and "Body"
+ * collapsibles where the markup should be. Replacing the spans with filler of
+ * the same length keeps every match index valid against the original string.
+ */
+/**
+ * HTML element names, which the agent never uses as protocol tags.
+ *
+ * Without this, a generated page's <head> and <body> are extracted as segments
+ * and the surrounding fence is torn in half — the reply renders as broken code
+ * with "Head" and "Body" collapsibles in place of the markup.
+ */
+const HTML_ELEMENT_NAMES = new Set([
+  'html', 'head', 'body', 'title', 'meta', 'link', 'style', 'script', 'noscript',
+  'div', 'span', 'p', 'a', 'br', 'hr', 'pre', 'code', 'blockquote', 'figure',
+  'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'strong', 'em', 'b', 'i', 'u', 's', 'small',
+  'header', 'footer', 'nav', 'main', 'section', 'article', 'aside', 'address',
+  'ul', 'ol', 'li', 'dl', 'dt', 'dd', 'table', 'thead', 'tbody', 'tfoot', 'tr',
+  'td', 'th', 'caption', 'colgroup', 'col',
+  'form', 'input', 'button', 'label', 'select', 'option', 'optgroup', 'textarea',
+  'fieldset', 'legend', 'output', 'progress', 'meter', 'datalist',
+  'img', 'picture', 'source', 'video', 'audio', 'track', 'canvas', 'svg', 'iframe',
+  'details', 'summary', 'dialog', 'template', 'slot', 'time', 'mark', 'abbr',
+  'cite', 'sub', 'sup', 'kbd', 'samp', 'var', 'q', 'ins', 'del', 'center', 'font',
+]);
+
+function maskCodeSpans(text: string): string {
+  return text
+    .replace(/```[\s\S]*?```/g, (block) => ' '.repeat(block.length))
+    .replace(/`[^`\n]*`/g, (span) => ' '.repeat(span.length));
+}
+
 export function parseAgentContent(text: string): AgentContentSegment[] {
   const repairedText = repairReasoningTags(text);
+  // Matched against masked text so code is invisible to the scanner; content is
+  // still sliced out of the real string.
+  const scannable = maskCodeSpans(repairedText);
   const segments: AgentContentSegment[] = [];
   let lastIndex = 0;
 
-  for (const match of repairedText.matchAll(XML_TAG_RE)) {
+  for (const match of scannable.matchAll(XML_TAG_RE)) {
+    // HTML element names are never agent tags. Unknown names are still allowed
+    // through — the agent emits tags this component does not enumerate, and
+    // getTagMeta styles them from a hash — but an allowlist would silently drop
+    // those, so the exclusion is aimed only at real markup.
+    if (HTML_ELEMENT_NAMES.has(match[1].toLowerCase())) continue;
     if (match.index! > lastIndex) {
       const value = repairedText.slice(lastIndex, match.index).trim();
       if (value) segments.push({ type: 'text', content: value });
