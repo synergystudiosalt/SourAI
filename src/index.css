@@ -416,6 +416,22 @@ html.dark body {
   box-shadow: 0 0 0 1px color-mix(in srgb, #4776d5 18%, transparent);
 }
 
+/* A leftward drag outdents a nested item. Since the destination is the project
+   root rather than a folder row, anchor its snap line to the top of the tree. */
+.ws-file-root-drop-target::before {
+  content: '';
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+  top: 1px;
+  left: 8px;
+  right: 7px;
+  height: 2px;
+  border-radius: 999px;
+  background: #4776d5;
+  box-shadow: 0 0 0 1px color-mix(in srgb, #4776d5 18%, transparent);
+}
+
 /* Toolbar button transitions */
 .ws-toolbar-btn {
   transition: background-color var(--z-motion) cubic-bezier(0.4, 0, 0.2, 1), color 0.15s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.15s cubic-bezier(0.4, 0, 0.2, 1), transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.12s ease !important;

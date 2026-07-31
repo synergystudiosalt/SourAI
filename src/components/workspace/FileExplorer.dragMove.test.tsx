@@ -101,6 +101,73 @@ describe('file explorer drag-to-move', () => {
     expect(onMoveNode).toHaveBeenCalledWith('src/a.ts', '');
   });
 
+  it('outdents a child by dragging left after its folder was closed and reopened', () => {
+    const onMoveNode = renderExplorer();
+    const folderLabel = screen.getByText('src');
+    fireEvent.click(folderLabel); // open
+    fireEvent.click(folderLabel); // close
+    fireEvent.click(folderLabel); // reopen
+    const child = rowFor('a.ts');
+
+    fireEvent.pointerDown(child, {
+      pointerId: 1,
+      isPrimary: true,
+      button: 0,
+      clientX: 30,
+      clientY: 30,
+    });
+    fireEvent.pointerMove(child, {
+      pointerId: 1,
+      isPrimary: true,
+      buttons: 1,
+      clientX: 10,
+      clientY: 30,
+    });
+
+    expect(document.querySelector('[data-explorer-tree]')).toHaveClass('ws-file-root-drop-target');
+
+    fireEvent.pointerUp(child, {
+      pointerId: 1,
+      isPrimary: true,
+      button: 0,
+      clientX: 10,
+      clientY: 30,
+    });
+
+    expect(onMoveNode).toHaveBeenCalledWith('src/a.ts', '');
+  });
+
+  it('outdents one level at a time in a deeply nested folder', () => {
+    const onMoveNode = renderExplorer();
+    fireEvent.click(screen.getByText('src'));
+    fireEvent.click(screen.getByText('inner'));
+    const child = rowFor('b.ts');
+
+    fireEvent.pointerDown(child, {
+      pointerId: 2,
+      isPrimary: true,
+      button: 0,
+      clientX: 44,
+      clientY: 30,
+    });
+    fireEvent.pointerMove(child, {
+      pointerId: 2,
+      isPrimary: true,
+      buttons: 1,
+      clientX: 24,
+      clientY: 30,
+    });
+    fireEvent.pointerUp(child, {
+      pointerId: 2,
+      isPrimary: true,
+      button: 0,
+      clientX: 24,
+      clientY: 30,
+    });
+
+    expect(onMoveNode).toHaveBeenCalledWith('src/inner/b.ts', 'src');
+  });
+
   it('shows an indented snap line while a folder is the valid destination', () => {
     renderExplorer();
     const source = rowFor('top.ts');

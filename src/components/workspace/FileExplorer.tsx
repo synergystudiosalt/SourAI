@@ -38,6 +38,27 @@ interface PointerDragCandidate {
 }
 
 const DRAG_START_DISTANCE = 5;
+const TREE_INDENT = 14;
+const TREE_BASE_PADDING = 8;
+
+/**
+ * Dragging left of a nested row means "outdent" even though the pointer still
+ * hits that row's full-width box. The returned path is the shallower ancestor
+ * folder, or the empty string for the project root.
+ */
+function getHorizontalOutdentTarget(
+  sourcePath: string,
+  clientX: number,
+  explorerLeft: number
+): string | null {
+  const parentParts = getParentPath(sourcePath).split('/').filter(Boolean);
+  if (parentParts.length === 0) return null;
+
+  const relativeX = Math.max(0, clientX - explorerLeft - TREE_BASE_PADDING);
+  const requestedParentDepth = Math.floor(relativeX / TREE_INDENT);
+  if (requestedParentDepth >= parentParts.length) return null;
+  return parentParts.slice(0, requestedParentDepth).join('/');
+}
 
 const menuItemClass =
   'w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-left cursor-pointer text-[#3b414d] dark:text-[#dfe3ea] hover:bg-[#f6f8fa] dark:hover:bg-[#1e2128] ws-button-smooth';
@@ -237,6 +258,17 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
       return;
     }
 
+    const outdentTarget = getHorizontalOutdentTarget(
+      sourcePath,
+      clientX,
+      explorer.getBoundingClientRect().left
+    );
+    if (outdentTarget !== null && canMoveTo(sourcePath, outdentTarget)) {
+      queueFolderExpand(null);
+      setPointerDropTarget(outdentTarget);
+      return;
+    }
+
     const row = hit.closest<HTMLElement>('[data-explorer-row]');
     const hoveredFolderPath = row?.dataset.nodeType === 'folder'
       ? row.dataset.path || null
@@ -332,7 +364,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   const renderCreateRow = (parentPath: string, depth: number) => {
     if (!pendingCreate || pendingCreate.parentPath !== parentPath) return null;
     return (
-      <div style={{ paddingLeft: depth * 14 + 8 }} className="flex items-center gap-1.5 pr-2 py-1">
+      <div style={{ paddingLeft: depth * TREE_INDENT + TREE_BASE_PADDING }} className="flex items-center gap-1.5 pr-2 py-1">
         {pendingCreate.type === 'folder' ? (
           <Folder className="w-3.5 h-3.5 text-current opacity-70 shrink-0" />
         ) : (
@@ -369,6 +401,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
           data-explorer-row
           data-path={node.path}
           data-node-type={node.type}
+          data-depth={depth}
           onPointerDown={(e) => handleRowPointerDown(e, node.path)}
           onClick={(e) => {
             if (suppressNextClickRef.current) {
@@ -383,8 +416,8 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
           onContextMenu={(e) => openNodeMenu(e, node)}
           onDoubleClick={() => beginRename(node)}
           style={{
-            paddingLeft: depth * 14 + 8,
-            '--file-drop-indent': `${(depth + 1) * 14 + 8}px`,
+            paddingLeft: depth * TREE_INDENT + TREE_BASE_PADDING,
+            '--file-drop-indent': `${(depth + 1) * TREE_INDENT + TREE_BASE_PADDING}px`,
           } as React.CSSProperties}
           className={`group relative w-full flex items-center justify-between pr-1.5 py-1 text-xs ws-file-item ws-clickable ${dragPath ? 'cursor-grabbing' : 'cursor-pointer'} ${dragPath === node.path ? 'opacity-40' : ''} ${isFolder && dropTarget === node.path ? 'ws-file-drop-target' : ''} ${
             isActive
@@ -517,7 +550,11 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto py-1" onContextMenu={openBackgroundMenu}>
+      <div
+        data-explorer-tree
+        className={`relative flex-1 overflow-y-auto py-1 ${dropTarget === '' ? 'ws-file-root-drop-target' : ''}`}
+        onContextMenu={openBackgroundMenu}
+      >
         {tree.length === 0 && !pendingCreate ? (
           <div className="px-3 py-6 text-center text-[11px] text-[#78828e] dark:text-[#888] italic leading-relaxed">
             No files yet.
