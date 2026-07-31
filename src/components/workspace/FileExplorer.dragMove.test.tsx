@@ -62,6 +62,12 @@ function pointerDrag(source: HTMLElement, target: HTMLElement) {
 }
 
 describe('file explorer drag-to-move', () => {
+  it('keeps the project header opaque above the explorer grid', () => {
+    renderExplorer();
+
+    expect(screen.getByTitle('drag-test').parentElement).toHaveClass('zed-panel-bar');
+  });
+
   it('moves a file into a folder it is dropped on', () => {
     const onMoveNode = renderExplorer();
 
