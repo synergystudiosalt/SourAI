@@ -233,6 +233,47 @@ describe('NotebookWorkspace', () => {
     expect(calls.filter((call) => call.action === 'overview')).toHaveLength(1);
   });
 
+  it('switches panes from the narrow-viewport tab bar', async () => {
+    // The tab bar is always in the DOM and hidden by CSS on wide screens, so
+    // its state machine is testable without a real viewport.
+    const user = userEvent.setup();
+    render(<Harness initial={notebookWith([source()])} />);
+
+    const tabs = screen.getByRole('navigation', { name: 'Notebook panes' });
+    expect(within(tabs).getByRole('button', { name: 'Chat' })).toHaveAttribute(
+      'aria-current',
+      'page'
+    );
+
+    await user.click(within(tabs).getByRole('button', { name: 'Sources' }));
+    expect(within(tabs).getByRole('button', { name: 'Sources' })).toHaveAttribute(
+      'aria-current',
+      'page'
+    );
+    expect(within(tabs).getByRole('button', { name: 'Chat' })).not.toHaveAttribute('aria-current');
+
+    await user.click(within(tabs).getByRole('button', { name: 'Studio' }));
+    expect(within(tabs).getByRole('button', { name: 'Studio' })).toHaveAttribute(
+      'aria-current',
+      'page'
+    );
+  });
+
+  it('returns to the chat pane when a question is asked from another pane', async () => {
+    const user = userEvent.setup();
+    render(<Harness initial={notebookWith([source()])} />);
+
+    const tabs = screen.getByRole('navigation', { name: 'Notebook panes' });
+    await user.click(within(tabs).getByRole('button', { name: 'Sources' }));
+    await user.type(await screen.findByPlaceholderText(/Ask anything/), 'What is deep work?');
+    await user.click(screen.getByRole('button', { name: 'Send question' }));
+
+    expect(within(tabs).getByRole('button', { name: 'Chat' })).toHaveAttribute(
+      'aria-current',
+      'page'
+    );
+  });
+
   it('offers the upgrade path instead of asking once the quota is spent', async () => {
     const user = userEvent.setup();
     const onUpgrade = vi.fn();

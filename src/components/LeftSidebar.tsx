@@ -57,8 +57,11 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
 
   return (
     <>
-      {/* Narrow Leftmost Icon Bar - Hidden on very small screens, visible on sm and up */}
-      <div className="hidden sm:flex w-[46px] h-screen bg-[#fbfcfd] dark:bg-[#17191d] border-r border-[#e3e4e6] dark:border-[#282c33] flex-col items-center justify-between py-3 z-30 shrink-0 select-none">
+      {/* Narrow leftmost icon bar.
+          This used to be `hidden sm:flex`, which left a phone with no way to
+          reach any workspace at all — the drawer toggle lives here. It is the
+          same 46px rail at every width. */}
+      <div className="flex w-[46px] h-screen bg-[#fbfcfd] dark:bg-[#17191d] border-r border-[#e3e4e6] dark:border-[#282c33] flex-col items-center justify-between py-3 z-30 shrink-0 select-none">
         {/* Top Icons */}
         <div className="flex flex-col items-center gap-2.5">
           {/* Sidebar Toggle */}
@@ -159,7 +162,10 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
               animate={{ x: 0, opacity: 1, filter: 'blur(0px)' }}
               exit={{ x: -20, opacity: 0, filter: 'blur(6px)' }}
               transition={{ duration: 0.25, ease: 'easeOut' }}
-              className="relative left-0 sm:left-[46px] w-full sm:w-[260px] h-screen bg-[#fbfcfd] dark:bg-[#17191d] border-r border-[#e3e4e6] dark:border-[#282c33] text-[#16181d] dark:text-[#dce0e5] flex flex-col z-50 shadow-xl"
+              // The drawer sits beside the icon rail at every width. Full-bleed
+              // on a phone covered the rail completely, which left no way to
+              // switch workspaces and no backdrop to tap to dismiss.
+              className="relative left-[46px] w-[calc(100%-46px)] sm:w-[260px] h-screen bg-[#fbfcfd] dark:bg-[#17191d] border-r border-[#e3e4e6] dark:border-[#282c33] text-[#16181d] dark:text-[#dce0e5] flex flex-col z-50 shadow-xl"
             >
               {/* Header */}
               <div className="p-3 md:p-4 border-b border-[#e3e4e6] dark:border-[#282c33] flex items-center justify-between">
@@ -170,7 +176,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                 </div>
                 <button
                   onClick={() => setIsExpanded(false)}
-                  className="p-1 rounded-md text-[#4a5259] dark:text-[#a9afbc] hover:bg-[#f2f4f7] dark:hover:bg-[#1e2128] hover:text-[#16181d] dark:hover:text-[#dce0e5] cursor-pointer transition-colors"
+                  aria-label="Close sidebar"
+                  className="p-2 sm:p-1 rounded-md text-[#4a5259] dark:text-[#a9afbc] hover:bg-[#f2f4f7] dark:hover:bg-[#1e2128] hover:text-[#16181d] dark:hover:text-[#dce0e5] cursor-pointer transition-colors"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>

@@ -308,12 +308,12 @@ export const NotebookChatPanel: React.FC<NotebookChatPanelProps> = ({
               )}
             </div>
 
-            <div className="mt-1.5 flex items-center justify-between text-[10.5px] text-[#78828e]">
+            <div className="mt-1.5 flex items-center justify-between gap-2 text-[10.5px] text-[#78828e]">
               <div ref={modelRef} className="relative">
                 <button
                   type="button"
                   onClick={() => setShowModels((open) => !open)}
-                  className="flex items-center gap-1 hover:text-[#16181d] dark:hover:text-[#dce0e5]"
+                  className="flex items-center gap-1 whitespace-nowrap hover:text-[#16181d] dark:hover:text-[#dce0e5]"
                 >
                   {MODEL_ROUTES[selectedModel].label}
                   <ChevronDown className="h-3 w-3" />
@@ -329,7 +329,11 @@ export const NotebookChatPanel: React.FC<NotebookChatPanelProps> = ({
                   )}
                 </AnimatePresence>
               </div>
-              <span>Answers are grounded in your selected sources.</span>
+              {/* Reassurance, not instruction — the first thing to drop when
+                  the row would otherwise wrap under the composer. */}
+              <span className="hidden truncate sm:inline">
+                Answers are grounded in your selected sources.
+              </span>
             </div>
           </div>
         </div>

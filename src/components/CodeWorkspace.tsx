@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import {
   Plus, Folder, ArrowLeft, Save, AlertCircle, CheckCircle2, X, Loader2,
   Download, WrapText, RefreshCw, Eye, EyeOff, RotateCw, ExternalLink,
+  Sparkles, FileCode2, FolderTree,
 } from 'lucide-react';
 import JSZip from 'jszip';
 import ReactMarkdown from 'react-markdown';
@@ -33,6 +34,7 @@ import {
 } from './workspace/previewLogStore';
 import { PREVIEW_RUNTIME_SETTLE_MS, waitForPreviewRuntimeError } from './workspace/previewAutoFix';
 import { useFlag } from '../features/flags';
+import { useIsCompactViewport } from '../utils/useMediaQuery';
 
 export { buildSandboxedPreviewDocument } from '../security/previewIsolation';
 
@@ -382,6 +384,16 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
   const [isAgentCollapsed, setIsAgentCollapsed] = useState(false);
   const [agentView, setAgentView] = useState<'chat' | 'advanced'>('chat');
   const [isFileExplorerCollapsed, setIsFileExplorerCollapsed] = useState(false);
+
+  /**
+   * Narrow viewports show one pane at a time.
+   *
+   * The three columns are sized by an animated inline `width`, which a
+   * breakpoint class cannot override — so the choice has to reach JavaScript
+   * rather than staying in CSS like the rest of the responsive work.
+   */
+  const isCompact = useIsCompactViewport();
+  const [mobilePane, setMobilePane] = useState<'agent' | 'editor' | 'files'>('editor');
   const [isScanning, setIsScanning] = useState(false);
   const [truncatedNotice, setTruncatedNotice] = useState(false);
   // Preview is scoped per open file tab (not a single global toggle) so
@@ -603,6 +615,9 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
       dedupeWorkspaceTabs([...prev, { path, isDirty: false }], path)
     );
     setActiveTabPath(path);
+    // On a one-pane layout the file just opened is behind the explorer, so
+    // opening it has to bring the editor forward or nothing appears to happen.
+    setMobilePane('editor');
 
     if (!node.isLoaded && rootDirHandleRef.current && !isLikelyBinary(path)) {
       try {
@@ -993,6 +1008,7 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
       dedupeWorkspaceTabs([...previous, { path, isDirty: false }], path)
     );
     setActiveTabPath(path);
+    setMobilePane('editor');
   };
 
   const handleLegacyAgentOps = async (ops: AgentFileOp[]): Promise<boolean> => {
@@ -1131,7 +1147,8 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
               className="flex items-center gap-1.5 text-[11px] text-[#4a5259] dark:text-[#a9afbc] hover:text-[#16181d] dark:hover:text-white font-medium cursor-pointer blurry-hover"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Exit Workspace</span>
+              <span className="hidden sm:inline">Exit Workspace</span>
+              <span className="sm:hidden">Exit</span>
             </button>
           </div>
 
@@ -1143,7 +1160,8 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
               title="Download the whole project as a .zip"
             >
               <Download className="w-3 h-3" />
-              <span>Download Project</span>
+              <span className="hidden sm:inline">Download Project</span>
+              <span className="sm:hidden">Project</span>
             </button>
             <button
               onClick={() => activeTabPath && handleDownloadFile(activeTabPath)}
@@ -1156,12 +1174,46 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
           </div>
         </div>
 
+        {/* One pane at a time below the three-column breakpoint. */}
+        <nav
+          aria-label="Workspace panes"
+          className="flex shrink-0 border-b border-[#dfe3ea] dark:border-[#282c33] lg:hidden"
+        >
+          {([
+            { id: 'agent', label: 'Agent', icon: Sparkles },
+            { id: 'editor', label: 'Editor', icon: FileCode2 },
+            { id: 'files', label: 'Files', icon: FolderTree },
+          ] as const).map((pane) => {
+            const PaneIcon = pane.icon;
+            return (
+              <button
+                key={pane.id}
+                type="button"
+                onClick={() => setMobilePane(pane.id)}
+                aria-current={mobilePane === pane.id ? 'page' : undefined}
+                className={`ws-tab flex flex-1 items-center justify-center gap-1.5 border-b-2 py-2 text-[11.5px] cursor-pointer ${
+                  mobilePane === pane.id
+                    ? 'border-[#4776d5] text-[#16181d] dark:text-[#dce0e5]'
+                    : 'border-transparent text-[#78828e]'
+                }`}
+              >
+                <PaneIcon className="h-3.5 w-3.5" />
+                {pane.label}
+              </button>
+            );
+          })}
+        </nav>
+
         <div className="flex-1 flex overflow-hidden">
           <motion.div
             initial={false}
-            animate={{ width: isAgentCollapsed ? 36 : agentView === 'advanced' ? 440 : 288 }}
+            animate={{
+              width: isCompact ? '100%' : isAgentCollapsed ? 36 : agentView === 'advanced' ? 440 : 288,
+            }}
             transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-            className="overflow-hidden relative"
+            className={`overflow-hidden relative ${
+              isCompact && mobilePane !== 'agent' ? 'hidden' : ''
+            }`}
           >
             {agentView === 'advanced' && clientAgentEnabled ? (
               <>
@@ -1213,7 +1265,11 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
             )}
           </motion.div>
 
-          <div className="zed-editor-surface flex-1 flex flex-col h-full overflow-hidden bg-white dark:bg-[#1e2128] min-w-0">
+          <div
+            className={`zed-editor-surface flex-1 flex flex-col h-full overflow-hidden bg-white dark:bg-[#1e2128] min-w-0 ${
+              isCompact && mobilePane !== 'editor' ? 'hidden' : ''
+            }`}
+          >
             <div className="zed-tabbar h-9 border-b border-[#dfe3ea] dark:border-[#282c33] bg-[#f6f8fa] dark:bg-[#1e2128] flex items-stretch select-none shrink-0">
               <div className="flex items-stretch overflow-x-auto flex-1 min-w-0">
                 {openTabs.map((tab) => {
@@ -1371,11 +1427,13 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
               )}
             </div>
 
-            <div className="zed-statusbar h-6 border-t border-[#dfe3ea] dark:border-[#282c33] bg-white dark:bg-[#1e2128] flex items-center justify-between px-3 text-[10px] text-[#78828e] dark:text-[#a9afbc] shrink-0">
-              <div className="flex items-center gap-3">
-                {truncatedNotice && <span title="Some files were hidden to keep the explorer fast">Large project — some files hidden</span>}
+            {/* The encoding and language readouts are the first to go on a
+                phone: five items at 10px wrapped the 24px bar onto two lines. */}
+            <div className="zed-statusbar h-6 border-t border-[#dfe3ea] dark:border-[#282c33] bg-white dark:bg-[#1e2128] flex items-center justify-between px-3 text-[10px] text-[#78828e] dark:text-[#a9afbc] shrink-0 overflow-hidden">
+              <div className="flex items-center gap-3 min-w-0">
+                {truncatedNotice && <span className="truncate" title="Some files were hidden to keep the explorer fast">Large project — some files hidden</span>}
               </div>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 sm:gap-4 shrink-0 whitespace-nowrap">
                 {activeNode && activeNode.type === 'file' && !isLikelyBinary(activeNode.path) && (
                   <>
                     <span>
@@ -1389,9 +1447,9 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
                     >
                       <WrapText className="w-3 h-3" /> Wrap
                     </button>
-                    <span>Spaces: 2</span>
-                    <span>UTF-8</span>
-                    <span>{getLanguageName(activeNode.path)}</span>
+                    <span className="hidden sm:inline">Spaces: 2</span>
+                    <span className="hidden sm:inline">UTF-8</span>
+                    <span className="hidden sm:inline">{getLanguageName(activeNode.path)}</span>
                   </>
                 )}
               </div>
@@ -1400,9 +1458,9 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
 
           <motion.div
             initial={false}
-            animate={{ width: isFileExplorerCollapsed ? 36 : 224 }}
+            animate={{ width: isCompact ? '100%' : isFileExplorerCollapsed ? 36 : 224 }}
             transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-            className="overflow-hidden"
+            className={`overflow-hidden ${isCompact && mobilePane !== 'files' ? 'hidden' : ''}`}
           >
             <FileExplorer
               projectName={activeProject.name}

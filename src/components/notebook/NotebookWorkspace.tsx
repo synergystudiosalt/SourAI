@@ -519,7 +519,10 @@ export const NotebookWorkspace: React.FC<NotebookWorkspaceProps> = ({
       </header>
 
       {/* Mobile: one column at a time. */}
-      <nav className="flex shrink-0 border-b border-[#dfe3ea] dark:border-[#282c33] lg:hidden">
+      <nav
+        aria-label="Notebook panes"
+        className="flex shrink-0 border-b border-[#dfe3ea] dark:border-[#282c33] lg:hidden"
+      >
         {tabs.map((tab) => {
           const Icon = tab.icon;
           return (
@@ -527,6 +530,7 @@ export const NotebookWorkspace: React.FC<NotebookWorkspaceProps> = ({
               key={tab.id}
               type="button"
               onClick={() => setMobileTab(tab.id)}
+              aria-current={mobileTab === tab.id ? 'page' : undefined}
               className={`ws-tab flex flex-1 items-center justify-center gap-1.5 border-b-2 py-2 text-[11.5px] ${
                 mobileTab === tab.id
                   ? 'border-[#4776d5] text-[#16181d] dark:text-[#dce0e5]'
