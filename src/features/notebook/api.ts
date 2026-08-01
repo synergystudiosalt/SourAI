@@ -7,6 +7,7 @@
  */
 
 import type { StudioOptions } from '../../../functions/shared/studioOptions';
+import type { StudyAttempt } from '../../../functions/shared/studyAttempt';
 import type { AIModel } from '../../types';
 import type { NotebookMessage, NotebookSource } from './types';
 
@@ -108,6 +109,34 @@ export function generateStudioDocument(options: {
       kind: options.kind,
       model: options.model,
       options: options.options,
+      sources: options.sources.map(toSourcePayload),
+    },
+    options.signal
+  );
+}
+
+export interface StudyReviewReply {
+  summary: string;
+  topics: string[];
+  /** One line, ready to drop into the focus box of a follow-up generation. */
+  focus: string;
+  score: number;
+  total: number;
+}
+
+/** Asks what to study next, from the sources and from what was just missed. */
+export function reviewStudyAttempt(options: {
+  attempt: StudyAttempt;
+  sources: readonly NotebookSource[];
+  model: AIModel;
+  signal?: AbortSignal;
+}): Promise<StudyReviewReply> {
+  return post<StudyReviewReply>(
+    {
+      action: 'study_review',
+      kind: options.attempt.kind,
+      model: options.model,
+      attempt: options.attempt,
       sources: options.sources.map(toSourcePayload),
     },
     options.signal

@@ -23,11 +23,13 @@ import {
   readFlashcards,
   readQuiz,
 } from '../../features/notebook/studyContent';
+import type { StudyAttempt } from '../../../functions/shared/studyAttempt';
 import { downloadArtifact, type ExportFormat } from '../../features/notebook/exportArtifact';
 import { Flashcards } from './Flashcards';
 import { MindMap } from './MindMap';
 import { NotebookMarkdown } from './NotebookMarkdown';
 import { QuizView } from './Quiz';
+import type { StudyReview } from './StudyResults';
 
 /**
  * Flashcards and quizzes are stored as JSON. Copying that to the clipboard, or
@@ -54,6 +56,11 @@ export interface ArtifactViewerProps {
   onUpdate: (id: string, update: Partial<Pick<StudioArtifact, 'title' | 'content'>>) => void;
   onConvertToSource: (artifact: StudioArtifact) => void;
   onOpenSource: (sourceId: string) => void;
+  review?: StudyReview;
+  onAttemptComplete?: (attempt: StudyAttempt) => void;
+  onRequestReview?: () => void;
+  onPractise?: (focus: string) => void;
+  isPractising?: boolean;
 }
 
 export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
@@ -63,6 +70,11 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
   onUpdate,
   onConvertToSource,
   onOpenSource,
+  review,
+  onAttemptComplete,
+  onRequestReview,
+  onPractise,
+  isPractising,
 }) => {
   const [isEditing, setIsEditing] = useState(artifact.kind === 'note' && !artifact.content);
   const [draft, setDraft] = useState(artifact.content);
@@ -305,12 +317,22 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
                   content={artifact.content}
                   onOpenSource={resolver.onSelect}
                   sourceLabel={resolver.labelFor}
+                  onComplete={onAttemptComplete}
+                  review={review}
+                  onRequestReview={onRequestReview}
+                  onPractise={onPractise}
+                  isPractising={isPractising}
                 />
               ) : artifact.kind === 'quiz' ? (
                 <QuizView
                   content={artifact.content}
                   onOpenSource={resolver.onSelect}
                   sourceLabel={resolver.labelFor}
+                  onComplete={onAttemptComplete}
+                  review={review}
+                  onRequestReview={onRequestReview}
+                  onPractise={onPractise}
+                  isPractising={isPractising}
                 />
               ) : (
                 <NotebookMarkdown text={artifact.content} resolver={resolver} />

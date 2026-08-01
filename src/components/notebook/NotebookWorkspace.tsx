@@ -6,6 +6,7 @@ import {
   askNotebook,
   generateOverview,
   generateStudioDocument,
+  reviewStudyAttempt,
   summariseSource,
   NotebookApiError,
 } from '../../features/notebook/api';
@@ -25,6 +26,8 @@ import { MESSAGE_QUOTA } from '../../utils/constants';
 import { composePdfText } from '../../features/notebook/pdfText';
 import { formatRemaining, transcribePdfPages } from '../../features/notebook/pdfOcr';
 import { studioOptionSpec, type StudioOptions } from '../../../functions/shared/studioOptions';
+import type { StudyAttempt } from '../../../functions/shared/studyAttempt';
+import type { StudyReview } from './StudyResults';
 import { AddSourceDialog, type PendingTranscription } from './AddSourceDialog';
 import { StudioOptionsDialog } from './StudioOptionsDialog';
 import { ArtifactViewer } from './ArtifactViewer';
@@ -80,6 +83,14 @@ export const NotebookWorkspace: React.FC<NotebookWorkspaceProps> = ({
   const [configuringKind, setConfiguringKind] = useState<Exclude<StudioArtifactKind, 'note'> | null>(
     null
   );
+  /**
+   * Review of the last finished attempt, per artifact.
+   *
+   * Deliberately not persisted: it describes one pass through a deck, so a
+   * retake must produce a fresh one rather than resurrecting the old verdict.
+   */
+  const [reviews, setReviews] = useState<Record<string, StudyReview>>({});
+  const attemptsRef = useRef(new Map<string, StudyAttempt>());
   const [titleDraft, setTitleDraft] = useState(notebook.title);
   const askControllerRef = useRef<AbortController | null>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
@@ -410,6 +421,46 @@ export const NotebookWorkspace: React.FC<NotebookWorkspaceProps> = ({
     [addArtifact, notebook, onChange, pendingKind, selectedModel]
   );
 
+  /** Remembers the finished attempt so a review can be asked for on demand. */
+  const recordAttempt = useCallback((artifactId: string, attempt: StudyAttempt) => {
+    attemptsRef.current.set(artifactId, attempt);
+    setReviews((current) => ({ ...current, [artifactId]: { state: 'idle' } }));
+  }, []);
+
+  const requestReview = useCallback(
+    async (artifactId: string) => {
+      const attempt = attemptsRef.current.get(artifactId);
+      const sources = pickSelected(notebook);
+      if (!attempt || sources.length === 0) return;
+      setReviews((current) => ({ ...current, [artifactId]: { state: 'loading' } }));
+      try {
+        const reply = await reviewStudyAttempt({ attempt, sources, model: selectedModel });
+        setReviews((current) => ({
+          ...current,
+          [artifactId]: {
+            state: 'ready',
+            summary: reply.summary,
+            topics: reply.topics,
+            focus: reply.focus,
+          },
+        }));
+      } catch (error) {
+        console.error('[sour.ai] Study review failed', error);
+        setReviews((current) => ({
+          ...current,
+          [artifactId]: {
+            state: 'error',
+            error:
+              error instanceof NotebookApiError
+                ? error.message
+                : 'That review could not be generated.',
+          },
+        }));
+      }
+    },
+    [notebook, selectedModel]
+  );
+
   const addNote = useCallback(() => {
     const note: StudioArtifact = {
       id: newId(),
@@ -513,6 +564,19 @@ export const NotebookWorkspace: React.FC<NotebookWorkspaceProps> = ({
           onUpdate={updateArtifact}
           onConvertToSource={convertArtifactToSource}
           onOpenSource={openSource}
+          review={reviews[activeArtifact.id]}
+          onAttemptComplete={(attempt) => recordAttempt(activeArtifact.id, attempt)}
+          onRequestReview={() => void requestReview(activeArtifact.id)}
+          onPractise={(focus) => {
+            // The follow-up is the same kind, aimed at what was just missed.
+            const kind = activeArtifact.kind as Exclude<StudioArtifactKind, 'note'>;
+            const spec = studioOptionSpec(kind);
+            void generate(kind, {
+              focus,
+              ...(spec?.count ? { count: spec.count.fallback } : {}),
+            });
+          }}
+          isPractising={pendingKind === activeArtifact.kind}
         />
       ) : (
         <NotebookChatPanel

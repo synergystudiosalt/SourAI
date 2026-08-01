@@ -50,7 +50,10 @@ describe('Flashcards', () => {
     // Marking advances, so the count reflects the second card.
     expect(await screen.findByText(/Card 2 of 2/)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /Known/ }));
-    expect(await screen.findByText(/Deck complete — 2 of 2 marked known/)).toBeInTheDocument();
+
+    const results = await screen.findByRole('region', { name: 'Results' });
+    expect(within(results).getByText('100%')).toBeInTheDocument();
+    expect(within(results).getByText('2 of 2 marked known')).toBeInTheDocument();
   });
 
   it('cannot step past either end of the deck', async () => {
@@ -119,11 +122,12 @@ describe('QuizView', () => {
     await user.click(screen.getByRole('button', { name: /Next/ }));
     await user.click(await screen.findByRole('button', { name: /Logistical tasks/ }));
 
-    expect(await screen.findByText(/Quiz complete — 2 of 2 correct/)).toBeInTheDocument();
+    const results = await screen.findByRole('region', { name: 'Results' });
+    expect(within(results).getByText('100%')).toBeInTheDocument();
+    expect(within(results).getByText('2 of 2 correct')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /Retake/ }));
-    // The completion banner animates out, so it lingers for a frame.
-    await waitFor(() => expect(screen.queryByText(/Quiz complete/)).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Results' })).not.toBeInTheDocument());
     expect(screen.getByText(/Question 1 of 2/)).toBeInTheDocument();
   });
 
@@ -143,5 +147,100 @@ describe('QuizView', () => {
     const header = screen.getByText(/Question 1 of 1/);
     expect(header).toBeInTheDocument();
     expect(within(document.body).queryByText('Broken')).not.toBeInTheDocument();
+  });
+});
+
+describe('finishing an attempt', () => {
+  it('reports the quiz attempt once, with what was missed', async () => {
+    const user = userEvent.setup();
+    const onComplete = vi.fn();
+    render(<QuizView content={QUIZ} onComplete={onComplete} />);
+
+    await user.click(screen.getByRole('button', { name: /Meetings/ }));
+    await user.click(screen.getByRole('button', { name: /Next/ }));
+    await user.click(await screen.findByRole('button', { name: /Logistical tasks/ }));
+
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    const attempt = onComplete.mock.calls[0][0];
+    expect(attempt).toMatchObject({ kind: 'quiz', score: 1, total: 2 });
+    // The missed item carries both what was picked and what was right, so the
+    // review can talk about the specific mistake.
+    expect(attempt.items[0]).toMatchObject({
+      correct: false,
+      chosen: 'Meetings',
+      answer: 'Distraction-free concentration',
+    });
+  });
+
+  it('reports a flashcard pass with the cards marked for review', async () => {
+    const user = userEvent.setup();
+    const onComplete = vi.fn();
+    render(<Flashcards content={DECK} onComplete={onComplete} />);
+
+    await user.click(screen.getByRole('button', { name: /Known/ }));
+    await user.click(await screen.findByRole('button', { name: /Review/ }));
+
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(onComplete.mock.calls[0][0]).toMatchObject({ kind: 'flashcards', score: 1, total: 2 });
+  });
+
+  it('reports again after a retake, so a second pass gets its own review', async () => {
+    const user = userEvent.setup();
+    const onComplete = vi.fn();
+    render(<QuizView content={QUIZ} onComplete={onComplete} />);
+
+    await user.click(screen.getByRole('button', { name: /Distraction-free concentration/ }));
+    await user.click(screen.getByRole('button', { name: /Next/ }));
+    await user.click(await screen.findByRole('button', { name: /Logistical tasks/ }));
+    expect(onComplete).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByRole('button', { name: /Retake/ }));
+    await user.click(await screen.findByRole('button', { name: /Meetings/ }));
+    await user.click(screen.getByRole('button', { name: /Next/ }));
+    await user.click(await screen.findByRole('button', { name: /Logistical tasks/ }));
+
+    expect(onComplete).toHaveBeenCalledTimes(2);
+    expect(onComplete.mock.calls[1][0].score).toBe(1);
+  });
+
+  it('shows the review and offers to practise the weak topics', async () => {
+    const user = userEvent.setup();
+    const onPractise = vi.fn();
+    render(
+      <QuizView
+        content={QUIZ}
+        review={{
+          state: 'ready',
+          summary: 'You mixed up deep and shallow work.',
+          topics: ['Deep work', 'Attention residue'],
+          focus: 'deep work, attention residue',
+        }}
+        onPractise={onPractise}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /Meetings/ }));
+    await user.click(screen.getByRole('button', { name: /Next/ }));
+    await user.click(await screen.findByRole('button', { name: /Logistical tasks/ }));
+
+    const results = await screen.findByRole('region', { name: 'Results' });
+    expect(within(results).getByText('You mixed up deep and shallow work.')).toBeInTheDocument();
+    expect(within(results).getByText('Deep work')).toBeInTheDocument();
+
+    await user.click(within(results).getByRole('button', { name: /Make a quiz on these topics/ }));
+    expect(onPractise).toHaveBeenCalledWith('deep work, attention residue');
+  });
+
+  it('asks for the review only when the learner wants it', async () => {
+    const user = userEvent.setup();
+    const onRequestReview = vi.fn();
+    render(<QuizView content={QUIZ} review={{ state: 'idle' }} onRequestReview={onRequestReview} />);
+
+    await user.click(screen.getByRole('button', { name: /Meetings/ }));
+    await user.click(screen.getByRole('button', { name: /Next/ }));
+    await user.click(await screen.findByRole('button', { name: /Logistical tasks/ }));
+
+    await user.click(await screen.findByRole('button', { name: /Review my answers/ }));
+    expect(onRequestReview).toHaveBeenCalledTimes(1);
   });
 });

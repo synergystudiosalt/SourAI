@@ -1,8 +1,10 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Check, X, RotateCcw, ChevronRight } from 'lucide-react';
 
+import type { StudyAttempt } from '../../../functions/shared/studyAttempt';
 import { optionLetter, readQuiz } from '../../features/notebook/studyContent';
+import { StudyResults, type StudyReview } from './StudyResults';
 
 /**
  * A multiple-choice quiz answered one question at a time.
@@ -17,12 +19,28 @@ export interface QuizViewProps {
   content: string;
   onOpenSource?: (index: number) => void;
   sourceLabel?: (index: number) => string | undefined;
+  /** Fired once per attempt, when the last question has been answered. */
+  onComplete?: (attempt: StudyAttempt) => void;
+  review?: StudyReview;
+  onRequestReview?: () => void;
+  onPractise?: (focus: string) => void;
+  isPractising?: boolean;
 }
 
-export const QuizView: React.FC<QuizViewProps> = ({ content, onOpenSource, sourceLabel }) => {
+export const QuizView: React.FC<QuizViewProps> = ({
+  content,
+  onOpenSource,
+  sourceLabel,
+  onComplete,
+  review,
+  onRequestReview,
+  onPractise,
+  isPractising,
+}) => {
   const quiz = useMemo(() => readQuiz(content), [content]);
   const [answers, setAnswers] = useState<Record<number, number>>({});
   const [position, setPosition] = useState(0);
+  const reportedRef = useRef(false);
 
   const total = quiz.questions.length;
   const question = quiz.questions[position];
@@ -32,7 +50,31 @@ export const QuizView: React.FC<QuizViewProps> = ({ content, onOpenSource, sourc
     (correct, entry, index) => (answers[index] === entry.answer ? correct + 1 : correct),
     0
   );
-  const isComplete = Object.keys(answers).length === total;
+  const isComplete = total > 0 && Object.keys(answers).length === total;
+
+  const attempt: StudyAttempt = useMemo(
+    () => ({
+      kind: 'quiz',
+      total,
+      score,
+      items: quiz.questions.map((entry, index) => ({
+        prompt: entry.question,
+        answer: entry.options[entry.answer],
+        chosen: answers[index] !== undefined ? entry.options[answers[index]] : undefined,
+        correct: answers[index] === entry.answer,
+        source: entry.source,
+      })),
+    }),
+    [quiz.questions, answers, total, score]
+  );
+
+  // Reported once per attempt; a re-render of a finished quiz must not ask for
+  // another review.
+  useEffect(() => {
+    if (!isComplete || reportedRef.current) return;
+    reportedRef.current = true;
+    onComplete?.(attempt);
+  }, [isComplete, attempt, onComplete]);
 
   if (total === 0) {
     return (
@@ -59,6 +101,7 @@ export const QuizView: React.FC<QuizViewProps> = ({ content, onOpenSource, sourc
         <button
           type="button"
           onClick={() => {
+            reportedRef.current = false;
             setAnswers({});
             setPosition(0);
           }}
@@ -189,18 +232,22 @@ export const QuizView: React.FC<QuizViewProps> = ({ content, onOpenSource, sourc
         </button>
       </div>
 
-      <AnimatePresence>
-        {isComplete && (
-          <motion.p
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            className="mt-4 border border-[#dfe3ea] bg-[#f6f8fa] px-3 py-2 text-[12px] text-[#16181d] dark:border-[#282c33] dark:bg-[#1e2128] dark:text-[#dce0e5]"
-          >
-            Quiz complete — {score} of {total} correct.
-          </motion.p>
-        )}
-      </AnimatePresence>
+      {isComplete && (
+        <StudyResults
+          attempt={attempt}
+          scoreNoun="correct"
+          review={review}
+          onRetry={() => {
+            reportedRef.current = false;
+            setAnswers({});
+            setPosition(0);
+          }}
+          onRequestReview={() => onRequestReview?.()}
+          onPractise={onPractise}
+          practiseLabel="Make a quiz on these topics"
+          isPractising={isPractising}
+        />
+      )}
     </div>
   );
 };

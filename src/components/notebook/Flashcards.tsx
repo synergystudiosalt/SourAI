@@ -1,12 +1,14 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { ChevronLeft, ChevronRight, RotateCcw, Shuffle, Check, X } from 'lucide-react';
 
+import type { StudyAttempt } from '../../../functions/shared/studyAttempt';
 import {
   readFlashcards,
   shuffle,
   type Flashcard,
 } from '../../features/notebook/studyContent';
+import { StudyResults, type StudyReview } from './StudyResults';
 
 /**
  * A flashcard deck you work through one card at a time.
@@ -20,6 +22,12 @@ export interface FlashcardsProps {
   content: string;
   onOpenSource?: (index: number) => void;
   sourceLabel?: (index: number) => string | undefined;
+  /** Fired once per attempt, when the last card has been marked. */
+  onComplete?: (attempt: StudyAttempt) => void;
+  review?: StudyReview;
+  onRequestReview?: () => void;
+  onPractise?: (focus: string) => void;
+  isPractising?: boolean;
 }
 
 type Verdict = 'known' | 'unsure';
@@ -28,6 +36,11 @@ export const Flashcards: React.FC<FlashcardsProps> = ({
   content,
   onOpenSource,
   sourceLabel,
+  onComplete,
+  review,
+  onRequestReview,
+  onPractise,
+  isPractising,
 }) => {
   const deck = useMemo(() => readFlashcards(content), [content]);
   const [order, setOrder] = useState<Flashcard[]>(() => deck.cards);
@@ -36,11 +49,36 @@ export const Flashcards: React.FC<FlashcardsProps> = ({
   const [verdicts, setVerdicts] = useState<Record<number, Verdict>>({});
   // Direction drives the slide, so going back does not animate forwards.
   const [direction, setDirection] = useState(1);
+  const reportedRef = useRef(false);
 
   const total = order.length;
   const card = order[position];
   const known = Object.values(verdicts).filter((verdict) => verdict === 'known').length;
   const reviewed = Object.keys(verdicts).length;
+  const isComplete = total > 0 && reviewed === total;
+
+  const attempt: StudyAttempt = useMemo(
+    () => ({
+      kind: 'flashcards',
+      total,
+      score: known,
+      items: order.map((entry, index) => ({
+        prompt: entry.front,
+        answer: entry.back,
+        correct: verdicts[index] === 'known',
+        source: entry.source,
+      })),
+    }),
+    [order, verdicts, total, known]
+  );
+
+  // Reported once per pass. Without the guard every re-render of a finished
+  // deck would ask for another review.
+  useEffect(() => {
+    if (!isComplete || reportedRef.current) return;
+    reportedRef.current = true;
+    onComplete?.(attempt);
+  }, [isComplete, attempt, onComplete]);
 
   if (total === 0) {
     return (
@@ -64,6 +102,7 @@ export const Flashcards: React.FC<FlashcardsProps> = ({
   };
 
   const restart = (reshuffle: boolean) => {
+    reportedRef.current = false;
     setOrder(reshuffle ? shuffle(deck.cards) : deck.cards);
     setVerdicts({});
     setPosition(0);
@@ -217,18 +256,18 @@ export const Flashcards: React.FC<FlashcardsProps> = ({
         </button>
       </div>
 
-      <AnimatePresence>
-        {reviewed === total && (
-          <motion.p
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            className="mt-4 border border-[#dfe3ea] bg-[#f6f8fa] px-3 py-2 text-[12px] text-[#16181d] dark:border-[#282c33] dark:bg-[#1e2128] dark:text-[#dce0e5]"
-          >
-            Deck complete — {known} of {total} marked known.
-          </motion.p>
-        )}
-      </AnimatePresence>
+      {isComplete && (
+        <StudyResults
+          attempt={attempt}
+          scoreNoun="marked known"
+          review={review}
+          onRetry={() => restart(false)}
+          onRequestReview={() => onRequestReview?.()}
+          onPractise={onPractise}
+          practiseLabel="Make a deck on these topics"
+          isPractising={isPractising}
+        />
+      )}
     </div>
   );
 };

@@ -4,6 +4,7 @@ import {
   buildOverviewPrompt,
   buildSourceSummaryPrompt,
   buildStudioPrompt,
+  buildStudyReviewPrompt,
   isStudioKind,
   isStructuredStudioKind,
   packSources,
@@ -12,6 +13,7 @@ import {
   type NotebookSourcePayload,
 } from '../shared/notebookPrompts';
 import { normalizeStudioOptions } from '../shared/studioOptions';
+import { normalizeStudyAttempt, renderStudyAttempt } from '../shared/studyAttempt';
 import { normalizeFlashcards, normalizeQuiz } from '../shared/studyContent';
 import { fetchWebSource, WebSourceError } from '../shared/webSource';
 import { splitThinkingAndText } from '../shared/responseFormatting';
@@ -26,6 +28,7 @@ interface NotebookRequestBody {
   image?: string;
   page?: number;
   options?: unknown;
+  attempt?: unknown;
 }
 
 /** Ceiling on a rendered page image, as base64 characters. */
@@ -182,6 +185,41 @@ export const onRequest: PagesFunction = async (context) => {
       const transcript = splitThinkingAndText(raw).text.trim();
       const empty = !transcript || /^\[no readable text\]$/i.test(transcript);
       return json({ text: empty ? '' : transcript, empty });
+    }
+
+    if (action === 'study_review') {
+      const attempt = normalizeStudyAttempt(body.kind, body.attempt);
+      if (!attempt) return json({ error: 'A completed attempt is required.' }, 400);
+      const packed = packSources(body.sources ?? []);
+      if (packed.length === 0) return json({ error: 'At least one source is required.' }, 400);
+
+      const reply = await runNotebookModel(
+        env,
+        body.model,
+        buildStudyReviewPrompt(attempt.kind, packed),
+        [{ role: 'user', content: `Review this attempt.\n\n${renderStudyAttempt(attempt)}` }]
+      );
+      const parsed = parseJsonReply<{ summary?: unknown; topics?: unknown; focus?: unknown }>(reply);
+      const topics = Array.isArray(parsed?.topics)
+        ? parsed!.topics
+            .filter((topic): topic is string => typeof topic === 'string' && !!topic.trim())
+            .slice(0, 5)
+        : [];
+      return json({
+        summary:
+          typeof parsed?.summary === 'string' && parsed.summary.trim()
+            ? parsed.summary.trim()
+            : reply,
+        topics,
+        // The follow-up generation needs one line it can drop into a focus box;
+        // falling back to the topics keeps that working when the model omits it.
+        focus:
+          typeof parsed?.focus === 'string' && parsed.focus.trim()
+            ? parsed.focus.trim().slice(0, 400)
+            : topics.join(', '),
+        score: attempt.score,
+        total: attempt.total,
+      });
     }
 
     if (action === 'source_summary') {
