@@ -53,7 +53,7 @@ export const AgentMessage: React.FC<AgentMessageProps> = ({
       {(message.thinking || message.isReadingFiles) && (
         <div role={message.isReadingFiles ? 'status' : undefined} aria-live={message.isReadingFiles ? 'polite' : undefined}>
           <AgentContent
-          text={`<thinking>${message.thinking || message.thinkingLabel || 'Thinking'}</thinking>`}
+          text={`<${message.thinkingTag || 'thinking'}>${message.thinking || message.thinkingLabel || 'Thinking'}</${message.thinkingTag || 'thinking'}>`}
           messageId={`${message.id}-provider-thinking`}
           openTags={openTags}
           onToggleTag={onToggleTag}

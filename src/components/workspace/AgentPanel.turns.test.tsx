@@ -98,6 +98,70 @@ describe('AgentPanel completed-turn parity', () => {
     vi.useRealTimers();
   });
 
+  it('shows the active retry gradient and retries a provider failure', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: { message: 'The agent failed to respond.' } }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      )
+      .mockResolvedValueOnce(jsonTurn('Recovered after retry.'));
+
+    renderPanel();
+    sendPrompt();
+
+    const retryLabel = await screen.findByText(/No response from the model\. Retrying \(1\/4\)/i);
+    expect(retryLabel).toHaveClass('agent-active-gradient');
+
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(await screen.findByText('Recovered after retry.')).toBeInTheDocument();
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    vi.useRealTimers();
+  });
+
+  it('animates the fallback XML status and sends the next request to another model', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const unavailable = () =>
+      new Response(JSON.stringify({ error: { message: 'The agent failed to respond.' } }), {
+        status: 503,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    let resolveFallback!: (response: Response) => void;
+    const fallbackResponse = new Promise<Response>((resolve) => {
+      resolveFallback = resolve;
+    });
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(unavailable())
+      .mockResolvedValueOnce(unavailable())
+      .mockResolvedValueOnce(unavailable())
+      .mockResolvedValueOnce(unavailable())
+      .mockResolvedValueOnce(unavailable())
+      .mockReturnValueOnce(fallbackResponse);
+
+    renderPanel();
+    sendPrompt();
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(5));
+    const fallbackLabel = await screen.findByText('Using Fallback Model');
+    expect(fallbackLabel).toHaveClass('agent-active-gradient');
+
+    await vi.advanceTimersByTimeAsync(15_000);
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(6));
+
+    const models = vi.mocked(fetch).mock.calls.map(
+      ([, init]) => JSON.parse(String((init as RequestInit).body)).model
+    );
+    expect(models.slice(0, 5).every((model) => model === models[0])).toBe(true);
+    expect(models[5]).not.toBe(models[0]);
+
+    resolveFallback(jsonTurn('Recovered with the fallback model.'));
+    expect(await screen.findByText('Recovered with the fallback model.')).toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
   it('surfaces a first-turn SSE processing failure instead of discarding the turn', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(streamedTurn('@@glob: ['));
 

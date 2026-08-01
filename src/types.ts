@@ -123,6 +123,8 @@ export interface AgentChatMessage {
   thinking?: string;
   /** Short, human-friendly label describing what the reasoning above was doing. */
   thinkingLabel?: string;
+  /** XML-style status tag used while a non-thinking agent transition is active. */
+  thinkingTag?: 'thinking' | 'using_fallback_model';
   /** Tool calls (readfile / findall) the agent made before its final answer. */
   toolCalls?: AgentToolCall[];
   /** True while the client is resolving tool calls and waiting for the second LLM turn. */

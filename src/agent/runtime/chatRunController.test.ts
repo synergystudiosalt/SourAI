@@ -10,7 +10,6 @@ import {
   MIN_RETRY_GAP_MS,
   RETRIES_EXHAUSTED,
   RETRY_ATTEMPT_NOTICE,
-  RETRY_TPM_BUDGET,
   retryGapMs,
   lastTurnNotice,
   NO_PROGRESS_RESPONSE,
@@ -250,16 +249,10 @@ describe('auto retry', () => {
     expect(controller.finalText('', 4, false)).toBe('Changes are ready for review.');
   });
 
-  // A flat 30s gap bills the whole request again inside the minute: a Standard
-  // request would reach ~12,900 tokens/min against an 8,000 limit and provoke
-  // the very rate limit the retry is recovering from.
-  it('paces resends against the token budget, with a floor', () => {
+  it('paces every resend at a fixed 15-second interval', () => {
     expect(retryGapMs(100)).toBe(MIN_RETRY_GAP_MS);
-    expect(retryGapMs(6439)).toBeGreaterThan(MIN_RETRY_GAP_MS);
-    expect(retryGapMs(6439)).toBeLessThanOrEqual(60_000);
-    // Never bills more than the budget per minute.
-    const gap = retryGapMs(9339);
-    expect((9339 / gap) * 60_000).toBeLessThanOrEqual(RETRY_TPM_BUDGET + 1);
+    expect(retryGapMs(6439)).toBe(15_000);
+    expect(retryGapMs(9339)).toBe(15_000);
   });
 
   it('counts up for the progress label', () => {

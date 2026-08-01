@@ -74,23 +74,11 @@ export const MAX_DEAD_TURNS = 2;
  */
 export const MAX_AUTO_RETRIES = 4;
 
-/** Floor between resends. */
-export const MIN_RETRY_GAP_MS = 30_000;
-/** Tokens per minute the retry pacing must stay under. */
-export const RETRY_TPM_BUDGET = 8000;
+/** Fixed spacing between resends so recovery remains visibly responsive. */
+export const MIN_RETRY_GAP_MS = 15_000;
 
-/**
- * Spacing between resends, derived from request size.
- *
- * A flat gap ignores that a resend costs the whole request again. At 30s a
- * Standard request bills ~12,900 tokens per minute against an 8,000 limit, so
- * the retry would itself provoke the rate limit it is recovering from. Pacing
- * to the budget keeps the resends inside it; the floor keeps small requests
- * from hammering.
- */
-export function retryGapMs(requestTokens: number): number {
-  const paced = Math.ceil((requestTokens / RETRY_TPM_BUDGET) * 60_000);
-  return Math.max(MIN_RETRY_GAP_MS, paced);
+export function retryGapMs(_requestTokens: number): number {
+  return MIN_RETRY_GAP_MS;
 }
 
 export const RETRY_ATTEMPT_NOTICE = (attempt: number, total: number): string =>
@@ -103,7 +91,7 @@ export const RETRIES_EXHAUSTED = (total: number): string =>
  * inline, the same way reasoning and tool sections appear.
  */
 export const FALLBACK_MODEL_NOTICE = (from: string, to: string): string =>
-  `<using_fallback_model>${from} did not respond after ${MAX_AUTO_RETRIES} attempts. Continuing with ${to}.</using_fallback_model>`;
+  `<using_fallback_model>${from} did not respond after ${MAX_AUTO_RETRIES} retries. Continuing with ${to}.</using_fallback_model>`;
 
 /**
  * Owns progress and terminal-state policy for the chat agent. Provider output

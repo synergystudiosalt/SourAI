@@ -19,7 +19,7 @@ import {
 import { customApiManager, type CustomApiConfig } from '../../utils/customApiManager';
 import { VoiceRecognizer } from '../../utils/voiceRecognition';
 import { apiUrl } from '../../lib/api';
-import { isAbortError, normalizeError, type SourError } from '../../contracts/errors';
+import { isAbortError, isSourError, normalizeError, type SourError } from '../../contracts/errors';
 import Logo from '../Logo';
 import PixelBowlIcon from '../PixelBowlIcon';
 import { CustomApiModal } from '../CustomApiModal';
@@ -36,6 +36,7 @@ import {
   FALLBACK_MODEL_NOTICE,
   lastTurnNotice,
   MAX_AUTO_RETRIES,
+  MIN_RETRY_GAP_MS,
   RETRY_ATTEMPT_NOTICE,
   retryGapMs,
 } from '../../agent/runtime/chatRunController';
@@ -1035,6 +1036,14 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       let turnCount = 0;
       let hasMoreTools = true;
       const runController = new ChatRunController();
+      const fetchAgent = async (init: RequestInit): Promise<Response> => {
+        try {
+          return await fetch(apiUrl('/api/agent'), init);
+        } catch (error: unknown) {
+          if (isAbortError(error)) throw error;
+          throw normalizeAgentProviderError(error);
+        }
+      };
       const appendThinking = (value: string | undefined) => {
         const next = value?.trim();
         if (!next || accumulatedThinking.includes(next)) return;
@@ -1053,6 +1062,26 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       let streamThinking = '';
       const composeThinking = () =>
         [accumulatedThinking, streamThinking].filter(Boolean).join('\n\n');
+      const activateFallbackModel = () => {
+        const previous = activeModel;
+        activeModel = pickFallbackModel(previous);
+        const fromLabel = MODEL_ROUTES[previous]?.label ?? previous;
+        const toLabel = MODEL_ROUTES[activeModel]?.label ?? activeModel;
+        fallbackNotice = FALLBACK_MODEL_NOTICE(fromLabel, toLabel);
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.id === msgId
+              ? {
+                  ...message,
+                  content: '',
+                  thinking: '',
+                  thinkingLabel: `${fromLabel} did not respond. Continuing with ${toLabel}.`,
+                  thinkingTag: 'using_fallback_model',
+                }
+              : message
+          )
+        );
+      };
 
       /**
        * Applies one completed provider turn.
@@ -1324,12 +1353,9 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
               maxAgentTurns
             );
             if (switchModel) {
-              const previous = activeModel;
-              activeModel = pickFallbackModel(previous);
-              fallbackNotice = FALLBACK_MODEL_NOTICE(
-                MODEL_ROUTES[previous]?.label ?? previous,
-                MODEL_ROUTES[activeModel]?.label ?? activeModel
-              );
+              activateFallbackModel();
+              await waitUnlessAborted(MIN_RETRY_GAP_MS, controller.signal);
+              if (controller.signal.aborted) return;
               finalDisplayText = '';
               hasMoreTools = true;
               turnWasProductive = true;
@@ -1363,109 +1389,148 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         turnCount++;
         hasMoreTools = false;
 
-        // Use streaming for the first turn, non-streaming for tool-result turns
-        if (turnCount === 1) {
-          const res = await fetch(apiUrl('/api/agent'), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              ...basePayload,
-              messages: conversationHistory,
-              attachments: agentAttachments,
-              stream: true,
-            }),
-            signal: controller.signal,
-          });
+        try {
+          // Use streaming for the first turn, non-streaming for tool-result turns
+          if (turnCount === 1) {
+            const res = await fetchAgent({
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                ...basePayload,
+                messages: conversationHistory,
+                attachments: agentAttachments,
+                stream: true,
+              }),
+              signal: controller.signal,
+            });
 
-          if (!res.ok) {
-            const errData = await res.json().catch(() => ({}));
-            throw normalizeAgentProviderError(errData?.error, 'The agent failed to respond.');
-          }
+            if (!res.ok) {
+              const errData = await res.json().catch(() => ({}));
+              throw normalizeAgentProviderError(errData?.error, 'The agent failed to respond.');
+            }
 
-          // Read SSE stream
-          const reader = res.body?.getReader();
-          const decoder = new TextDecoder();
-          let streamBuffer = '';
-          let streamText = '';
+            // Read SSE stream
+            const reader = res.body?.getReader();
+            const decoder = new TextDecoder();
+            let streamBuffer = '';
+            let streamText = '';
 
-          if (reader) {
-            let sawDoneEvent = false;
-            let transportClosed = false;
-            while (!transportClosed) {
-              const { done, value } = await reader.read();
-              let lines: string[];
-              if (done) {
-                transportClosed = true;
-                // The transport can close before the terminal event arrives.
-                // Everything streamed so far was then dropped on the floor —
-                // no answer, no file ops, the whole turn lost even though the
-                // model had already written the files. Replay what arrived as
-                // the final event so it parses exactly as a normal one would,
-                // producing real ops rather than raw text in the transcript.
-                lines =
-                  sawDoneEvent || !streamText.trim()
-                    ? []
-                    : [`data: ${JSON.stringify({ done: true, text: streamText })}`];
-              } else {
-                streamBuffer += decoder.decode(value, { stream: true });
-                lines = streamBuffer.split('\n');
-                streamBuffer = lines.pop() || '';
-              }
-              for (const line of lines) {
-                const trimmed = line.trim();
-                if (!trimmed || !trimmed.startsWith('data: ')) continue;
-                const event = parseAgentStreamEvent(trimmed.slice(6));
-                if (!event) continue;
-                if (event.token) {
-                  streamText += event.token;
-                  streamThinking = splitThinkingAndText(streamText).thinking?.trim() || '';
-                  setMessages((prev) =>
-                    prev.map((m) =>
-                      m.id === msgId
-                        ? { ...m, content: '', thinking: composeThinking() }
-                        : m
-                    )
-                  );
+            if (reader) {
+              let sawDoneEvent = false;
+              let transportClosed = false;
+              while (!transportClosed) {
+                const { done, value } = await reader.read();
+                let lines: string[];
+                if (done) {
+                  transportClosed = true;
+                  // The transport can close before the terminal event arrives.
+                  // Everything streamed so far was then dropped on the floor —
+                  // no answer, no file ops, the whole turn lost even though the
+                  // model had already written the files. Replay what arrived as
+                  // the final event so it parses exactly as a normal one would,
+                  // producing real ops rather than raw text in the transcript.
+                  lines =
+                    sawDoneEvent || !streamText.trim()
+                      ? []
+                      : [`data: ${JSON.stringify({ done: true, text: streamText })}`];
+                } else {
+                  streamBuffer += decoder.decode(value, { stream: true });
+                  lines = streamBuffer.split('\n');
+                  streamBuffer = lines.pop() || '';
                 }
-                if (event.done) {
-                  sawDoneEvent = true;
-                  const responseText = event.text || streamText;
-                  // The turn is finished: fold its thinking into the record
-                  // once, and release the live slot so the next turn starts
-                  // from empty.
-                  streamThinking = '';
-                  await consumeCompletedTurn(
-                    responseText,
-                    event.thinking,
-                    event.thinkingLabel
-                  );
+                for (const line of lines) {
+                  const trimmed = line.trim();
+                  if (!trimmed || !trimmed.startsWith('data: ')) continue;
+                  const event = parseAgentStreamEvent(trimmed.slice(6));
+                  if (!event) continue;
+                  if (event.token) {
+                    streamText += event.token;
+                    streamThinking = splitThinkingAndText(streamText).thinking?.trim() || '';
+                    setMessages((prev) =>
+                      prev.map((m) =>
+                        m.id === msgId
+                          ? { ...m, content: '', thinking: composeThinking() }
+                          : m
+                      )
+                    );
+                  }
+                  if (event.done) {
+                    sawDoneEvent = true;
+                    const responseText = event.text || streamText;
+                    // The turn is finished: fold its thinking into the record
+                    // once, and release the live slot so the next turn starts
+                    // from empty.
+                    streamThinking = '';
+                    await consumeCompletedTurn(
+                      responseText,
+                      event.thinking,
+                      event.thinkingLabel
+                    );
+                  }
                 }
               }
             }
+          } else {
+            // Non-streaming for tool-result turns (faster)
+            const res = await fetchAgent({
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                ...basePayload,
+                messages: conversationHistory,
+                attachments: agentAttachments,
+                stream: false,
+              }),
+              signal: controller.signal,
+            });
+
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw normalizeAgentProviderError(data?.error, 'The agent failed to respond.');
+
+            const responseText = data.text || '';
+            await consumeCompletedTurn(
+              responseText,
+              data.thinking,
+              data.thinkingLabel
+            );
           }
-        } else {
-          // Non-streaming for tool-result turns (faster)
-          const res = await fetch(apiUrl('/api/agent'), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              ...basePayload,
-              messages: conversationHistory,
-              attachments: agentAttachments,
-              stream: false,
-            }),
-            signal: controller.signal,
-          });
+        } catch (err: unknown) {
+          if (isAbortError(err)) throw err;
+          const normalized = normalizeAgentProviderError(err);
+          const isRetryableProviderError = isSourError(err) && normalized.retryable;
+          const attempt = isRetryableProviderError
+            ? runController.consumeAutoRetry('', 0, 0, turnCount, maxAgentTurns)
+            : null;
+          if (attempt) {
+            const waitMs = retryGapMs(
+              estimateTokens(conversationHistory.map((message) => message.content).join(''))
+            );
+            setMessages((prev) =>
+              prev.map((message) =>
+                message.id === msgId
+                  ? {
+                      ...message,
+                      content: '',
+                      thinking: composeThinking(),
+                      thinkingLabel: RETRY_ATTEMPT_NOTICE(attempt, MAX_AUTO_RETRIES),
+                      thinkingTag: 'thinking',
+                    }
+                  : message
+              )
+            );
+            await waitUnlessAborted(waitMs, controller.signal);
+            if (controller.signal.aborted) return;
+            hasMoreTools = true;
+            continue;
+          }
 
-          const data = await res.json().catch(() => ({}));
-          if (!res.ok) throw normalizeAgentProviderError(data?.error, 'The agent failed to respond.');
-
-          const responseText = data.text || '';
-          await consumeCompletedTurn(
-            responseText,
-            data.thinking,
-            data.thinkingLabel
-          );
+          const switchModel = isRetryableProviderError
+            && runController.consumeModelFallback('', 0, turnCount, maxAgentTurns);
+          if (!switchModel) throw normalized;
+          activateFallbackModel();
+          await waitUnlessAborted(MIN_RETRY_GAP_MS, controller.signal);
+          if (controller.signal.aborted) return;
+          hasMoreTools = true;
         }
       }
 
@@ -1513,6 +1578,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                 approvalStatus: enrichedOps.length > 0 ? 'pending' : undefined,
                 thinking: composeThinking(),
                 thinkingLabel: accumulatedThinkingLabel,
+                thinkingTag: undefined,
                 toolCalls: allToolCalls,
                 isReadingFiles: false,
               }
