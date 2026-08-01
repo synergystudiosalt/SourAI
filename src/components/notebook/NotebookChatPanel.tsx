@@ -268,7 +268,7 @@ export const NotebookChatPanel: React.FC<NotebookChatPanelProps> = ({
                           text={message.content}
                           resolver={citationResolver(message, notebook, onOpenSource)}
                         />
-                        <div className="mt-2 flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100">
+                        <div className="mt-2 flex items-center gap-2">
                           <button
                             type="button"
                             onClick={() => onSaveToNote(message)}
