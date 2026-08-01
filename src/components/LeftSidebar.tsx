@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
-import { PanelLeft, Plus, MessageSquare, Code, Search, Sun, Moon, X, Trash2 } from 'lucide-react';
+import { PanelLeft, Plus, MessageSquare, Code, Search, Sun, Moon, X, Trash2, NotebookPen } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Conversation } from '../types';
+import type { Notebook } from '../features/notebook/types';
 import Logo from './Logo';
 import { MESSAGE_QUOTA } from '../utils/constants';
+
+export type WorkspaceView = 'chat' | 'code' | 'notebook';
 
 interface LeftSidebarProps {
   onNewChat: () => void;
@@ -15,8 +18,13 @@ interface LeftSidebarProps {
   messageUnitsUsed: number;
   isDarkMode: boolean;
   onToggleTheme: () => void;
-  activeView: 'chat' | 'code';
-  onViewChange: (view: 'chat' | 'code') => void;
+  activeView: WorkspaceView;
+  onViewChange: (view: WorkspaceView) => void;
+  notebooks: Notebook[];
+  activeNotebookId: string | null;
+  onSelectNotebook: (id: string) => void;
+  onNewNotebook: () => void;
+  onDeleteNotebook: (id: string) => void;
 }
 
 export const LeftSidebar: React.FC<LeftSidebarProps> = ({
@@ -31,12 +39,20 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   onToggleTheme,
   activeView,
   onViewChange,
+  notebooks,
+  activeNotebookId,
+  onSelectNotebook,
+  onNewNotebook,
+  onDeleteNotebook,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
   const filteredConversations = conversations.filter(c =>
     c.title.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+  const filteredNotebooks = notebooks.filter(n =>
+    n.title.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
@@ -80,6 +96,20 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
             }`}
           >
             <MessageSquare className="w-[17px] h-[17px]" />
+          </button>
+
+          {/* Notebook Icon */}
+          <button
+            onClick={() => {
+              onViewChange('notebook');
+              setIsExpanded(true);
+            }}
+            title="Notebook"
+            className={`p-1.5 rounded-lg cursor-pointer interactable-btn transition-colors ${
+              activeView === 'notebook' ? 'bg-[#e3e7ee] dark:bg-[#282c33] text-[#16181d] dark:text-[#dce0e5]' : 'text-[#4a5259] dark:text-[#9a9da2] hover:bg-[#f2f4f7] dark:hover:bg-[#1e2128]'
+            }`}
+          >
+            <NotebookPen className="w-[17px] h-[17px]" />
           </button>
 
           {/* AI IDE Icon */}
@@ -164,14 +194,32 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                 </div>
               )}
 
+              {/* New Notebook Button */}
+              {activeView === 'notebook' && (
+                <div className="p-2 md:p-2.5">
+                  <button
+                    onClick={() => {
+                      onNewNotebook();
+                      setIsExpanded(false);
+                    }}
+                    className="w-full flex items-center justify-between gap-2 bg-[#e4e8f0] dark:bg-[#1e2128] hover:bg-[#d8dde8] dark:hover:bg-[#2e2f30] text-[#16181d] dark:text-[#dce0e5] px-2.5 py-1.5 rounded-lg text-xs md:text-xs font-medium cursor-pointer interactable-btn transition-colors"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <Plus className="w-3.5 h-3.5 text-[#484b51] dark:text-[#acadaf]" />
+                      New notebook
+                    </span>
+                  </button>
+                </div>
+              )}
+
               {/* Search Box */}
-              {activeView === 'chat' && (
+              {(activeView === 'chat' || activeView === 'notebook') && (
                 <div className="px-2 md:px-2.5 pb-2">
                   <div className="relative flex items-center">
                     <Search className="w-3 h-3 text-[#78828e] dark:text-[#888] absolute left-2.5" />
                     <input
                       type="text"
-                      placeholder="Search chats..."
+                      placeholder={activeView === 'notebook' ? 'Search notebooks...' : 'Search chats...'}
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="w-full bg-[#eaedf2] dark:bg-[#212122] border border-[#d7dbe4] dark:border-[#333] rounded-md pl-7 pr-2.5 py-1 text-xs md:text-xs text-[#16181d] dark:text-[#dce0e5] placeholder-[#78828e] dark:placeholder-[#888] outline-none focus:border-[#aaaeb6] transition-colors"
@@ -212,6 +260,52 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                           }}
                           className="opacity-0 group-hover:opacity-100 p-0.5 text-[#78828e] dark:text-[#888] hover:text-red-600 transition-opacity cursor-pointer"
                           title="Delete chat"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+
+              {/* Notebooks List */}
+              {activeView === 'notebook' && (
+                <div className="flex-1 overflow-y-auto px-2 py-1 space-y-0.5">
+                  <div className="px-2 py-1 text-[10px] md:text-[10px] font-semibold text-[#78828e] dark:text-[#888] tracking-wider uppercase">
+                    Notebooks
+                  </div>
+                  {filteredNotebooks.length === 0 ? (
+                    <div className="p-3 text-center text-[11px] md:text-[11px] text-[#78828e] dark:text-[#888] italic">
+                      No notebooks yet
+                    </div>
+                  ) : (
+                    filteredNotebooks.map((notebook) => (
+                      <div
+                        key={notebook.id}
+                        className={`group flex items-center justify-between px-2 py-1.5 rounded-md text-xs md:text-xs cursor-pointer transition-colors ${
+                          notebook.id === activeNotebookId
+                            ? 'bg-[#dee2ea] dark:bg-[#282c33] font-medium text-[#16181d] dark:text-[#dce0e5]'
+                            : 'text-[#484b51] dark:text-[#acadaf] hover:bg-[#eaedf2] dark:hover:bg-[#212122] hover:text-[#16181d] dark:hover:text-[#dce0e5]'
+                        }`}
+                        onClick={() => {
+                          onSelectNotebook(notebook.id);
+                          setIsExpanded(false);
+                        }}
+                      >
+                        <span className="min-w-0 pr-1">
+                          <span className="block truncate text-[11px] md:text-[11px]">{notebook.title}</span>
+                          <span className="block truncate text-[9.5px] text-[#78828e] dark:text-[#888]">
+                            {notebook.sources.length} source{notebook.sources.length === 1 ? '' : 's'}
+                          </span>
+                        </span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDeleteNotebook(notebook.id);
+                          }}
+                          className="opacity-0 group-hover:opacity-100 p-0.5 text-[#78828e] dark:text-[#888] hover:text-red-600 transition-opacity cursor-pointer"
+                          title="Delete notebook"
                         >
                           <Trash2 className="w-3 h-3" />
                         </button>

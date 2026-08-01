@@ -1,0 +1,185 @@
+import React from 'react';
+import {
+  BookOpen,
+  ClipboardList,
+  HelpCircle,
+  CalendarClock,
+  Network,
+  Plus,
+  Loader2,
+  Trash2,
+  StickyNote,
+} from 'lucide-react';
+
+import {
+  studioArtifactTitle,
+  type StudioArtifact,
+  type StudioArtifactKind,
+} from '../../features/notebook/types';
+
+/**
+ * Studio: the generated-output column.
+ *
+ * NotebookLM's audio and video overviews are deliberately absent — this build
+ * generates written study material only.
+ */
+
+const GENERATORS: {
+  kind: Exclude<StudioArtifactKind, 'note'>;
+  label: string;
+  hint: string;
+  icon: React.ComponentType<{ className?: string }>;
+}[] = [
+  {
+    kind: 'study_guide',
+    label: 'Study guide',
+    hint: 'Questions, answers and a glossary',
+    icon: BookOpen,
+  },
+  {
+    kind: 'briefing',
+    label: 'Briefing doc',
+    hint: 'Themes, facts and open questions',
+    icon: ClipboardList,
+  },
+  { kind: 'faq', label: 'FAQ', hint: 'The questions your sources answer', icon: HelpCircle },
+  { kind: 'timeline', label: 'Timeline', hint: 'Events in order, with a cast list', icon: CalendarClock },
+  { kind: 'mindmap', label: 'Mind map', hint: 'An explorable map of the ideas', icon: Network },
+];
+
+const KIND_ICONS: Record<StudioArtifactKind, React.ComponentType<{ className?: string }>> = {
+  note: StickyNote,
+  study_guide: BookOpen,
+  briefing: ClipboardList,
+  faq: HelpCircle,
+  timeline: CalendarClock,
+  mindmap: Network,
+};
+
+export interface StudioPanelProps {
+  artifacts: StudioArtifact[];
+  activeArtifactId: string | null;
+  pendingKind: StudioArtifactKind | null;
+  canGenerate: boolean;
+  onGenerate: (kind: Exclude<StudioArtifactKind, 'note'>) => void;
+  onAddNote: () => void;
+  onOpenArtifact: (id: string) => void;
+  onRemoveArtifact: (id: string) => void;
+}
+
+export const StudioPanel: React.FC<StudioPanelProps> = ({
+  artifacts,
+  activeArtifactId,
+  pendingKind,
+  canGenerate,
+  onGenerate,
+  onAddNote,
+  onOpenArtifact,
+  onRemoveArtifact,
+}) => (
+  <section
+    aria-label="Studio"
+    className="zed-agent-panel z-grid z-grid-fine flex h-full w-full flex-col border-l border-[#dfe3ea] bg-[#fbfcfd] dark:border-[#282c33] dark:bg-[#17191d]"
+  >
+    <div className="zed-panel-bar flex h-9 shrink-0 items-center justify-between border-b border-[#dfe3ea] px-3 dark:border-[#282c33]">
+      <span className="text-[11px] font-medium uppercase tracking-wider text-[#78828e]">Studio</span>
+      <button
+        type="button"
+        onClick={onAddNote}
+        title="Add note"
+        className="flex items-center gap-1 border border-[#dfe3ea] px-1.5 py-0.5 text-[10.5px] text-[#4a5259] hover:border-[#4776d5] hover:text-[#4776d5] dark:border-[#282c33] dark:text-[#a9afbc] ws-toolbar-btn"
+      >
+        <Plus className="h-3 w-3" />
+        Note
+      </button>
+    </div>
+
+    <div className="min-h-0 flex-1 overflow-y-auto px-2.5 py-3 thin-scrollbar">
+      <p className="px-0.5 pb-2 text-[10.5px] font-medium uppercase tracking-wider text-[#78828e]">
+        Create
+      </p>
+      <div className="space-y-1">
+        {GENERATORS.map((generator) => {
+          const Icon = generator.icon;
+          const isPending = pendingKind === generator.kind;
+          return (
+            <button
+              key={generator.kind}
+              type="button"
+              onClick={() => onGenerate(generator.kind)}
+              disabled={!canGenerate || pendingKind !== null}
+              title={canGenerate ? generator.hint : 'Select at least one source first'}
+              className="ws-clickable flex w-full items-center gap-2.5 border border-[#dfe3ea] bg-[#f6f8fa] px-2.5 py-2 text-left disabled:cursor-not-allowed disabled:opacity-50 dark:border-[#282c33] dark:bg-[#1e2128]"
+            >
+              {isPending ? (
+                <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[#4776d5]" />
+              ) : (
+                <Icon className="h-4 w-4 shrink-0 text-[#4776d5]" />
+              )}
+              <span className="min-w-0">
+                <span className="block truncate text-[12px] text-[#16181d] dark:text-[#dce0e5]">
+                  {generator.label}
+                </span>
+                <span className="block truncate text-[10px] text-[#78828e]">{generator.hint}</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <p className="px-0.5 pb-2 pt-5 text-[10.5px] font-medium uppercase tracking-wider text-[#78828e]">
+        Saved
+      </p>
+      {artifacts.length === 0 ? (
+        <p className="border border-dashed border-[#c3cad6] px-2.5 py-4 text-center text-[11px] leading-relaxed text-[#78828e] dark:border-[#3b414d]">
+          Generated documents and saved notes land here.
+        </p>
+      ) : (
+        <ul className="space-y-1">
+          {artifacts.map((artifact) => {
+            const Icon = KIND_ICONS[artifact.kind] ?? StickyNote;
+            const isActive = artifact.id === activeArtifactId;
+            return (
+              <li key={artifact.id}>
+                <div
+                  className={`ws-file-item group flex items-center gap-2 px-1.5 py-1.5 ${
+                    isActive
+                      ? 'bg-[#e3e7ee] dark:bg-[#282c33]'
+                      : 'hover:bg-[#f2f4f7] dark:hover:bg-[#1e2128]'
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => onOpenArtifact(artifact.id)}
+                    className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                    title={artifact.title}
+                  >
+                    <Icon className="h-3.5 w-3.5 shrink-0 text-[#4776d5]" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[11.5px] text-[#16181d] dark:text-[#dce0e5]">
+                        {artifact.title}
+                      </span>
+                      <span className="block truncate font-code text-[9.5px] text-[#78828e]">
+                        {studioArtifactTitle(artifact.kind)} ·{' '}
+                        {new Date(artifact.createdAt).toLocaleDateString()}
+                      </span>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onRemoveArtifact(artifact.id)}
+                    aria-label={`Delete ${artifact.title}`}
+                    title="Delete"
+                    className="shrink-0 p-0.5 text-[#78828e] opacity-0 transition-opacity hover:text-[#c0392b] group-hover:opacity-100"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  </section>
+);

@@ -1,3 +1,4 @@
+import { reviveNotebook, type Notebook } from '../features/notebook/types';
 import type { AgentChatMessage, ChatMessage, Conversation } from '../types';
 import { openStorageDatabase, queryBound, queryOnly, type StorageDatabase } from './database';
 import { LegacyLocalStorageMigration } from './legacyMigration';
@@ -16,6 +17,7 @@ import { RECORD_SCHEMA_VERSION, STORE_NAMES } from './schema';
 import { sha256Hex } from './blobStore';
 
 const CHAT_PROJECT_ID = 'sourai:chat';
+const NOTEBOOK_SCOPE = 'notebook';
 const MAX_SEQUENCE = Number.MAX_SAFE_INTEGER;
 
 function jsonValue(value: unknown): JsonValue {
@@ -32,6 +34,10 @@ function chatThreadId(id: string): string {
 
 function agentThreadId(projectId: string): string {
   return `agent:${token(projectId)}`;
+}
+
+function notebookKey(notebookId: string): string {
+  return `notebook:${token(notebookId)}`;
 }
 
 function reviveChatMessage(value: unknown): ChatMessage | null {
@@ -171,6 +177,29 @@ export class ClientPersistence {
         await transaction.delete('threads', threadId);
       }
     );
+  }
+
+  /**
+   * Notebooks live in one settings record each.
+   *
+   * A notebook is a single document — sources, transcript and studio output are
+   * only ever read and written together — so the thread/message split the chat
+   * uses would buy nothing here but joins.
+   */
+  async loadNotebooks(): Promise<Notebook[]> {
+    const records = await this.settings.list(NOTEBOOK_SCOPE);
+    return records
+      .map((record) => reviveNotebook(record.value))
+      .filter((notebook): notebook is Notebook => notebook !== null)
+      .sort((left, right) => right.updatedAt - left.updatedAt);
+  }
+
+  async saveNotebook(notebook: Notebook): Promise<void> {
+    await this.settings.set(notebookKey(notebook.id), NOTEBOOK_SCOPE, jsonValue(notebook));
+  }
+
+  async deleteNotebook(notebookId: string): Promise<void> {
+    await this.settings.delete(notebookKey(notebookId));
   }
 
   async loadAgentMessages(projectId: string): Promise<AgentChatMessage[]> {

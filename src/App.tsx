@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { LeftSidebar } from './components/LeftSidebar';
+import { LeftSidebar, type WorkspaceView } from './components/LeftSidebar';
 import { TopBar } from './components/TopBar';
 import { GreetingHeader } from './components/GreetingHeader';
 import { MainPromptCard } from './components/MainPromptCard';
@@ -9,10 +9,22 @@ import { UpgradeModal } from './components/UpgradeModal';
 import { ChatStreamView } from './components/ChatStreamView';
 import { CodeWorkspace } from './components/CodeWorkspace';
 import { GlobalContextMenu } from './components/GlobalContextMenu';
+import { useNotebooks } from './features/notebook/useNotebooks';
 import { AIModel, ChatMessage, Conversation, AttachmentItem } from './types';
 import { MESSAGE_QUOTA } from './utils/constants';
 import { isAbortError, normalizeError, type SourError } from './contracts/errors';
 import { getClientPersistence, type ClientPersistence } from './storage/clientPersistence';
+
+/**
+ * The Notebook is a third workspace alongside chat and the IDE, and it pulls in
+ * the document parsers and Markdown chrome only it needs. Loading it lazily
+ * keeps that weight out of the initial bundle for sessions that never open it.
+ */
+const NotebookWorkspace = React.lazy(() =>
+  import('./components/notebook/NotebookWorkspace').then((module) => ({
+    default: module.NotebookWorkspace,
+  }))
+);
 
 export function normalizeChatProviderError(
   value: unknown,
@@ -246,7 +258,27 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [conversations, storageReady]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
-  const [activeView, setActiveView] = useState<'chat' | 'code'>('chat');
+  const [activeView, setActiveView] = useState<WorkspaceView>('chat');
+
+  const {
+    notebooks,
+    activeNotebookId,
+    isReady: notebooksReady,
+    selectNotebook,
+    createNewNotebook,
+    updateNotebook,
+    removeNotebook,
+  } = useNotebooks();
+  const activeNotebook = notebooks.find((notebook) => notebook.id === activeNotebookId) ?? null;
+
+  // Opening the Notebook lands on the most recent one, or on a fresh notebook
+  // for a first-time visitor — never on a blank pane. This waits for the stored
+  // notebooks to arrive, or a click during hydration would create a duplicate.
+  useEffect(() => {
+    if (activeView !== 'notebook' || !notebooksReady || activeNotebook) return;
+    if (notebooks.length > 0) selectNotebook(notebooks[0].id);
+    else createNewNotebook();
+  }, [activeView, notebooksReady, activeNotebook, notebooks, selectNotebook, createNewNotebook]);
 
   const activeConversation = conversations.find((c) => c.id === activeConversationId);
 
@@ -579,12 +611,23 @@ export default function App() {
         onToggleTheme={handleToggleTheme}
         activeView={activeView}
         onViewChange={(view) => setActiveView(view)}
+        notebooks={notebooks}
+        activeNotebookId={activeNotebookId}
+        onSelectNotebook={(id) => {
+          selectNotebook(id);
+          setActiveView('notebook');
+        }}
+        onNewNotebook={() => {
+          createNewNotebook();
+          setActiveView('notebook');
+        }}
+        onDeleteNotebook={removeNotebook}
       />
 
       {/* Main Container Area */}
       <div className="zed-shell z-grid flex-1 h-screen flex flex-col justify-between overflow-hidden relative bg-[#fbfcfd] dark:bg-[#121316] text-[#16181d] dark:text-[#dce0e5] transition-colors duration-[var(--z-motion)]">
         {/* Top Bar Navigation */}
-        {activeView !== 'code' && (
+        {activeView !== 'code' && activeView !== 'notebook' && (
           <TopBar />
         )}
 
@@ -600,6 +643,39 @@ export default function App() {
               className="flex-1 flex flex-col overflow-hidden"
             >
               <CodeWorkspace isDarkMode={isDarkMode} />
+            </motion.div>
+          ) : activeView === 'notebook' ? (
+            <motion.div
+              key="notebook-workspace"
+              initial={{ opacity: 0, filter: 'blur(10px)', scale: 0.99 }}
+              animate={{ opacity: 1, filter: 'blur(0px)', scale: 1 }}
+              exit={{ opacity: 0, filter: 'blur(10px)', scale: 0.99 }}
+              transition={{ duration: 0.25, ease: 'easeOut' }}
+              className="flex-1 flex flex-col overflow-hidden"
+            >
+              <React.Suspense
+                fallback={
+                  <div className="flex flex-1 items-center justify-center text-xs text-[#78828e]">
+                    Opening notebook…
+                  </div>
+                }
+              >
+                {activeNotebook ? (
+                  <NotebookWorkspace
+                    notebook={activeNotebook}
+                    onChange={(update) => updateNotebook(activeNotebook.id, update)}
+                    selectedModel={selectedModel}
+                    onSelectModel={setSelectedModel}
+                    messageUnitsUsed={messageUnitsUsed}
+                    onConsumeMessageUnit={addMessageUnits}
+                    onOpenUpgrade={() => setIsUpgradeOpen(true)}
+                  />
+                ) : (
+                  <div className="flex flex-1 items-center justify-center text-xs text-[#78828e]">
+                    Preparing your notebook…
+                  </div>
+                )}
+              </React.Suspense>
             </motion.div>
           ) : activeConversation ? (
             <motion.div
@@ -662,7 +738,7 @@ export default function App() {
         </AnimatePresence>
 
         {/* Bottom subtle attribution / disclaimer text */}
-        {activeView !== 'code' && !activeConversation && (
+        {activeView === 'chat' && !activeConversation && (
           <div className="py-1.5 text-center text-[10px] text-[#78828e] dark:text-[#666] select-none">
             sour.ai can make mistakes. Verify important info.
           </div>
