@@ -71,9 +71,11 @@ export class GroqVoiceRecorder {
       recorder.onstop = () => {
         void this.handleStop(mimeType);
       };
-      recorder.onerror = () => {
-        this.callbacks.onError('Recording failed');
+      recorder.onerror = (event) => {
+        console.warn('MediaRecorder error:', event);
+        this.callbacks.onError('Recording failed, using browser speech recognition');
         this.releaseStream();
+        this.startFallback();
       };
       recorder.start();
       this.callbacks.onStart?.();
