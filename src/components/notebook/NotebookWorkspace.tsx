@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence } from 'motion/react';
-import { FileText, MessageSquare, Sparkles } from 'lucide-react';
+import { FileText, MessageSquare, Wand2 } from 'lucide-react';
 
 import {
   askNotebook,
@@ -22,7 +22,11 @@ import {
 } from '../../features/notebook/types';
 import type { AIModel } from '../../types';
 import { MESSAGE_QUOTA } from '../../utils/constants';
-import { AddSourceDialog } from './AddSourceDialog';
+import { composePdfText } from '../../features/notebook/pdfText';
+import { formatRemaining, transcribePdfPages } from '../../features/notebook/pdfOcr';
+import { studioOptionSpec, type StudioOptions } from '../../../functions/shared/studioOptions';
+import { AddSourceDialog, type PendingTranscription } from './AddSourceDialog';
+import { StudioOptionsDialog } from './StudioOptionsDialog';
 import { ArtifactViewer } from './ArtifactViewer';
 import { NotebookChatPanel } from './NotebookChatPanel';
 import { SourceViewer } from './SourceViewer';
@@ -72,9 +76,15 @@ export const NotebookWorkspace: React.FC<NotebookWorkspaceProps> = ({
   const [isGenerating, setIsGenerating] = useState(false);
   const [isOverviewLoading, setIsOverviewLoading] = useState(false);
   const [pendingKind, setPendingKind] = useState<StudioArtifactKind | null>(null);
+  /** The kind waiting on its settings dialog, if any. */
+  const [configuringKind, setConfiguringKind] = useState<Exclude<StudioArtifactKind, 'note'> | null>(
+    null
+  );
   const [titleDraft, setTitleDraft] = useState(notebook.title);
   const askControllerRef = useRef<AbortController | null>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
+  /** Running page-transcription jobs, keyed by source id. */
+  const transcriptionRef = useRef(new Map<string, AbortController>());
 
   const selected = useMemo(() => pickSelected(notebook), [notebook]);
   const selectedKey = selected.map((source) => source.id).join('|');
@@ -93,13 +103,17 @@ export const NotebookWorkspace: React.FC<NotebookWorkspaceProps> = ({
 
   // A request in flight belongs to the notebook that started it; leaving the
   // notebook must not append its answer to a different transcript.
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    const jobs = transcriptionRef.current;
+    return () => {
       askControllerRef.current?.abort();
       askControllerRef.current = null;
-    },
-    [notebook.id]
-  );
+      // A transcription belongs to the notebook that started it, and its pdf.js
+      // handle must not outlive the view.
+      for (const controller of jobs.values()) controller.abort();
+      jobs.clear();
+    };
+  }, [notebook.id]);
 
   const patchSource = useCallback(
     (id: string, patch: Partial<NotebookSource>) => {
@@ -115,8 +129,67 @@ export const NotebookWorkspace: React.FC<NotebookWorkspaceProps> = ({
 
   // ── Sources ───────────────────────────────────────────────────────────────
 
+  /**
+   * Reads the pages of a scanned PDF that carry no text.
+   *
+   * The source is already in the notebook and usable; each transcribed page is
+   * merged in as it arrives, so a long document becomes progressively more
+   * answerable instead of appearing all at once at the end.
+   */
+  const runTranscription = useCallback(
+    async (job: PendingTranscription) => {
+      const controller = new AbortController();
+      transcriptionRef.current.set(job.sourceId, controller);
+      const pages = job.pages.map((page) => ({ ...page }));
+
+      try {
+        const summary = await transcribePdfPages({
+          handle: job.handle,
+          pages: job.pendingPages,
+          signal: controller.signal,
+          onPage: ({ page, text }) => {
+            const slot = pages.find((entry) => entry.page === page);
+            if (slot) slot.text = text;
+            patchSource(job.sourceId, { content: composePdfText(pages, job.truncated) });
+          },
+          onProgress: ({ completed, total, estimatedRemainingMs }) => {
+            patchSource(job.sourceId, {
+              transcription: {
+                state: 'running',
+                total,
+                completed,
+                remainingMs: estimatedRemainingMs,
+              },
+            });
+          },
+        });
+
+        patchSource(job.sourceId, {
+          transcription: {
+            state: summary.cancelled
+              ? 'cancelled'
+              : summary.transcribed === 0
+                ? 'failed'
+                : 'done',
+            total: job.pendingPages.length,
+            completed: summary.transcribed + summary.blank + summary.failed,
+          },
+        });
+      } catch (error) {
+        console.error('[sour.ai] Page transcription failed', error);
+        patchSource(job.sourceId, {
+          transcription: { state: 'failed', total: job.pendingPages.length, completed: 0 },
+        });
+      } finally {
+        transcriptionRef.current.delete(job.sourceId);
+        await job.handle.close();
+      }
+    },
+    [patchSource]
+  );
+
   const addSources = useCallback(
-    (added: NotebookSource[]) => {
+    (added: NotebookSource[], pending?: PendingTranscription[]) => {
       onChange((current) => ({
         ...current,
         title:
@@ -125,12 +198,18 @@ export const NotebookWorkspace: React.FC<NotebookWorkspaceProps> = ({
             : current.title,
         sources: [...current.sources, ...added],
       }));
+      for (const job of pending ?? []) void runTranscription(job);
     },
-    [onChange]
+    [onChange, runTranscription]
   );
+
+  const cancelTranscription = useCallback((id: string) => {
+    transcriptionRef.current.get(id)?.abort();
+  }, []);
 
   const removeSource = useCallback(
     (id: string) => {
+      transcriptionRef.current.get(id)?.abort();
       onChange((current) => ({
         ...current,
         sources: current.sources.filter((source) => source.id !== id),
@@ -288,12 +367,17 @@ export const NotebookWorkspace: React.FC<NotebookWorkspaceProps> = ({
   );
 
   const generate = useCallback(
-    async (kind: Exclude<StudioArtifactKind, 'note'>) => {
+    async (kind: Exclude<StudioArtifactKind, 'note'>, options: StudioOptions = {}) => {
       const sources = pickSelected(notebook);
       if (sources.length === 0 || pendingKind) return;
       setPendingKind(kind);
       try {
-        const reply = await generateStudioDocument({ kind, sources, model: selectedModel });
+        const reply = await generateStudioDocument({
+          kind,
+          sources,
+          model: selectedModel,
+          options,
+        });
         const artifact: StudioArtifact = {
           id: newId(),
           kind,
@@ -468,6 +552,8 @@ export const NotebookWorkspace: React.FC<NotebookWorkspaceProps> = ({
       }
       onOpenSource={openSource}
       onRemoveSource={removeSource}
+      onCancelTranscription={cancelTranscription}
+      formatRemaining={formatRemaining}
     />
   );
 
@@ -477,7 +563,12 @@ export const NotebookWorkspace: React.FC<NotebookWorkspaceProps> = ({
       activeArtifactId={view.kind === 'artifact' ? view.id : null}
       pendingKind={pendingKind}
       canGenerate={selected.length > 0}
-      onGenerate={(kind) => void generate(kind)}
+      onGenerate={(kind) => {
+        // Kinds with a settings spec ask first; the rest go straight to the
+        // model, because a dialog with nothing in it is pure friction.
+        if (studioOptionSpec(kind)) setConfiguringKind(kind);
+        else void generate(kind);
+      }}
       onAddNote={addNote}
       onOpenArtifact={(id) => {
         setView({ kind: 'artifact', id });
@@ -490,7 +581,7 @@ export const NotebookWorkspace: React.FC<NotebookWorkspaceProps> = ({
   const tabs: { id: MobileTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
     { id: 'sources', label: 'Sources', icon: FileText },
     { id: 'chat', label: 'Chat', icon: MessageSquare },
-    { id: 'studio', label: 'Studio', icon: Sparkles },
+    { id: 'studio', label: 'Studio', icon: Wand2 },
   ];
 
   return (
@@ -561,6 +652,16 @@ export const NotebookWorkspace: React.FC<NotebookWorkspaceProps> = ({
           {studioPanel}
         </div>
       </div>
+
+      <StudioOptionsDialog
+        kind={configuringKind}
+        onCancel={() => setConfiguringKind(null)}
+        onConfirm={(options) => {
+          const kind = configuringKind;
+          setConfiguringKind(null);
+          if (kind) void generate(kind, options);
+        }}
+      />
 
       <AddSourceDialog
         isOpen={isAddOpen}

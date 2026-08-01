@@ -6,6 +6,7 @@
  * safe to retry.
  */
 
+import type { StudioOptions } from '../../../functions/shared/studioOptions';
 import type { AIModel } from '../../types';
 import type { NotebookMessage, NotebookSource } from './types';
 
@@ -97,6 +98,8 @@ export function generateStudioDocument(options: {
   kind: string;
   sources: readonly NotebookSource[];
   model: AIModel;
+  /** Per-generation settings: how many, how hard, what to focus on. */
+  options?: StudioOptions;
   signal?: AbortSignal;
 }): Promise<GroundedReply> {
   return post<GroundedReply>(
@@ -104,6 +107,7 @@ export function generateStudioDocument(options: {
       action: 'studio',
       kind: options.kind,
       model: options.model,
+      options: options.options,
       sources: options.sources.map(toSourcePayload),
     },
     options.signal
@@ -160,4 +164,21 @@ export interface FetchedPage {
 
 export function fetchWebsiteSource(url: string, signal?: AbortSignal): Promise<FetchedPage> {
   return post<FetchedPage>({ action: 'fetch_url', url }, signal);
+}
+
+export interface TranscribedPage {
+  text: string;
+  empty: boolean;
+}
+
+/** Reads one rendered page of a scanned PDF back as text. */
+export function transcribePdfPage(options: {
+  image: string;
+  page: number;
+  signal?: AbortSignal;
+}): Promise<TranscribedPage> {
+  return post<TranscribedPage>(
+    { action: 'transcribe_page', image: options.image, page: options.page },
+    options.signal
+  );
 }

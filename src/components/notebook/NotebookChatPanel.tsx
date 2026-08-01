@@ -7,7 +7,6 @@ import {
   NotebookPen,
   RefreshCw,
   Square,
-  Sparkles,
   AlertCircle,
 } from 'lucide-react';
 
@@ -19,6 +18,7 @@ import type {
   NotebookOverview,
   NotebookSource,
 } from '../../features/notebook/types';
+import Logo from '../Logo';
 import { ModelSelectorPopover } from '../ModelSelectorPopover';
 import { NotebookMarkdown } from './NotebookMarkdown';
 
@@ -145,7 +145,7 @@ export const NotebookChatPanel: React.FC<NotebookChatPanelProps> = ({
               <div className="border border-[#dfe3ea] bg-[#f6f8fa] p-4 dark:border-[#282c33] dark:bg-[#17191d]">
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <span className="flex items-center gap-1.5 text-[10.5px] font-medium uppercase tracking-wider text-[#78828e]">
-                    <Sparkles className="h-3 w-3 text-[#4776d5]" />
+                    <Logo size={12} />
                     Notebook guide
                   </span>
                   <button

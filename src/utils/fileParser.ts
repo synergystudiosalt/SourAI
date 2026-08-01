@@ -457,11 +457,45 @@ let pdfjsPromise: Promise<PdfjsModule> | null = null;
 let mammothPromise: Promise<MammothModule> | null = null;
 
 /**
+ * pdf.js 6 renders pages through `Map.prototype.getOrInsertComputed`, a
+ * standards-track method that only shipped in browsers from 2025 onwards.
+ * Without it, page rendering throws `getOrInsertComputed is not a function`
+ * while text extraction keeps working — so a PDF appears to load and then
+ * silently produces no page image at all.
+ *
+ * The proposal semantics are three lines, so the fallback is provided rather
+ * than the feature being lost on any browser a year or two behind.
+ */
+function ensureMapGetOrInsert(): void {
+  const prototype = Map.prototype as unknown as Record<string, unknown>;
+  if (typeof prototype.getOrInsertComputed !== 'function') {
+    prototype.getOrInsertComputed = function getOrInsertComputed<K, V>(
+      this: Map<K, V>,
+      key: K,
+      callback: (key: K) => V
+    ): V {
+      if (this.has(key)) return this.get(key)!;
+      const value = callback(key);
+      this.set(key, value);
+      return value;
+    };
+  }
+  if (typeof prototype.getOrInsert !== 'function') {
+    prototype.getOrInsert = function getOrInsert<K, V>(this: Map<K, V>, key: K, value: V): V {
+      if (this.has(key)) return this.get(key)!;
+      this.set(key, value);
+      return value;
+    };
+  }
+}
+
+/**
  * Exported so other readers share this loader rather than wiring the worker
  * again. The worker URL is the security-sensitive part — it must stay
  * same-origin — and one caller getting it wrong would defeat the CSP.
  */
 export async function loadPdfjs(): Promise<PdfjsModule> {
+  ensureMapGetOrInsert();
   if (!pdfjsPromise) {
     pdfjsPromise = (async () => {
       const [pdfjsLib, workerUrl] = await Promise.all([

@@ -21,8 +21,6 @@ import {
   ThumbsDown,
   RotateCw,
 
-  Sparkles,
-
   Download,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';

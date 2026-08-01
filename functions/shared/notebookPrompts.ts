@@ -8,6 +8,8 @@
  * cannot drift apart on how sources are numbered.
  */
 
+import { renderStudioOptions, type StudioOptions } from './studioOptions';
+
 export interface NotebookSourcePayload {
   readonly id?: string;
   readonly title?: string;
@@ -212,12 +214,17 @@ const STUDIO_INSTRUCTIONS: Record<StudioKind, string> = {
   ].join('\n'),
 };
 
-export function buildStudioPrompt(kind: StudioKind, packed: readonly PackedSource[]): string {
+export function buildStudioPrompt(
+  kind: StudioKind,
+  packed: readonly PackedSource[],
+  options: StudioOptions = {}
+): string {
   return [
     ...GROUNDING_RULES,
     '',
     'TASK:',
     STUDIO_INSTRUCTIONS[kind],
+    renderStudioOptions(kind, options),
     '',
     'SOURCES:',
     renderSourceCorpus(packed),

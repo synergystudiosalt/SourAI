@@ -5,6 +5,21 @@ import { FileUp, Link2, ClipboardType, X, Loader2, AlertCircle } from 'lucide-re
 import { fetchWebsiteSource, NotebookApiError } from '../../features/notebook/api';
 import type { NotebookSource, NotebookSourceKind } from '../../features/notebook/types';
 import { createNotebookId } from '../../features/notebook/types';
+import type { PdfDocumentHandle, PdfPageText } from '../../features/notebook/pdfText';
+
+/**
+ * A scanned PDF that still needs its pages read by the model.
+ *
+ * The document handle is passed on still open, because every pending page has
+ * to be rendered from it; the workspace closes it when the job ends.
+ */
+export interface PendingTranscription {
+  sourceId: string;
+  handle: PdfDocumentHandle;
+  pages: PdfPageText[];
+  pendingPages: number[];
+  truncated: boolean;
+}
 
 /**
  * The three ways a source gets into a notebook: a file, a link, or pasted text.
@@ -38,7 +53,7 @@ function kindForFile(name: string, parsedType: string): NotebookSourceKind {
 export interface AddSourceDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddSources: (sources: NotebookSource[]) => void;
+  onAddSources: (sources: NotebookSource[], pending?: PendingTranscription[]) => void;
   sourceCount: number;
 }
 
@@ -91,6 +106,7 @@ export const AddSourceDialog: React.FC<AddSourceDialogProps> = ({
         import('../../features/notebook/pdfText'),
       ]);
       const added: NotebookSource[] = [];
+      const pending: PendingTranscription[] = [];
       const failed: string[] = [];
       for (const file of list) {
         const position = list.length > 1 ? ` (${added.length + failed.length + 1}/${list.length})` : '';
@@ -101,22 +117,33 @@ export const AddSourceDialog: React.FC<AddSourceDialogProps> = ({
           // model, which quietly threw away most of any real document.
           if (isPdf(file)) {
             const extracted = await extractPdf(file, file.name);
-            await extracted.handle.close();
-            if (!extracted.text.trim()) {
-              failed.push(
-                `${file.name} — no selectable text on any page; it looks like a scan.`
-              );
-              continue;
-            }
+            const sourceId = createNotebookId();
+            const needsTranscription = extracted.pendingPages.length > 0;
             added.push({
-              id: createNotebookId(),
+              id: sourceId,
               title: file.name,
               kind: 'pdf',
               content: extracted.text,
               addedAt: Date.now(),
               selected: true,
               summaryState: 'idle',
+              transcription: needsTranscription
+                ? { state: 'running', total: extracted.pendingPages.length, completed: 0 }
+                : undefined,
             });
+            // Pages with no text layer are read by the model afterwards; the
+            // source is usable in the meantime with whatever text it does have.
+            if (needsTranscription) {
+              pending.push({
+                sourceId,
+                handle: extracted.handle,
+                pages: extracted.pages,
+                pendingPages: extracted.pendingPages,
+                truncated: extracted.truncated,
+              });
+            } else {
+              await extracted.handle.close();
+            }
             continue;
           }
 
@@ -140,7 +167,7 @@ export const AddSourceDialog: React.FC<AddSourceDialogProps> = ({
         }
       }
       setProgress(null);
-      if (added.length > 0) onAddSources(added);
+      if (added.length > 0) onAddSources(added, pending);
       if (failed.length > 0) {
         setError(`Could not add: ${failed.join(', ')}`);
         setIsBusy(false);

@@ -31,6 +31,16 @@ export interface NotebookSource {
   summary?: string;
   topics?: string[];
   summaryState?: 'idle' | 'loading' | 'ready' | 'error';
+  /** Progress of model transcription for a scanned PDF, when one was needed. */
+  transcription?: SourceTranscription;
+}
+
+export interface SourceTranscription {
+  state: 'running' | 'done' | 'cancelled' | 'failed';
+  total: number;
+  completed: number;
+  /** Set while running, so the panel can say how long is left. */
+  remainingMs?: number;
 }
 
 export interface NotebookMessage {
@@ -52,7 +62,16 @@ export type StudioArtifactKind =
   | 'briefing'
   | 'faq'
   | 'timeline'
-  | 'mindmap';
+  | 'mindmap'
+  | 'flashcards'
+  | 'quiz';
+
+/** Kinds stored as JSON and rendered as an interactive widget, not as prose. */
+export const INTERACTIVE_ARTIFACT_KINDS: readonly StudioArtifactKind[] = ['flashcards', 'quiz'];
+
+export function isInteractiveArtifact(kind: StudioArtifactKind): boolean {
+  return INTERACTIVE_ARTIFACT_KINDS.includes(kind);
+}
 
 export interface StudioArtifact {
   id: string;
@@ -130,6 +149,8 @@ const STUDIO_TITLES: Record<StudioArtifactKind, string> = {
   faq: 'FAQ',
   timeline: 'Timeline',
   mindmap: 'Mind map',
+  flashcards: 'Flashcards',
+  quiz: 'Quiz',
 };
 
 export function studioArtifactTitle(kind: StudioArtifactKind): string {
@@ -150,6 +171,23 @@ export function countWords(text: string): number {
  * written value can leave fields missing; a notebook that renders is better
  * than a workspace that throws on mount.
  */
+/**
+ * A job cannot survive the page that was running it, so a notebook reloaded
+ * mid-transcription reports the truth: it stopped.
+ */
+function reviveTranscription(value: unknown): SourceTranscription | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const record = value as Record<string, unknown>;
+  const total = typeof record.total === 'number' ? record.total : 0;
+  const completed = typeof record.completed === 'number' ? record.completed : 0;
+  if (total <= 0) return undefined;
+  const state =
+    record.state === 'done' || record.state === 'failed' || record.state === 'cancelled'
+      ? record.state
+      : 'cancelled';
+  return { state, total, completed };
+}
+
 export function reviveNotebook(value: unknown): Notebook | null {
   if (!value || typeof value !== 'object') return null;
   const record = value as Record<string, unknown>;
@@ -174,6 +212,7 @@ export function reviveNotebook(value: unknown): Notebook | null {
               ? source.topics.filter((topic): topic is string => typeof topic === 'string')
               : undefined,
             summaryState: typeof source.summary === 'string' ? 'ready' : 'idle',
+            transcription: reviveTranscription(source.transcription),
           };
         })
         .filter((source): source is NotebookSource => source !== null)

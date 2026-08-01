@@ -166,14 +166,34 @@ describe('NotebookWorkspace', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('The notebook service is unavailable.');
   });
 
-  it('generates a study guide into the studio and opens it', async () => {
+  it('asks how to aim a study guide, then generates it into the studio', async () => {
     const user = userEvent.setup();
+    const calls = stubNotebookApi();
     render(<Harness initial={notebookWith([source()])} />);
 
     await user.click(screen.getByRole('button', { name: /Study guide/ }));
 
+    // Kinds with settings ask first rather than spending a generation blind.
+    const dialog = await screen.findByRole('dialog', { name: /Study guide settings/ });
+    await user.click(within(dialog).getByRole('radio', { name: 'Advanced' }));
+    await user.type(within(dialog).getByLabelText(/Focus/), 'chapter 3');
+    await user.click(within(dialog).getByRole('button', { name: 'Generate' }));
+
     expect(await screen.findByRole('region', { name: /Studio output: Study guide/ })).toBeInTheDocument();
     expect(screen.getByText('Review questions')).toBeInTheDocument();
+
+    const studio = calls.find((call) => call.action === 'studio');
+    expect(studio?.body.options).toEqual({ difficulty: 'advanced', focus: 'chapter 3' });
+  });
+
+  it('generates a kind with nothing to configure without interrupting', async () => {
+    const user = userEvent.setup();
+    render(<Harness initial={notebookWith([source()])} />);
+
+    await user.click(screen.getByRole('button', { name: /Timeline/ }));
+
+    expect(await screen.findByRole('region', { name: /Studio output: Timeline/ })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('renders a generated mind map as an explorable tree, not raw Markdown', async () => {

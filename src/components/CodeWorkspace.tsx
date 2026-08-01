@@ -3,7 +3,7 @@ import { motion } from 'motion/react';
 import {
   Plus, Folder, ArrowLeft, Save, AlertCircle, CheckCircle2, X, Loader2,
   Download, WrapText, RefreshCw, Eye, EyeOff, RotateCw, ExternalLink,
-  Sparkles, FileCode2, FolderTree,
+  FileCode2, FolderTree,
 } from 'lucide-react';
 import JSZip from 'jszip';
 import ReactMarkdown from 'react-markdown';
@@ -37,6 +37,11 @@ import { useFlag } from '../features/flags';
 import { useIsCompactViewport } from '../utils/useMediaQuery';
 
 export { buildSandboxedPreviewDocument } from '../security/previewIsolation';
+
+/** The agent is sour.ai, so its tab carries the brand mark rather than an icon. */
+const AgentTabIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <Logo size={14} className={className} />
+);
 
 const ProfessionalAgentWorkspace = React.lazy(() =>
   import('./agent-workspace/AgentWorkspace').then((module) => ({
@@ -1180,7 +1185,7 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({ isDarkMode }) => {
           className="flex shrink-0 border-b border-[#dfe3ea] dark:border-[#282c33] lg:hidden"
         >
           {([
-            { id: 'agent', label: 'Agent', icon: Sparkles },
+            { id: 'agent', label: 'Agent', icon: AgentTabIcon },
             { id: 'editor', label: 'Editor', icon: FileCode2 },
             { id: 'files', label: 'Files', icon: FolderTree },
           ] as const).map((pane) => {

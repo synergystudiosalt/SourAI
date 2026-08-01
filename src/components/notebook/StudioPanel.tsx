@@ -1,10 +1,13 @@
 import React from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import {
   BookOpen,
   ClipboardList,
   HelpCircle,
   CalendarClock,
   Network,
+  Layers,
+  ListChecks,
   Plus,
   Loader2,
   Trash2,
@@ -43,12 +46,21 @@ const GENERATORS: {
     icon: ClipboardList,
   },
   { kind: 'faq', label: 'FAQ', hint: 'The questions your sources answer', icon: HelpCircle },
+  {
+    kind: 'flashcards',
+    label: 'Flashcards',
+    hint: 'Two-sided cards to test recall',
+    icon: Layers,
+  },
+  { kind: 'quiz', label: 'Quiz', hint: 'Multiple choice, marked as you go', icon: ListChecks },
   { kind: 'timeline', label: 'Timeline', hint: 'Events in order, with a cast list', icon: CalendarClock },
   { kind: 'mindmap', label: 'Mind map', hint: 'An explorable map of the ideas', icon: Network },
 ];
 
 const KIND_ICONS: Record<StudioArtifactKind, React.ComponentType<{ className?: string }>> = {
   note: StickyNote,
+  flashcards: Layers,
+  quiz: ListChecks,
   study_guide: BookOpen,
   briefing: ClipboardList,
   faq: HelpCircle,
@@ -136,11 +148,22 @@ export const StudioPanel: React.FC<StudioPanelProps> = ({
         </p>
       ) : (
         <ul className="space-y-1">
+          <AnimatePresence initial={false}>
           {artifacts.map((artifact) => {
             const Icon = KIND_ICONS[artifact.kind] ?? StickyNote;
             const isActive = artifact.id === activeArtifactId;
             return (
-              <li key={artifact.id}>
+              // Newly generated output slides in at the top of the list, so a
+              // document that took twenty seconds to make is not just suddenly
+              // there.
+              <motion.li
+                key={artifact.id}
+                layout
+                initial={{ opacity: 0, y: -6, height: 0 }}
+                animate={{ opacity: 1, y: 0, height: 'auto' }}
+                exit={{ opacity: 0, x: -12, height: 0 }}
+                transition={{ duration: 0.22, ease: [0.2, 0, 0, 1] }}
+              >
                 <div
                   className={`ws-file-item group flex items-center gap-2 px-1.5 py-1.5 ${
                     isActive
@@ -175,9 +198,10 @@ export const StudioPanel: React.FC<StudioPanelProps> = ({
                     <Trash2 className="h-3 w-3" />
                   </button>
                 </div>
-              </li>
+              </motion.li>
             );
           })}
+          </AnimatePresence>
         </ul>
       )}
     </div>

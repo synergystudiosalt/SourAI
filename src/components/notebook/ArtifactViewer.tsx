@@ -1,14 +1,44 @@
-import React, { useEffect, useState } from 'react';
-import { motion } from 'motion/react';
-import { ArrowLeft, Check, Copy, FilePlus2, Pencil } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
+import {
+  ArrowLeft,
+  Check,
+  Copy,
+  Download,
+  FileImage,
+  FilePlus2,
+  FileText,
+  Loader2,
+  Pencil,
+} from 'lucide-react';
 
 import {
   studioArtifactTitle,
   type Notebook,
   type StudioArtifact,
 } from '../../features/notebook/types';
+import {
+  flashcardsToPlainText,
+  quizToPlainText,
+  readFlashcards,
+  readQuiz,
+} from '../../features/notebook/studyContent';
+import { downloadArtifact, type ExportFormat } from '../../features/notebook/exportArtifact';
+import { Flashcards } from './Flashcards';
 import { MindMap } from './MindMap';
 import { NotebookMarkdown } from './NotebookMarkdown';
+import { QuizView } from './Quiz';
+
+/**
+ * Flashcards and quizzes are stored as JSON. Copying that to the clipboard, or
+ * feeding it back in as a source, would be useless to a person and to a model
+ * alike — both take the readable rendition instead.
+ */
+function artifactAsText(artifact: StudioArtifact): string {
+  if (artifact.kind === 'flashcards') return flashcardsToPlainText(readFlashcards(artifact.content));
+  if (artifact.kind === 'quiz') return quizToPlainText(readQuiz(artifact.content));
+  return artifact.content;
+}
 
 /**
  * Reading and editing view for one studio output.
@@ -38,6 +68,10 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
   const [draft, setDraft] = useState(artifact.content);
   const [title, setTitle] = useState(artifact.title);
   const [copied, setCopied] = useState(false);
+  const [downloadOpen, setDownloadOpen] = useState(false);
+  const [downloading, setDownloading] = useState<ExportFormat | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const downloadRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setDraft(artifact.content);
@@ -56,6 +90,40 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
     },
   };
 
+  const plainText = artifactAsText(artifact);
+
+  useEffect(() => {
+    if (!downloadOpen) return;
+    const close = (event: MouseEvent) => {
+      if (downloadRef.current && !downloadRef.current.contains(event.target as Node)) {
+        setDownloadOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [downloadOpen]);
+
+  const download = async (format: ExportFormat) => {
+    setDownloading(format);
+    setDownloadError(null);
+    try {
+      await downloadArtifact(
+        {
+          title: artifact.title,
+          text: plainText,
+          kindLabel: studioArtifactTitle(artifact.kind),
+          notebookTitle: notebook.title,
+        },
+        format
+      );
+      setDownloadOpen(false);
+    } catch (error) {
+      setDownloadError((error as Error)?.message ?? 'That download could not be prepared.');
+    } finally {
+      setDownloading(null);
+    }
+  };
+
   const commit = () => {
     onUpdate(artifact.id, { title: title.trim() || artifact.title, content: draft });
     setIsEditing(false);
@@ -63,7 +131,7 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
 
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(artifact.content);
+      await navigator.clipboard.writeText(plainText);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1500);
     } catch {
@@ -100,6 +168,67 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
               Edit
             </button>
           )}
+          {/* Word for editing and sharing, PNG for pasting into a chat or a
+              slide — the two things people actually do with a study sheet. */}
+          <div ref={downloadRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setDownloadOpen((open) => !open)}
+              aria-haspopup="menu"
+              aria-expanded={downloadOpen}
+              className="flex items-center gap-1 border border-[#dfe3ea] px-2 py-0.5 text-[10.5px] text-[#4a5259] hover:border-[#4776d5] hover:text-[#4776d5] dark:border-[#282c33] dark:text-[#a9afbc] ws-toolbar-btn"
+            >
+              <Download className="h-3 w-3" />
+              Download
+            </button>
+            <AnimatePresence>
+              {downloadOpen && (
+                <motion.div
+                  role="menu"
+                  initial={{ opacity: 0, y: -6, filter: 'blur(4px)' }}
+                  animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                  exit={{ opacity: 0, y: -6, filter: 'blur(4px)' }}
+                  transition={{ duration: 0.16, ease: 'easeOut' }}
+                  className="absolute right-0 top-full z-50 mt-1 w-48 border border-[#dfe3ea] bg-[#fbfcfd] shadow-xl dark:border-[#282c33] dark:bg-[#1e2128]"
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => void download('docx')}
+                    disabled={downloading !== null}
+                    className="dropdown-item flex w-full items-center gap-2 px-2.5 py-2 text-left text-[11.5px] text-[#16181d] disabled:opacity-50 dark:text-[#dce0e5]"
+                  >
+                    {downloading === 'docx' ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-[#4776d5]" />
+                    ) : (
+                      <FileText className="h-3.5 w-3.5 text-[#4776d5]" />
+                    )}
+                    Word document (.docx)
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => void download('png')}
+                    disabled={downloading !== null}
+                    className="dropdown-item flex w-full items-center gap-2 px-2.5 py-2 text-left text-[11.5px] text-[#16181d] disabled:opacity-50 dark:text-[#dce0e5]"
+                  >
+                    {downloading === 'png' ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-[#4776d5]" />
+                    ) : (
+                      <FileImage className="h-3.5 w-3.5 text-[#4776d5]" />
+                    )}
+                    Image (.png)
+                  </button>
+                  {downloadError && (
+                    <p role="alert" className="px-2.5 py-2 text-[10.5px] text-[#b5484a]">
+                      {downloadError}
+                    </p>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
           <button
             type="button"
             onClick={() => void copy()}
@@ -110,7 +239,7 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
           </button>
           <button
             type="button"
-            onClick={() => onConvertToSource(artifact)}
+            onClick={() => onConvertToSource({ ...artifact, content: plainText })}
             title="Add this document to the notebook as a source"
             className="flex items-center gap-1 border border-[#dfe3ea] px-2 py-0.5 text-[10.5px] text-[#4a5259] hover:border-[#4776d5] hover:text-[#4776d5] dark:border-[#282c33] dark:text-[#a9afbc] ws-toolbar-btn"
           >
@@ -171,6 +300,18 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
               </h2>
               {artifact.kind === 'mindmap' ? (
                 <MindMap markdown={artifact.content} rootLabel={notebook.title} />
+              ) : artifact.kind === 'flashcards' ? (
+                <Flashcards
+                  content={artifact.content}
+                  onOpenSource={resolver.onSelect}
+                  sourceLabel={resolver.labelFor}
+                />
+              ) : artifact.kind === 'quiz' ? (
+                <QuizView
+                  content={artifact.content}
+                  onOpenSource={resolver.onSelect}
+                  sourceLabel={resolver.labelFor}
+                />
               ) : (
                 <NotebookMarkdown text={artifact.content} resolver={resolver} />
               )}

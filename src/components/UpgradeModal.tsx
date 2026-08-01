@@ -1,5 +1,6 @@
 import React from 'react';
-import { X, Sparkles } from 'lucide-react';
+import { X } from 'lucide-react';
+import Logo from './Logo';
 import { motion, AnimatePresence } from 'motion/react';
 import { LimitTimer } from './LimitTimer';
 import { MESSAGE_QUOTA } from '../utils/constants';
@@ -44,7 +45,7 @@ export const UpgradeModal: React.FC<UpgradeModalProps> = ({ isOpen, onClose, lim
 
             {/* Header */}
             <div className="w-12 h-12 rounded-2xl bg-[#e3e9f4] dark:bg-[#292a2c] flex items-center justify-center mx-auto mb-3">
-              <Sparkles className="w-6 h-6 text-[#4776d5]" />
+              <Logo size={24} />
             </div>
 
             <h2 className="font-instrument text-2xl font-normal text-[#16181d] dark:text-[#dce0e5] tracking-tight mb-2">

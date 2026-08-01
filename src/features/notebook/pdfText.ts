@@ -153,7 +153,10 @@ export class PdfDocumentHandle {
       context.fillRect(0, 0, canvas.width, canvas.height);
       await page.render({ canvasContext: context, viewport, canvas } as never).promise;
       return canvas.toDataURL('image/jpeg', 0.82);
-    } catch {
+    } catch (error) {
+      // Swallowing this silently made a failed transcription indistinguishable
+      // from a blank page.
+      console.error(`[sour.ai] Could not render page ${pageNumber} for transcription`, error);
       return null;
     } finally {
       page.cleanup();

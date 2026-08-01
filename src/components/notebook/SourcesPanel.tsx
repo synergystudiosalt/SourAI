@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import {
   Plus,
   FileText,
@@ -9,6 +10,8 @@ import {
   StickyNote,
   Trash2,
   Search,
+  ScanText,
+  X,
 } from 'lucide-react';
 
 import {
@@ -37,6 +40,8 @@ export interface SourcesPanelProps {
   onToggleAll: (selected: boolean) => void;
   onOpenSource: (id: string) => void;
   onRemoveSource: (id: string) => void;
+  onCancelTranscription?: (id: string) => void;
+  formatRemaining?: (ms: number) => string;
 }
 
 export const SourcesPanel: React.FC<SourcesPanelProps> = ({
@@ -47,6 +52,8 @@ export const SourcesPanel: React.FC<SourcesPanelProps> = ({
   onToggleAll,
   onOpenSource,
   onRemoveSource,
+  onCancelTranscription,
+  formatRemaining,
 }) => {
   const [query, setQuery] = useState('');
 
@@ -133,6 +140,7 @@ export const SourcesPanel: React.FC<SourcesPanelProps> = ({
             {filtered.map((source) => {
               const Icon = ICONS[source.kind] ?? FileText;
               const isActive = source.id === activeSourceId;
+              const transcription = source.transcription;
               return (
                 <li key={source.id}>
                   <div
@@ -175,6 +183,70 @@ export const SourcesPanel: React.FC<SourcesPanelProps> = ({
                       <Trash2 className="h-3 w-3" />
                     </button>
                   </div>
+
+                  {/* Scanned pages are read by the model afterwards, one at a
+                      time. The job runs for minutes, so it reports where it is
+                      and can be stopped. */}
+                  <AnimatePresence initial={false}>
+                    {transcription && transcription.state === 'running' && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.2, ease: 'easeOut' }}
+                        className="overflow-hidden"
+                      >
+                        <div className="mx-1.5 mb-1 border-l-2 border-[#4776d5] bg-[#f2f4f7] px-2 py-1.5 dark:bg-[#1e2128]">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="flex min-w-0 items-center gap-1 text-[10px] text-[#4a5259] dark:text-[#a9afbc]">
+                              <ScanText className="h-3 w-3 shrink-0 animate-pulse text-[#4776d5]" />
+                              <span className="truncate">
+                                Reading scanned page {Math.min(transcription.completed + 1, transcription.total)} of{' '}
+                                {transcription.total}
+                              </span>
+                            </span>
+                            {onCancelTranscription && (
+                              <button
+                                type="button"
+                                onClick={() => onCancelTranscription(source.id)}
+                                aria-label={`Stop reading ${source.title}`}
+                                title="Stop"
+                                className="shrink-0 p-0.5 text-[#78828e] hover:text-[#c0392b]"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            )}
+                          </div>
+                          <div className="mt-1 h-[2px] w-full bg-[#dfe3ea] dark:bg-[#282c33]">
+                            <motion.div
+                              className="h-full bg-[#4776d5]"
+                              initial={false}
+                              animate={{
+                                width: `${(transcription.completed / Math.max(transcription.total, 1)) * 100}%`,
+                              }}
+                              transition={{ type: 'spring', stiffness: 200, damping: 30 }}
+                            />
+                          </div>
+                          {formatRemaining && transcription.remainingMs !== undefined && (
+                            <span className="mt-1 block font-code text-[9px] text-[#78828e]">
+                              {formatRemaining(transcription.remainingMs)}
+                            </span>
+                          )}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  {transcription && transcription.state === 'cancelled' && (
+                    <p className="mx-1.5 mb-1 px-2 text-[9.5px] text-[#78828e]">
+                      Page reading stopped — {transcription.completed} of {transcription.total} read.
+                    </p>
+                  )}
+                  {transcription && transcription.state === 'failed' && (
+                    <p className="mx-1.5 mb-1 px-2 text-[9.5px] text-[#b5484a]">
+                      Those scanned pages could not be read.
+                    </p>
+                  )}
                 </li>
               );
             })}
