@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, Mic, ChevronDown, ArrowUp, X, MicOff, Square } from 'lucide-react';
+import { Plus, Mic, ChevronDown, ArrowUp, X, MicOff, Square, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AIModel, AttachmentItem } from '../types';
 import { ModelSelectorPopover } from './ModelSelectorPopover';
@@ -8,7 +8,7 @@ import { AttachmentCard } from './AttachmentCard';
 import { LimitTimer } from './LimitTimer';
 import { parseUploadedFile } from '../utils/fileParser';
 import { MESSAGE_QUOTA } from '../utils/constants';
-import { VoiceRecognizer } from '../utils/voiceRecognition';
+import { GroqVoiceRecorder } from '../utils/groqVoice';
 import { MODEL_ROUTES } from '../../functions/shared/ai';
 
 interface MainPromptCardProps {
@@ -47,23 +47,25 @@ export const MainPromptCard: React.FC<MainPromptCardProps> = ({
   const [showModelPopover, setShowModelPopover] = useState(false);
   const [showAttachPopover, setShowAttachPopover] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const voiceRecognizerRef = useRef<VoiceRecognizer | null>(null);
+  const voiceRecorderRef = useRef<GroqVoiceRecorder | null>(null);
   const modelPopoverRef = useRef<HTMLDivElement>(null);
   const attachPopoverRef = useRef<HTMLDivElement>(null);
 
-  // Initialize voice recognizer on mount
+  // Initialize voice recorder on mount
   useEffect(() => {
-    voiceRecognizerRef.current = new VoiceRecognizer({
+    voiceRecorderRef.current = new GroqVoiceRecorder({
       onTranscript: (transcript) => {
         setPromptInput((prev) => (prev ? prev + ' ' : '') + transcript);
       },
       onError: (error) => {
-        console.error('Voice recognition error:', error);
+        console.error('Voice input error:', error);
         setIsRecording(false);
       },
       onStart: () => setIsRecording(true),
       onEnd: () => setIsRecording(false),
+      onTranscribing: setIsTranscribing,
     });
   }, []);
 
@@ -91,11 +93,11 @@ export const MainPromptCard: React.FC<MainPromptCardProps> = ({
     };
   }, [showModelPopover, showAttachPopover]);
 
-  // Cleanup voice recognizer on unmount
+  // Cleanup voice recorder on unmount
   useEffect(() => {
     return () => {
-      if (voiceRecognizerRef.current) {
-        voiceRecognizerRef.current.stop();
+      if (voiceRecorderRef.current) {
+        voiceRecorderRef.current.stop();
       }
     };
   }, []);
@@ -122,8 +124,8 @@ export const MainPromptCard: React.FC<MainPromptCardProps> = ({
     // Stop voice recording on Escape
     if (e.key === 'Escape' && isRecording) {
       e.preventDefault();
-      if (voiceRecognizerRef.current) {
-        voiceRecognizerRef.current.stop();
+      if (voiceRecorderRef.current) {
+        voiceRecorderRef.current.stop();
       }
     }
   };
@@ -131,17 +133,12 @@ export const MainPromptCard: React.FC<MainPromptCardProps> = ({
   const modelDisplayName = MODEL_ROUTES[selectedModel].label;
 
   const toggleVoiceRecording = () => {
-    if (!voiceRecognizerRef.current) return;
+    if (!voiceRecorderRef.current) return;
 
     if (isRecording) {
-      voiceRecognizerRef.current.stop();
-      setIsRecording(false);
+      voiceRecorderRef.current.stop();
     } else {
-      if (!voiceRecognizerRef.current.isSupported()) {
-        alert('Speech recognition is not supported in your browser');
-        return;
-      }
-      voiceRecognizerRef.current.start();
+      voiceRecorderRef.current.start();
     }
   };
 
@@ -287,14 +284,21 @@ export const MainPromptCard: React.FC<MainPromptCardProps> = ({
           <button
             type="button"
             onClick={toggleVoiceRecording}
-            className={`p-1 rounded-lg cursor-pointer interactable-btn ${
+            disabled={isTranscribing}
+            className={`p-1 rounded-lg cursor-pointer interactable-btn disabled:cursor-wait ${
               isRecording
                 ? 'bg-red-100 text-red-600 animate-pulse'
                 : 'text-[#4a5259] dark:text-[#a9afbc] hover:bg-[#f6f8fa] dark:hover:bg-[#1e2128] hover:text-[#16181d] dark:hover:text-[#dce0e5]'
             }`}
-            title={isRecording ? 'Listening...' : 'Voice Dictation'}
+            title={isTranscribing ? 'Transcribing...' : isRecording ? 'Listening...' : 'Voice Dictation'}
           >
-            {isRecording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4 stroke-[1.75]" />}
+            {isTranscribing ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : isRecording ? (
+              <MicOff className="w-4 h-4" />
+            ) : (
+              <Mic className="w-4 h-4 stroke-[1.75]" />
+            )}
           </button>
 
           {/* Send / Stop Button */}

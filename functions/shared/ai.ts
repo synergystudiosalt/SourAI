@@ -728,6 +728,91 @@ export async function generateWithGroq(
   return generateWithOpenAICompatible('groq', 'https://api.groq.com/openai', keys, takeGroqKey, messages, systemInstruction, model, tuning, reasoning);
 }
 
+/**
+ * Speech-to-text via Groq Whisper. `whisper-large-v3-turbo` is the fastest
+ * and cheapest Whisper route Groq serves — well inside free-tier limits for
+ * short dictation clips — while still covering the same language set as the
+ * full model.
+ */
+export async function transcribeWithGroq(
+  keys: string[],
+  audio: Blob,
+  filename: string,
+  model: string = 'whisper-large-v3-turbo',
+  language?: string
+): Promise<string> {
+  const state = new KeyAttemptState(keys, takeGroqKey);
+  let lastErr: unknown = new Error('No Groq API keys configured');
+  let lastChoice: KeySelection | undefined;
+
+  while (true) {
+    const choice = state.next();
+    if (!choice) throw state.failure('groq', model, lastErr, lastChoice);
+    lastChoice = choice;
+    state.begin(choice);
+    try {
+      const form = new FormData();
+      form.append('file', audio, filename);
+      form.append('model', model);
+      form.append('response_format', 'json');
+      if (language) form.append('language', language);
+      const res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${choice.key}` },
+        body: form,
+      });
+      if (!res.ok) throw await httpError(res, keys);
+      const data: any = await res.json().catch(() => ({}));
+      return (data?.text || '').trim();
+    } catch (err: unknown) {
+      lastErr = err;
+      state.reject(err, choice);
+      const failure = state.failure('groq', model, err, choice);
+      console.warn(failure.message);
+      if (!isRetryableError(err) || !state.canRetry()) throw failure;
+      await pauseBeforeRetry(err, state.roundComplete());
+    }
+  }
+}
+
+/**
+ * Text-to-speech via Groq's PlayAI voices — the only TTS route Groq serves,
+ * and included on its free tier. Returns raw WAV bytes.
+ */
+export async function synthesizeSpeechWithGroq(
+  keys: string[],
+  text: string,
+  voice: string = 'Fritz-PlayAI',
+  model: string = 'playai-tts'
+): Promise<ArrayBuffer> {
+  const state = new KeyAttemptState(keys, takeGroqKey);
+  let lastErr: unknown = new Error('No Groq API keys configured');
+  let lastChoice: KeySelection | undefined;
+
+  while (true) {
+    const choice = state.next();
+    if (!choice) throw state.failure('groq', model, lastErr, lastChoice);
+    lastChoice = choice;
+    state.begin(choice);
+    try {
+      const res = await fetch('https://api.groq.com/openai/v1/audio/speech', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${choice.key}` },
+        body: JSON.stringify({ model, voice, input: text, response_format: 'wav' }),
+      });
+      if (!res.ok) throw await httpError(res, keys);
+      return await res.arrayBuffer();
+    } catch (err: unknown) {
+      lastErr = err;
+      state.reject(err, choice);
+      const failure = state.failure('groq', model, err, choice);
+      console.warn(failure.message);
+      if (!isRetryableError(err) || !state.canRetry()) throw failure;
+      await pauseBeforeRetry(err, state.roundComplete());
+    }
+  }
+}
+
 export async function generateWithCerebras(
   keys: string[],
   messages: { role: string; content: string }[],

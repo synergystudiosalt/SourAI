@@ -20,6 +20,7 @@ import {
   ThumbsUp,
   ThumbsDown,
   RotateCw,
+  Loader2,
 
   Download,
 } from 'lucide-react';
@@ -32,6 +33,7 @@ import { AttachmentPopover } from './AttachmentPopover';
 import { AttachmentCard } from './AttachmentCard';
 import { parseUploadedFile } from '../utils/fileParser';
 import { MODEL_ROUTES } from '../../functions/shared/ai';
+import { GroqVoiceRecorder, speakText, stopSpeaking } from '../utils/groqVoice';
 import { ImagePreviewCard } from './ImagePreviewCard';
 import { QuestionBox, extractQuestionBlocks } from './QuestionBox';
 
@@ -408,6 +410,7 @@ export const ChatStreamView: React.FC<ChatStreamViewProps> = ({
   const [showAttachPopover, setShowAttachPopover] = useState(false);
   const [attachments, setAttachments] = useState<AttachmentItem[]>([]);
   const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [questionDismissed, setQuestionDismissed] = useState(false);
   const lastQuestionContentRef = useRef<string | null>(null);
@@ -452,9 +455,27 @@ export const ChatStreamView: React.FC<ChatStreamViewProps> = ({
   const scrollEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const recognitionRef = useRef<any>(null);
+  const voiceRecorderRef = useRef<GroqVoiceRecorder | null>(null);
   const modelPopoverRef = useRef<HTMLDivElement>(null);
   const attachPopoverRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    voiceRecorderRef.current = new GroqVoiceRecorder({
+      onTranscript: (transcript) => {
+        setInputText((prev) => (prev ? prev + ' ' : '') + transcript);
+      },
+      onError: (error) => {
+        console.error('Voice input error:', error);
+        setIsRecording(false);
+      },
+      onStart: () => setIsRecording(true),
+      onEnd: () => setIsRecording(false),
+      onTranscribing: setIsTranscribing,
+    });
+    return () => {
+      voiceRecorderRef.current?.stop();
+    };
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -522,19 +543,16 @@ export const ChatStreamView: React.FC<ChatStreamViewProps> = ({
   };
 
   const handleSpeak = (text: string, index: number) => {
-    if ('speechSynthesis' in window) {
-      if (speakingIndex === index) {
-        window.speechSynthesis.cancel();
-        setSpeakingIndex(null);
-      } else {
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.onend = () => setSpeakingIndex(null);
-        utterance.onerror = () => setSpeakingIndex(null);
-        window.speechSynthesis.speak(utterance);
-        setSpeakingIndex(index);
-      }
+    if (speakingIndex === index) {
+      stopSpeaking();
+      setSpeakingIndex(null);
+      return;
     }
+    speakText(text, {
+      onStart: () => setSpeakingIndex(index),
+      onEnd: () => setSpeakingIndex((current) => (current === index ? null : current)),
+      onError: () => setSpeakingIndex((current) => (current === index ? null : current)),
+    });
   };
 
   const handleAddAttachment = (item: AttachmentItem) => {
@@ -546,46 +564,11 @@ export const ChatStreamView: React.FC<ChatStreamViewProps> = ({
   };
 
   const toggleVoiceRecording = () => {
+    if (!voiceRecorderRef.current) return;
     if (isRecording) {
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.stop();
-        } catch (e) {}
-      }
-      setIsRecording(false);
-      return;
-    }
-
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (SpeechRecognition) {
-      try {
-        const recognition = new SpeechRecognition();
-        recognition.continuous = true;
-        recognition.interimResults = true;
-        recognition.lang = 'en-US';
-
-        recognition.onresult = (event: any) => {
-          let transcript = '';
-          for (let i = 0; i < event.results.length; i++) {
-            transcript += event.results[i][0].transcript;
-          }
-          if (transcript) {
-            setInputText(transcript);
-          }
-        };
-
-        recognition.onerror = () => setIsRecording(false);
-        recognition.onend = () => setIsRecording(false);
-
-        recognition.start();
-        recognitionRef.current = recognition;
-        setIsRecording(true);
-      } catch (err) {
-        console.error('Speech recognition failed to start:', err);
-        setIsRecording(false);
-      }
+      voiceRecorderRef.current.stop();
     } else {
-      console.warn('Speech recognition is not supported in this browser');
+      voiceRecorderRef.current.start();
     }
   };
 
@@ -837,14 +820,21 @@ export const ChatStreamView: React.FC<ChatStreamViewProps> = ({
               <button
                 type="button"
                 onClick={toggleVoiceRecording}
-                className={`p-1.5 rounded-lg cursor-pointer interactable-btn ${
+                disabled={isTranscribing}
+                className={`p-1.5 rounded-lg cursor-pointer interactable-btn disabled:cursor-wait ${
                   isRecording
                     ? 'bg-red-100 dark:bg-red-950/60 text-red-600 dark:text-red-400 animate-pulse'
                     : 'text-[#4a5259] dark:text-[#a9afbc] hover:bg-[#f6f8fa] dark:hover:bg-[#1e2128] hover:text-[#16181d] dark:hover:text-[#dce0e5]'
                 }`}
-                title={isRecording ? 'Listening...' : 'Voice Dictation'}
+                title={isTranscribing ? 'Transcribing...' : isRecording ? 'Listening...' : 'Voice Dictation'}
               >
-                {isRecording ? <MicOff className="w-4.5 h-4.5" /> : <Mic className="w-4.5 h-4.5 stroke-[1.75]" />}
+                {isTranscribing ? (
+                  <Loader2 className="w-4.5 h-4.5 animate-spin" />
+                ) : isRecording ? (
+                  <MicOff className="w-4.5 h-4.5" />
+                ) : (
+                  <Mic className="w-4.5 h-4.5 stroke-[1.75]" />
+                )}
               </button>
 
               {/* Send / Stop Button */}

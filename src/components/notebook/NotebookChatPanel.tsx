@@ -4,10 +4,14 @@ import {
   ArrowUp,
   ChevronDown,
   Loader2,
+  Mic,
+  MicOff,
   NotebookPen,
   RefreshCw,
   Square,
   AlertCircle,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 
 import { MODEL_ROUTES } from '../../../functions/shared/ai';
@@ -21,6 +25,7 @@ import type {
 import Logo from '../Logo';
 import { ModelSelectorPopover } from '../ModelSelectorPopover';
 import { NotebookMarkdown } from './NotebookMarkdown';
+import { GroqVoiceRecorder, speakText, stopSpeaking } from '../../utils/groqVoice';
 
 export interface NotebookChatPanelProps {
   notebook: Notebook;
@@ -74,12 +79,57 @@ export const NotebookChatPanel: React.FC<NotebookChatPanelProps> = ({
 }) => {
   const [draft, setDraft] = useState('');
   const [showModels, setShowModels] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const modelRef = useRef<HTMLDivElement>(null);
+  const voiceRecorderRef = useRef<GroqVoiceRecorder | null>(null);
 
   const hasSources = notebook.sources.length > 0;
   const canSend = draft.trim().length > 0 && selectedSources.length > 0 && !isGenerating;
+
+  useEffect(() => {
+    voiceRecorderRef.current = new GroqVoiceRecorder({
+      onTranscript: (transcript) => {
+        setDraft((prev) => (prev ? `${prev} ` : '') + transcript);
+      },
+      onError: (error) => {
+        console.error('Voice input error:', error);
+        setIsRecording(false);
+      },
+      onStart: () => setIsRecording(true),
+      onEnd: () => setIsRecording(false),
+      onTranscribing: setIsTranscribing,
+    });
+    return () => {
+      voiceRecorderRef.current?.stop();
+      stopSpeaking();
+    };
+  }, []);
+
+  const toggleVoiceRecording = () => {
+    if (!voiceRecorderRef.current) return;
+    if (isRecording) {
+      voiceRecorderRef.current.stop();
+    } else {
+      voiceRecorderRef.current.start();
+    }
+  };
+
+  const toggleSpeak = (message: NotebookMessage) => {
+    if (speakingMessageId === message.id) {
+      stopSpeaking();
+      setSpeakingMessageId(null);
+      return;
+    }
+    speakText(message.content, {
+      onStart: () => setSpeakingMessageId(message.id),
+      onEnd: () => setSpeakingMessageId((current) => (current === message.id ? null : current)),
+      onError: () => setSpeakingMessageId((current) => (current === message.id ? null : current)),
+    });
+  };
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -227,6 +277,22 @@ export const NotebookChatPanel: React.FC<NotebookChatPanelProps> = ({
                             <NotebookPen className="h-3 w-3" />
                             Save to note
                           </button>
+                          <button
+                            type="button"
+                            onClick={() => toggleSpeak(message)}
+                            className={`flex items-center gap-1 border px-2 py-0.5 text-[10.5px] ws-toolbar-btn ${
+                              speakingMessageId === message.id
+                                ? 'border-[#4776d5] text-[#4776d5]'
+                                : 'border-[#dfe3ea] text-[#4a5259] hover:border-[#4776d5] hover:text-[#4776d5] dark:border-[#282c33] dark:text-[#a9afbc]'
+                            }`}
+                          >
+                            {speakingMessageId === message.id ? (
+                              <VolumeX className="h-3 w-3" />
+                            ) : (
+                              <Volume2 className="h-3 w-3" />
+                            )}
+                            Read aloud
+                          </button>
                         </div>
                       </>
                     )}
@@ -284,6 +350,25 @@ export const NotebookChatPanel: React.FC<NotebookChatPanelProps> = ({
                 }
                 className="max-h-40 min-h-[22px] flex-1 resize-none bg-transparent text-[13px] leading-relaxed text-[#16181d] outline-none placeholder:text-[#78828e] dark:text-[#dce0e5] thin-scrollbar"
               />
+              <button
+                type="button"
+                onClick={toggleVoiceRecording}
+                disabled={isTranscribing || selectedSources.length === 0}
+                title={isTranscribing ? 'Transcribing...' : isRecording ? 'Listening...' : 'Voice dictation'}
+                className={`flex h-7 w-7 shrink-0 items-center justify-center disabled:opacity-40 disabled:cursor-wait ws-toolbar-btn ${
+                  isRecording
+                    ? 'bg-red-100 text-red-600 animate-pulse dark:bg-red-950/60 dark:text-red-400'
+                    : 'text-[#78828e] hover:text-[#16181d] dark:hover:text-[#dce0e5]'
+                }`}
+              >
+                {isTranscribing ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : isRecording ? (
+                  <MicOff className="h-3.5 w-3.5" />
+                ) : (
+                  <Mic className="h-3.5 w-3.5" />
+                )}
+              </button>
               {isGenerating ? (
                 <button
                   type="button"

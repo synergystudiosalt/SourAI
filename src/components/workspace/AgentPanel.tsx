@@ -17,7 +17,7 @@ import {
   summarizeForHistory,
 } from '../../utils/agentProtocol';
 import { customApiManager, type CustomApiConfig } from '../../utils/customApiManager';
-import { VoiceRecognizer } from '../../utils/voiceRecognition';
+import { GroqVoiceRecorder } from '../../utils/groqVoice';
 import { apiUrl } from '../../lib/api';
 import { isAbortError, isSourError, normalizeError, type SourError } from '../../contracts/errors';
 import Logo from '../Logo';
@@ -237,6 +237,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   const [showCustomApiModal, setShowCustomApiModal] = useState(false);
   const [customApiConfigs, setCustomApiConfigs] = useState<CustomApiConfig[]>(customApiManager.getConfigs());
   const [isListening, setIsListening] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
   const [mentionState, setMentionState] = useState<{ query: string; start: number } | null>(null);
   const [showSlash, setShowSlash] = useState(false);
   const [openXmlTags, setOpenXmlTags] = useState<Set<string>>(new Set());
@@ -277,43 +278,36 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const modelPopoverRef = useRef<HTMLDivElement>(null);
   const reasoningPopoverRef = useRef<HTMLDivElement>(null);
-  const voiceRecognizerRef = useRef<VoiceRecognizer | null>(null);
+  const voiceRecorderRef = useRef<GroqVoiceRecorder | null>(null);
   // Messages generated during this mount get a typewriter effect; messages
   // restored from localStorage on load render instantly.
   const freshMessageIdsRef = useRef<Set<string>>(new Set());
-  // Initialize voice recognizer on mount
+  // Initialize voice recorder on mount
   useEffect(() => {
-    voiceRecognizerRef.current = new VoiceRecognizer({
-      onTranscript: (transcript, isFinal) => {
-        setInput((prev) => {
-          const newInput = prev + transcript;
-          return newInput;
-        });
-        if (isFinal) {
-          setIsListening(false);
-        }
+    voiceRecorderRef.current = new GroqVoiceRecorder({
+      onTranscript: (transcript) => {
+        setInput((prev) => (prev ? `${prev} ` : '') + transcript);
       },
       onError: (error) => {
-        console.error('Voice recognition error:', error);
+        console.error('Voice input error:', error);
         setIsListening(false);
       },
       onStart: () => setIsListening(true),
       onEnd: () => setIsListening(false),
+      onTranscribing: setIsTranscribing,
     });
+    return () => {
+      voiceRecorderRef.current?.stop();
+    };
   }, []);
 
   const handleVoiceToggle = () => {
-    if (!voiceRecognizerRef.current) return;
+    if (!voiceRecorderRef.current) return;
 
     if (isListening) {
-      voiceRecognizerRef.current.stop();
-      setIsListening(false);
+      voiceRecorderRef.current.stop();
     } else {
-      if (!voiceRecognizerRef.current.isSupported()) {
-        alert('Speech recognition is not supported in your browser');
-        return;
-      }
-      voiceRecognizerRef.current.start();
+      voiceRecorderRef.current.start();
     }
   };
 
@@ -2018,14 +2012,21 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           <div className="flex items-center gap-1 sm:gap-2">
             <button
               onClick={handleVoiceToggle}
-              title={isListening ? 'Stop listening' : 'Start voice input'}
-              className={`flex items-center justify-center p-1.5 sm:p-0 gap-1 cursor-pointer ws-button-smooth min-w-[44px] sm:min-w-auto h-[44px] sm:h-auto ${
+              disabled={isTranscribing}
+              title={isTranscribing ? 'Transcribing...' : isListening ? 'Stop listening' : 'Start voice input'}
+              className={`flex items-center justify-center p-1.5 sm:p-0 gap-1 cursor-pointer ws-button-smooth min-w-[44px] sm:min-w-auto h-[44px] sm:h-auto disabled:cursor-wait ${
                 isListening
                   ? 'text-[#4776d5] hover:text-[#3664c1]'
                   : 'text-[#78828e] dark:text-[#a9afbc] hover:text-[#16181d] dark:hover:text-[#dce0e5]'
               }`}
             >
-              {isListening ? <Mic className="w-4 h-4 sm:w-3.5 sm:h-3.5" /> : <MicOff className="w-4 h-4 sm:w-3.5 sm:h-3.5" />}
+              {isTranscribing ? (
+                <Loader2 className="w-4 h-4 sm:w-3.5 sm:h-3.5 animate-spin" />
+              ) : isListening ? (
+                <Mic className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
+              ) : (
+                <MicOff className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
+              )}
             </button>
             {isSending ? (
               <button onClick={() => abortControllerRef.current?.abort()} title="Stop generating" className="flex items-center justify-center p-1.5 sm:p-0 min-w-[44px] sm:min-w-auto h-[44px] sm:h-auto hover:text-red-500 cursor-pointer ws-button-smooth">
