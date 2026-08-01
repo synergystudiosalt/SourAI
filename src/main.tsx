@@ -12,6 +12,11 @@ import '@fontsource/ibm-plex-serif/300-italic.css';
 import '@fontsource/ibm-plex-serif/400.css';
 import './index.css';
 import './styles/zedTheme.css';
+import {trackAppViewportHeight} from './utils/appViewport';
+
+// Started before the first paint so the shell is never laid out against a
+// viewport height the phone is not actually showing.
+trackAppViewportHeight();
 
 createRoot(document.getElementById('root')!, rootErrorHandlers).render(
   <Root />,

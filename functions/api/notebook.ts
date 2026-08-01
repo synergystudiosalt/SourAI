@@ -5,11 +5,13 @@ import {
   buildSourceSummaryPrompt,
   buildStudioPrompt,
   isStudioKind,
+  isStructuredStudioKind,
   packSources,
   parseJsonReply,
   renderSourceCorpus,
   type NotebookSourcePayload,
 } from '../shared/notebookPrompts';
+import { normalizeFlashcards, normalizeQuiz } from '../shared/studyContent';
 import { fetchWebSource, WebSourceError } from '../shared/webSource';
 import { splitThinkingAndText } from '../shared/responseFormatting';
 
@@ -176,6 +178,33 @@ export const onRequest: PagesFunction = async (context) => {
         { role: 'user', content: 'Generate the requested document from the sources.' },
       ]);
       if (!text) return json({ error: 'The model returned an empty document.' }, 502);
+
+      // Flashcards and quizzes are answered rather than read, so they are
+      // validated here and stored as normalised JSON. Handing the raw reply to
+      // the client would put a malformed question in front of the user.
+      if (isStructuredStudioKind(body.kind)) {
+        const parsed = parseJsonReply<unknown>(text);
+        const normalized =
+          body.kind === 'flashcards' ? normalizeFlashcards(parsed) : normalizeQuiz(parsed);
+        const count =
+          'cards' in normalized ? normalized.cards.length : normalized.questions.length;
+        if (count === 0) {
+          return json(
+            {
+              error:
+                body.kind === 'flashcards'
+                  ? 'No usable flashcards could be built from these sources.'
+                  : 'No usable quiz questions could be built from these sources.',
+            },
+            502
+          );
+        }
+        return json({
+          text: JSON.stringify(normalized),
+          sourceIds: packed.map((source) => source.id),
+        });
+      }
+
       return json({ text, sourceIds: packed.map((source) => source.id) });
     }
 

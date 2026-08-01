@@ -456,7 +456,12 @@ type MammothModule = typeof import('mammoth');
 let pdfjsPromise: Promise<PdfjsModule> | null = null;
 let mammothPromise: Promise<MammothModule> | null = null;
 
-async function loadPdfjs(): Promise<PdfjsModule> {
+/**
+ * Exported so other readers share this loader rather than wiring the worker
+ * again. The worker URL is the security-sensitive part — it must stay
+ * same-origin — and one caller getting it wrong would defeat the CSP.
+ */
+export async function loadPdfjs(): Promise<PdfjsModule> {
   if (!pdfjsPromise) {
     pdfjsPromise = (async () => {
       const [pdfjsLib, workerUrl] = await Promise.all([

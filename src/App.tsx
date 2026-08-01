@@ -591,7 +591,7 @@ export default function App() {
   }, [activeView]);
 
   return (
-    <div className={`zed-shell h-screen w-screen overflow-hidden flex flex-row ${isDarkMode ? 'dark bg-[#121316] text-[#dce0e5]' : 'bg-[#fbfcfd] text-[#16181d]'} antialiased`}>
+    <div className={`zed-shell h-app-shell w-full overflow-hidden flex flex-row ${isDarkMode ? 'dark bg-[#121316] text-[#dce0e5]' : 'bg-[#fbfcfd] text-[#16181d]'} antialiased`}>
       {/* Left Icon Sidebar + Drawer */}
       <LeftSidebar
         onNewChat={() => {
@@ -625,7 +625,7 @@ export default function App() {
       />
 
       {/* Main Container Area */}
-      <div className="zed-shell z-grid flex-1 h-screen flex flex-col justify-between overflow-hidden relative bg-[#fbfcfd] dark:bg-[#121316] text-[#16181d] dark:text-[#dce0e5] transition-colors duration-[var(--z-motion)]">
+      <div className="zed-shell z-grid flex-1 h-app-shell min-h-0 flex flex-col justify-between overflow-hidden relative bg-[#fbfcfd] dark:bg-[#121316] text-[#16181d] dark:text-[#dce0e5] transition-colors duration-[var(--z-motion)]">
         {/* Top Bar Navigation */}
         {activeView !== 'code' && activeView !== 'notebook' && (
           <TopBar />
@@ -704,7 +704,11 @@ export default function App() {
               animate={{ opacity: 1, filter: 'blur(0px)', scale: 1 }}
               exit={{ opacity: 0, filter: 'blur(0px)', scale: 1 }}
               transition={{ duration: 0.25, ease: 'easeOut' }}
-              className="flex-1 flex flex-col items-center justify-center px-4 -mt-8 select-none"
+              // The shell clips rather than scrolls, so on a short viewport —
+              // a phone in landscape, or with the keyboard up — the composer
+              // was simply cut off. `justify-center` still centres it when it
+              // fits; `overflow-y-auto` lets it scroll when it does not.
+              className="flex-1 min-h-0 overflow-y-auto flex flex-col items-center justify-center px-4 py-4 sm:-mt-8 select-none thin-scrollbar"
             >
               {/* Greeting Header */}
               <GreetingHeader />

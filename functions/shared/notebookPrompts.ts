@@ -131,6 +131,8 @@ export type StudioKind =
   | 'faq'
   | 'timeline'
   | 'mindmap'
+  | 'flashcards'
+  | 'quiz'
   | 'summary';
 
 export const STUDIO_KINDS: readonly StudioKind[] = [
@@ -139,8 +141,17 @@ export const STUDIO_KINDS: readonly StudioKind[] = [
   'faq',
   'timeline',
   'mindmap',
+  'flashcards',
+  'quiz',
   'summary',
 ];
+
+/** Kinds whose reply is parsed as JSON rather than rendered as Markdown. */
+export const STRUCTURED_STUDIO_KINDS: readonly StudioKind[] = ['flashcards', 'quiz'];
+
+export function isStructuredStudioKind(value: unknown): boolean {
+  return typeof value === 'string' && (STRUCTURED_STUDIO_KINDS as readonly string[]).includes(value);
+}
 
 export function isStudioKind(value: unknown): value is StudioKind {
   return typeof value === 'string' && (STUDIO_KINDS as readonly string[]).includes(value);
@@ -179,6 +190,21 @@ const STUDIO_INSTRUCTIONS: Record<StudioKind, string> = {
     'The first line is a single top-level bullet naming the central concept.',
     'Nest two to four levels deep using two spaces of indentation per level. Aim for 4 to 7 branches at the first level and 2 to 5 children under each.',
     'Every node is a short noun phrase of at most six words. Do not write sentences, and do not add citations inside the map.',
+  ].join('\n'),
+  flashcards: [
+    'Produce a flashcard deck as strict JSON and nothing else — no prose, no Markdown, no code fence.',
+    'Shape: {"cards":[{"front":"<prompt>","back":"<answer>","source":<source number>}]}',
+    'Write 10 to 16 cards covering the most testable facts, definitions and relationships in the sources.',
+    'The front is a question or a term, at most 18 words. The back is the answer in one or two sentences.',
+    'Do not put bracketed citation markers inside the text; use the numeric "source" field instead.',
+  ].join('\n'),
+  quiz: [
+    'Produce a multiple-choice quiz as strict JSON and nothing else — no prose, no Markdown, no code fence.',
+    'Shape: {"questions":[{"question":"<question>","options":["<a>","<b>","<c>","<d>"],"answer":<0-based index of the correct option>,"explanation":"<why it is correct>","source":<source number>}]}',
+    'Write 8 to 12 questions, each with exactly four options. Exactly one option is correct.',
+    'Distractors must be plausible and drawn from the same subject matter, never joke answers or "none of the above".',
+    'Vary which index holds the correct answer. The explanation is one or two sentences.',
+    'Do not put bracketed citation markers inside the text; use the numeric "source" field instead.',
   ].join('\n'),
   summary: [
     'Produce a notebook overview in Markdown: a two-to-four sentence summary paragraph, then a `## Key topics` bulleted list of 4 to 8 topics.',

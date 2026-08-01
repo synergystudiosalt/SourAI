@@ -4,6 +4,16 @@
 @variant dark (&:where(.dark, .dark *));
 
 @layer utilities {
+  /* Full height of what the user can actually see.
+     The three declarations are a deliberate cascade, best last: `vh` for very
+     old browsers, `dvh` for a collapsing mobile toolbar, and the custom
+     property — published from `visualViewport` — for the on-screen keyboard,
+     which on iOS never changes either of the other two. */
+  .h-app-shell {
+    height: 100vh;
+    height: 100dvh;
+    height: var(--app-viewport-height, 100dvh);
+  }
   .font-instrument {
     font-family: 'Instrument Serif', 'Newsreader', Georgia, serif;
   }

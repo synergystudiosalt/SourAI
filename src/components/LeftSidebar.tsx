@@ -61,7 +61,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
           This used to be `hidden sm:flex`, which left a phone with no way to
           reach any workspace at all — the drawer toggle lives here. It is the
           same 46px rail at every width. */}
-      <div className="flex w-[46px] h-screen bg-[#fbfcfd] dark:bg-[#17191d] border-r border-[#e3e4e6] dark:border-[#282c33] flex-col items-center justify-between py-3 z-30 shrink-0 select-none">
+      <div className="flex w-[46px] h-app-shell bg-[#fbfcfd] dark:bg-[#17191d] border-r border-[#e3e4e6] dark:border-[#282c33] flex-col items-center justify-between py-3 z-30 shrink-0 select-none">
         {/* Top Icons */}
         <div className="flex flex-col items-center gap-2.5">
           {/* Sidebar Toggle */}
@@ -165,7 +165,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
               // The drawer sits beside the icon rail at every width. Full-bleed
               // on a phone covered the rail completely, which left no way to
               // switch workspaces and no backdrop to tap to dismiss.
-              className="relative left-[46px] w-[calc(100%-46px)] sm:w-[260px] h-screen bg-[#fbfcfd] dark:bg-[#17191d] border-r border-[#e3e4e6] dark:border-[#282c33] text-[#16181d] dark:text-[#dce0e5] flex flex-col z-50 shadow-xl"
+              className="relative left-[46px] w-[calc(100%-46px)] sm:w-[260px] h-app-shell bg-[#fbfcfd] dark:bg-[#17191d] border-r border-[#e3e4e6] dark:border-[#282c33] text-[#16181d] dark:text-[#dce0e5] flex flex-col z-50 shadow-xl"
             >
               {/* Header */}
               <div className="p-3 md:p-4 border-b border-[#e3e4e6] dark:border-[#282c33] flex items-center justify-between">

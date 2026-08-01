@@ -9,16 +9,21 @@ import { createNotebookId } from '../../features/notebook/types';
 /**
  * The three ways a source gets into a notebook: a file, a link, or pasted text.
  *
- * File parsing reuses the app's existing extractor (`utils/fileParser`), which
- * already handles PDF text extraction and DOCX unpacking safely; the notebook
- * keeps only the text, since a grounded answer is written from words rather
- * than from page rasters.
+ * DOCX and plain files reuse the app's existing extractor (`utils/fileParser`).
+ * PDFs do not: that parser stops after five pages and rasterises each one for a
+ * vision model, so a notebook source built from it silently contained a
+ * fraction of the document. `features/notebook/pdfText` reads the whole file as
+ * text instead, which is all a grounded, citable answer needs.
  */
 
 const ACCEPTED_FILES =
   '.txt,.md,.markdown,.json,.csv,.tsv,.log,.pdf,.doc,.docx,.js,.ts,.tsx,.jsx,.py,.html,.css,.yml,.yaml,.xml,.sql,.sh,.rs,.go,.java,.rb,.php,.c,.cpp,.cs';
 
 const MAX_SOURCES = 50;
+
+function isPdf(file: File): boolean {
+  return file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+}
 
 function kindForFile(name: string, parsedType: string): NotebookSourceKind {
   const lower = name.toLowerCase();
@@ -49,6 +54,7 @@ export const AddSourceDialog: React.FC<AddSourceDialogProps> = ({
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [progress, setProgress] = useState<string | null>(null);
   const [linkValue, setLinkValue] = useState('');
   const [pasteTitle, setPasteTitle] = useState('');
   const [pasteValue, setPasteValue] = useState('');
@@ -58,6 +64,7 @@ export const AddSourceDialog: React.FC<AddSourceDialogProps> = ({
 
   const reset = () => {
     setError(null);
+    setProgress(null);
     setLinkValue('');
     setPasteTitle('');
     setPasteValue('');
@@ -77,12 +84,42 @@ export const AddSourceDialog: React.FC<AddSourceDialogProps> = ({
     }
     setIsBusy(true);
     setError(null);
+    setProgress(null);
     try {
-      const { parseUploadedFile } = await import('../../utils/fileParser');
+      const [{ parseUploadedFile }, { extractPdf }] = await Promise.all([
+        import('../../utils/fileParser'),
+        import('../../features/notebook/pdfText'),
+      ]);
       const added: NotebookSource[] = [];
       const failed: string[] = [];
       for (const file of list) {
+        const position = list.length > 1 ? ` (${added.length + failed.length + 1}/${list.length})` : '';
+        setProgress(`Reading ${file.name}${position}…`);
         try {
+          // PDFs go through the notebook's own reader. The shared attachment
+          // parser stops after five pages and rasterises each one for a vision
+          // model, which quietly threw away most of any real document.
+          if (isPdf(file)) {
+            const extracted = await extractPdf(file, file.name);
+            await extracted.handle.close();
+            if (!extracted.text.trim()) {
+              failed.push(
+                `${file.name} — no selectable text on any page; it looks like a scan.`
+              );
+              continue;
+            }
+            added.push({
+              id: createNotebookId(),
+              title: file.name,
+              kind: 'pdf',
+              content: extracted.text,
+              addedAt: Date.now(),
+              selected: true,
+              summaryState: 'idle',
+            });
+            continue;
+          }
+
           const parsed = await parseUploadedFile(file);
           const content = (parsed.content || '').trim();
           if (!content) {
@@ -99,9 +136,10 @@ export const AddSourceDialog: React.FC<AddSourceDialogProps> = ({
             summaryState: 'idle',
           });
         } catch (fileError) {
-          failed.push(`${file.name} (${(fileError as Error)?.message ?? 'could not be read'})`);
+          failed.push(`${file.name} — ${(fileError as Error)?.message ?? 'could not be read'}`);
         }
       }
+      setProgress(null);
       if (added.length > 0) onAddSources(added);
       if (failed.length > 0) {
         setError(`Could not add: ${failed.join(', ')}`);
@@ -110,6 +148,7 @@ export const AddSourceDialog: React.FC<AddSourceDialogProps> = ({
       }
       close();
     } catch (uploadError) {
+      setProgress(null);
       setError((uploadError as Error)?.message ?? 'Those files could not be read.');
       setIsBusy(false);
     }
@@ -341,7 +380,7 @@ export const AddSourceDialog: React.FC<AddSourceDialogProps> = ({
               {isBusy && tab === 'upload' && (
                 <div className="mt-3 flex items-center gap-2 text-[11.5px] text-[#4a5259] dark:text-[#a9afbc]">
                   <Loader2 className="h-3.5 w-3.5 animate-spin text-[#4776d5]" />
-                  Reading files…
+                  <span className="truncate">{progress ?? 'Reading files…'}</span>
                 </div>
               )}
 
