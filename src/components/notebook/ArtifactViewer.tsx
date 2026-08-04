@@ -33,6 +33,7 @@ import { synthesizeAudioOverview } from '../../features/notebook/audioOverview';
 import { Flashcards } from './Flashcards';
 import { MindMap } from './MindMap';
 import { NotebookMarkdown } from './NotebookMarkdown';
+import { PresentationViewer } from './PresentationViewer';
 import { QuizView } from './Quiz';
 import type { StudyReview } from './StudyResults';
 
@@ -387,9 +388,11 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
             </>
           ) : (
             <>
-              <h2 className="mt-1 mb-4 font-heading text-[22px] not-italic leading-snug text-[#16181d] dark:text-[#dce0e5]">
-                {artifact.title}
-              </h2>
+              {artifact.kind !== 'presentation' && (
+                <h2 className="mt-1 mb-4 font-heading text-[22px] not-italic leading-snug text-[#16181d] dark:text-[#dce0e5]">
+                  {artifact.title}
+                </h2>
+              )}
               {artifact.kind === 'audio_overview' && (
                 <div className="mb-5 border border-[#dfe3ea] bg-[#f6f8fa] p-3 dark:border-[#282c33] dark:bg-[#1e2128]">
                   <div className="flex items-center justify-between gap-3">
@@ -425,7 +428,15 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
                   {audioError && <p role="alert" className="mt-2 text-[10.5px] text-[#b5484a]">{audioError}</p>}
                 </div>
               )}
-              {artifact.kind === 'mindmap' ? (
+              {artifact.kind === 'presentation' ? (
+                <PresentationViewer
+                  markdown={artifact.content}
+                  fallbackTitle={artifact.title}
+                  notebookTitle={notebook.title}
+                  sourceLabel={resolver.labelFor}
+                  onOpenSource={resolver.onSelect}
+                />
+              ) : artifact.kind === 'mindmap' ? (
                 <MindMap markdown={artifact.content} rootLabel={notebook.title} />
               ) : artifact.kind === 'flashcards' ? (
                 <Flashcards

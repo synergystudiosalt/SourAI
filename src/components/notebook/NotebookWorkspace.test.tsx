@@ -205,6 +205,7 @@ describe('NotebookWorkspace', () => {
     let dialog = await screen.findByRole('dialog', { name: /Presentation settings/ });
     await user.click(within(dialog).getByRole('button', { name: 'Generate' }));
     expect(await screen.findByRole('region', { name: /Studio output: Presentation/ })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Presentation viewer' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /Audio overview/ }));
     dialog = await screen.findByRole('dialog', { name: /Audio overview settings/ });
