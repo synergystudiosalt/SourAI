@@ -40,18 +40,35 @@ function wavParts(buffer: ArrayBuffer): { format: Uint8Array; data: Uint8Array }
     const id = ascii(bytes, offset, 4);
     const size = view.getUint32(offset + 4, true);
     const start = offset + 8;
-    if (start + size > bytes.length) break;
-    if (id === 'fmt ') format = bytes.slice(start, start + size);
-    if (id === 'data') data = bytes.slice(start, start + size);
+    const end = start + size;
+    if (id === 'fmt ') {
+      if (end > bytes.length) break;
+      format = bytes.slice(start, end);
+    }
+    if (id === 'data') {
+      // Groq occasionally closes a response after all available PCM bytes have
+      // arrived but leaves a larger size in the data header. The audio is still
+      // recoverable: take the bytes that arrived and write a corrected header
+      // in mergeWavSegments below.
+      data = bytes.slice(start, Math.min(end, bytes.length));
+    }
+    if (end > bytes.length) break;
     offset = start + size + (size % 2);
   }
   if (!format || !data) throw new Error('Groq returned an incomplete WAV segment.');
+  const blockAlign = format.length >= 14
+    ? new DataView(format.buffer, format.byteOffset, format.byteLength).getUint16(12, true)
+    : 1;
+  if (blockAlign > 1 && data.length % blockAlign) {
+    data = data.slice(0, data.length - (data.length % blockAlign));
+  }
+  if (data.length === 0) throw new Error('Groq returned an empty WAV segment.');
   return { format, data };
 }
 
 /** Joins PCM WAV responses without leaving an invalid header between chunks. */
 export function mergeWavSegments(segments: ArrayBuffer[]): ArrayBuffer {
-  if (segments.length === 1) return segments[0];
+  if (segments.length === 0) throw new Error('Groq returned no WAV segments.');
   const parts = segments.map(wavParts);
   const format = parts[0].format;
   if (parts.some((part) => part.format.length !== format.length || part.format.some((byte, i) => byte !== format[i]))) {
@@ -59,7 +76,8 @@ export function mergeWavSegments(segments: ArrayBuffer[]): ArrayBuffer {
   }
   const formatPad = format.length % 2;
   const dataLength = parts.reduce((total, part) => total + part.data.length, 0);
-  const output = new Uint8Array(12 + 8 + format.length + formatPad + 8 + dataLength);
+  const dataPad = dataLength % 2;
+  const output = new Uint8Array(12 + 8 + format.length + formatPad + 8 + dataLength + dataPad);
   const view = new DataView(output.buffer);
   const writeAscii = (offset: number, value: string) => value.split('').forEach((char, index) => { output[offset + index] = char.charCodeAt(0); });
   writeAscii(0, 'RIFF');

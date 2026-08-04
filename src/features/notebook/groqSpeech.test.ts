@@ -23,6 +23,12 @@ function wav(data: number[]): ArrayBuffer {
   return output.buffer;
 }
 
+function wavWithOversizedDataHeader(data: number[], declaredSize: number): ArrayBuffer {
+  const buffer = wav(data);
+  new DataView(buffer).setUint32(40, declaredSize, true);
+  return buffer;
+}
+
 describe('Groq speech preparation', () => {
   it('splits long transcripts under the provider request limit without losing words', () => {
     const text = 'One sentence ends here. '.repeat(30).trim();
@@ -32,10 +38,18 @@ describe('Groq speech preparation', () => {
   });
 
   it('merges WAV payloads behind one valid header', () => {
-    const merged = mergeWavSegments([wav([1, 2]), wav([3, 4, 5])]);
+    const merged = mergeWavSegments([wav([1, 2]), wav([3, 4, 5, 6])]);
     const bytes = new Uint8Array(merged);
     expect(new TextDecoder().decode(bytes.slice(0, 4))).toBe('RIFF');
-    expect(new DataView(merged).getUint32(40, true)).toBe(5);
-    expect([...bytes.slice(44)]).toEqual([1, 2, 3, 4, 5]);
+    expect(new DataView(merged).getUint32(40, true)).toBe(6);
+    expect([...bytes.slice(44)]).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+
+  it('repairs a truncated Groq data chunk and drops an incomplete PCM frame', () => {
+    const merged = mergeWavSegments([wavWithOversizedDataHeader([1, 2, 3], 100)]);
+    const bytes = new Uint8Array(merged);
+    expect(new DataView(merged).getUint32(4, true)).toBe(38);
+    expect(new DataView(merged).getUint32(40, true)).toBe(2);
+    expect([...bytes.slice(44)]).toEqual([1, 2]);
   });
 });

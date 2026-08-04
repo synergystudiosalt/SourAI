@@ -66,7 +66,7 @@ const GENERATORS: {
   {
     kind: 'audio_overview',
     label: 'Audio overview',
-    hint: 'A grounded transcript voiced by Groq',
+    hint: 'A grounded audio summary voiced by Groq',
     icon: Headphones,
   },
 ];

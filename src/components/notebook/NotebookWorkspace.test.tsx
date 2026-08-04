@@ -42,7 +42,15 @@ interface StubResponses {
 
 function stubNotebookApi(responses: StubResponses = {}) {
   const calls: { action: string; body: any }[] = [];
-  const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+  const fetchMock = vi.fn(async (url: string, init: RequestInit) => {
+    if (url.includes('/api/text-to-speech')) {
+      calls.push({ action: 'text-to-speech', body: JSON.parse(String(init.body)) });
+      return {
+        ok: true,
+        status: 200,
+        blob: async () => new Blob(['audio'], { type: 'audio/wav' }),
+      } as Response;
+    }
     const body = JSON.parse(String(init.body));
     calls.push({ action: body.action, body });
     const payload =
@@ -95,6 +103,14 @@ const Harness: React.FC<{ initial: Notebook; units?: number; onUpgrade?: () => v
 describe('NotebookWorkspace', () => {
   beforeEach(() => {
     stubNotebookApi();
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: vi.fn(() => 'blob:audio-overview'),
+    });
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      configurable: true,
+      value: vi.fn(),
+    });
   });
 
   it('asks the user for a source before it will answer anything', () => {
@@ -211,10 +227,13 @@ describe('NotebookWorkspace', () => {
     dialog = await screen.findByRole('dialog', { name: /Audio overview settings/ });
     await user.click(within(dialog).getByRole('button', { name: 'Generate' }));
     expect(await screen.findByRole('region', { name: /Studio output: Audio overview/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Create audio' })).toBeInTheDocument();
+    expect(await screen.findByRole('region', { name: 'Audio overview player' })).toBeInTheDocument();
+    expect(await screen.findByLabelText('Audio overview')).toBeInTheDocument();
+    expect(screen.queryByText('Review questions')).not.toBeInTheDocument();
 
     expect(calls.filter((call) => call.action === 'studio').map((call) => call.body.kind))
       .toEqual(['presentation', 'audio_overview']);
+    expect(calls.filter((call) => call.action === 'text-to-speech')).toHaveLength(1);
   });
 
   it('renders a generated mind map as an explorable tree, not raw Markdown', async () => {

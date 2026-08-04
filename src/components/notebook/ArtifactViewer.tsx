@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   ArrowLeft,
@@ -10,7 +10,6 @@ import {
   FileText,
   Presentation,
   Headphones,
-  Play,
   Loader2,
   Pencil,
 } from 'lucide-react';
@@ -176,7 +175,7 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
     }
   };
 
-  const createAudio = async (): Promise<Blob | null> => {
+  const createAudio = useCallback(async (): Promise<Blob | null> => {
     if (audioBlob) return audioBlob;
     setAudioState('loading');
     setAudioError(null);
@@ -193,7 +192,11 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
       setAudioError((error as Error)?.message ?? 'The audio overview could not be created.');
       return null;
     }
-  };
+  }, [artifact.content, audioBlob]);
+
+  useEffect(() => {
+    if (artifact.kind === 'audio_overview' && audioState === 'idle') void createAudio();
+  }, [artifact.kind, artifact.id, audioState, createAudio]);
 
   const downloadAudio = async () => {
     const blob = await createAudio();
@@ -394,41 +397,51 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
                 </h2>
               )}
               {artifact.kind === 'audio_overview' && (
-                <div className="mb-5 border border-[#dfe3ea] bg-[#f6f8fa] p-3 dark:border-[#282c33] dark:bg-[#1e2128]">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      <Headphones className="h-4 w-4 text-[#4776d5]" />
-                      <div>
-                        <p className="text-[12px] font-medium text-[#16181d] dark:text-[#dce0e5]">Groq audio overview</p>
-                        <p className="text-[10.5px] text-[#78828e]">Your transcript is sent to Groq only when you create the audio.</p>
-                      </div>
+                <section aria-label="Audio overview player" className="border border-[#dfe3ea] bg-[#f6f8fa] p-5 dark:border-[#282c33] dark:bg-[#1e2128]">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#4776d5]/10">
+                      {audioState === 'loading'
+                        ? <Loader2 className="h-5 w-5 animate-spin text-[#4776d5]" />
+                        : <Headphones className="h-5 w-5 text-[#4776d5]" />}
                     </div>
-                    {audioUrl ? (
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[12px] font-medium text-[#16181d] dark:text-[#dce0e5]">
+                        {audioState === 'loading' ? 'Creating your audio overview' : 'Audio overview'}
+                      </p>
+                      <p className="text-[10.5px] text-[#78828e]">
+                        {audioState === 'loading' ? 'Groq is turning the overview into speech…' : 'Generated with Groq speech'}
+                      </p>
+                    </div>
+                    {audioUrl && (
                       <button
                         type="button"
                         onClick={() => void downloadAudio()}
                         className="flex shrink-0 items-center gap-1.5 bg-[#4776d5] px-3 py-1.5 text-[11.5px] font-medium text-white interactable-btn"
                       >
                         <Download className="h-3 w-3" />
-                        Download audio
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => void createAudio()}
-                        disabled={audioState === 'loading'}
-                        className="flex shrink-0 items-center gap-1.5 bg-[#4776d5] px-3 py-1.5 text-[11.5px] font-medium text-white disabled:opacity-60 interactable-btn"
-                      >
-                        {audioState === 'loading' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
-                        {audioState === 'loading' ? 'Creating audio' : 'Create audio'}
+                        Download
                       </button>
                     )}
                   </div>
-                  {audioUrl && <audio ref={audioRef} src={audioUrl} controls className="mt-3 w-full" />}
-                  {audioError && <p role="alert" className="mt-2 text-[10.5px] text-[#b5484a]">{audioError}</p>}
-                </div>
+                  {audioUrl && <audio ref={audioRef} aria-label="Audio overview" src={audioUrl} controls className="mt-4 w-full" />}
+                  {audioError && (
+                    <div className="mt-3 flex items-center justify-between gap-3">
+                      <p role="alert" className="text-[10.5px] text-[#b5484a]">{audioError}</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAudioState('idle');
+                          setAudioError(null);
+                        }}
+                        className="shrink-0 border border-[#dfe3ea] px-2.5 py-1 text-[11px] text-[#4a5259] hover:border-[#4776d5] hover:text-[#4776d5] dark:border-[#282c33] dark:text-[#a9afbc]"
+                      >
+                        Retry
+                      </button>
+                    </div>
+                  )}
+                </section>
               )}
-              {artifact.kind === 'presentation' ? (
+              {artifact.kind === 'audio_overview' ? null : artifact.kind === 'presentation' ? (
                 <PresentationViewer
                   markdown={artifact.content}
                   fallbackTitle={artifact.title}
