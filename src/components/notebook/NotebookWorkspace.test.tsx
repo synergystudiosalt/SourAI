@@ -229,7 +229,10 @@ describe('NotebookWorkspace', () => {
     expect(await screen.findByRole('region', { name: /Studio output: Audio overview/ })).toBeInTheDocument();
     expect(await screen.findByRole('region', { name: 'Audio overview player' })).toBeInTheDocument();
     expect(await screen.findByLabelText('Audio overview')).toBeInTheDocument();
+    expect(screen.getByText('Generated with Sour')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Audio waveform' })).toBeInTheDocument();
     expect(screen.queryByText('Review questions')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Groq speech/i)).not.toBeInTheDocument();
 
     expect(calls.filter((call) => call.action === 'studio').map((call) => call.body.kind))
       .toEqual(['presentation', 'audio_overview']);

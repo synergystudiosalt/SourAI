@@ -29,6 +29,7 @@ import type { StudyAttempt } from '../../../functions/shared/studyAttempt';
 import { downloadArtifact, type ExportFormat } from '../../features/notebook/exportArtifact';
 import { saveBlob, safeFileName } from '../../features/notebook/exportArtifact';
 import { synthesizeAudioOverview } from '../../features/notebook/audioOverview';
+import { AudioOverviewPlayer } from './AudioOverviewPlayer';
 import { Flashcards } from './Flashcards';
 import { MindMap } from './MindMap';
 import { NotebookMarkdown } from './NotebookMarkdown';
@@ -93,7 +94,6 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [audioError, setAudioError] = useState<string | null>(null);
   const downloadRef = useRef<HTMLDivElement>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
   const audioUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -409,7 +409,7 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
                         {audioState === 'loading' ? 'Creating your audio overview' : 'Audio overview'}
                       </p>
                       <p className="text-[10.5px] text-[#78828e]">
-                        {audioState === 'loading' ? 'Groq is turning the overview into speech…' : 'Generated with Groq speech'}
+                        {audioState === 'loading' ? 'Sour is preparing your audio…' : 'Generated with Sour'}
                       </p>
                     </div>
                     {audioUrl && (
@@ -423,7 +423,7 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
                       </button>
                     )}
                   </div>
-                  {audioUrl && <audio ref={audioRef} aria-label="Audio overview" src={audioUrl} controls className="mt-4 w-full" />}
+                  {audioUrl && <AudioOverviewPlayer src={audioUrl} />}
                   {audioError && (
                     <div className="mt-3 flex items-center justify-between gap-3">
                       <p role="alert" className="text-[10.5px] text-[#b5484a]">{audioError}</p>
