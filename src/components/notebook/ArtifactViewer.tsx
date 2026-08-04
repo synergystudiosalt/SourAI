@@ -8,6 +8,9 @@ import {
   FileImage,
   FilePlus2,
   FileText,
+  Presentation,
+  Headphones,
+  Play,
   Loader2,
   Pencil,
 } from 'lucide-react';
@@ -25,6 +28,8 @@ import {
 } from '../../features/notebook/studyContent';
 import type { StudyAttempt } from '../../../functions/shared/studyAttempt';
 import { downloadArtifact, type ExportFormat } from '../../features/notebook/exportArtifact';
+import { saveBlob, safeFileName } from '../../features/notebook/exportArtifact';
+import { synthesizeAudioOverview } from '../../features/notebook/audioOverview';
 import { Flashcards } from './Flashcards';
 import { MindMap } from './MindMap';
 import { NotebookMarkdown } from './NotebookMarkdown';
@@ -83,13 +88,32 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [downloading, setDownloading] = useState<ExportFormat | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [audioState, setAudioState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [audioError, setAudioError] = useState<string | null>(null);
   const downloadRef = useRef<HTMLDivElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const audioUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
     setDraft(artifact.content);
     setTitle(artifact.title);
     setIsEditing(artifact.kind === 'note' && !artifact.content);
   }, [artifact.id, artifact.kind, artifact.content, artifact.title]);
+
+  useEffect(() => {
+    setAudioState('idle');
+    setAudioBlob(null);
+    setAudioError(null);
+    if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+    audioUrlRef.current = null;
+    setAudioUrl(null);
+    return () => {
+      if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
+    };
+  }, [artifact.id]);
 
   const resolver = {
     labelFor: (index: number) => {
@@ -149,6 +173,30 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
     } catch {
       // Clipboard access can be denied; the text stays selectable on screen.
     }
+  };
+
+  const createAudio = async (): Promise<Blob | null> => {
+    if (audioBlob) return audioBlob;
+    setAudioState('loading');
+    setAudioError(null);
+    try {
+      const blob = await synthesizeAudioOverview(artifact.content);
+      const url = URL.createObjectURL(blob);
+      audioUrlRef.current = url;
+      setAudioBlob(blob);
+      setAudioUrl(url);
+      setAudioState('ready');
+      return blob;
+    } catch (error) {
+      setAudioState('error');
+      setAudioError((error as Error)?.message ?? 'The audio overview could not be created.');
+      return null;
+    }
+  };
+
+  const downloadAudio = async () => {
+    const blob = await createAudio();
+    if (blob) saveBlob(blob, `${safeFileName(artifact.title)}.wav`);
   };
 
   return (
@@ -231,6 +279,38 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
                     )}
                     Image (.png)
                   </button>
+                  {artifact.kind === 'presentation' && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => void download('pptx')}
+                      disabled={downloading !== null}
+                      className="dropdown-item flex w-full items-center gap-2 px-2.5 py-2 text-left text-[11.5px] text-[#16181d] disabled:opacity-50 dark:text-[#dce0e5]"
+                    >
+                      {downloading === 'pptx' ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-[#4776d5]" />
+                      ) : (
+                        <Presentation className="h-3.5 w-3.5 text-[#4776d5]" />
+                      )}
+                      PowerPoint (.pptx)
+                    </button>
+                  )}
+                  {artifact.kind === 'audio_overview' && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => void downloadAudio()}
+                      disabled={audioState === 'loading'}
+                      className="dropdown-item flex w-full items-center gap-2 px-2.5 py-2 text-left text-[11.5px] text-[#16181d] disabled:opacity-50 dark:text-[#dce0e5]"
+                    >
+                      {audioState === 'loading' ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-[#4776d5]" />
+                      ) : (
+                        <Headphones className="h-3.5 w-3.5 text-[#4776d5]" />
+                      )}
+                      Audio overview (.wav)
+                    </button>
+                  )}
                   {downloadError && (
                     <p role="alert" className="px-2.5 py-2 text-[10.5px] text-[#b5484a]">
                       {downloadError}
@@ -310,6 +390,41 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
               <h2 className="mt-1 mb-4 font-heading text-[22px] not-italic leading-snug text-[#16181d] dark:text-[#dce0e5]">
                 {artifact.title}
               </h2>
+              {artifact.kind === 'audio_overview' && (
+                <div className="mb-5 border border-[#dfe3ea] bg-[#f6f8fa] p-3 dark:border-[#282c33] dark:bg-[#1e2128]">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <Headphones className="h-4 w-4 text-[#4776d5]" />
+                      <div>
+                        <p className="text-[12px] font-medium text-[#16181d] dark:text-[#dce0e5]">Groq audio overview</p>
+                        <p className="text-[10.5px] text-[#78828e]">Your transcript is sent to Groq only when you create the audio.</p>
+                      </div>
+                    </div>
+                    {audioUrl ? (
+                      <button
+                        type="button"
+                        onClick={() => void downloadAudio()}
+                        className="flex shrink-0 items-center gap-1.5 bg-[#4776d5] px-3 py-1.5 text-[11.5px] font-medium text-white interactable-btn"
+                      >
+                        <Download className="h-3 w-3" />
+                        Download audio
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => void createAudio()}
+                        disabled={audioState === 'loading'}
+                        className="flex shrink-0 items-center gap-1.5 bg-[#4776d5] px-3 py-1.5 text-[11.5px] font-medium text-white disabled:opacity-60 interactable-btn"
+                      >
+                        {audioState === 'loading' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
+                        {audioState === 'loading' ? 'Creating audio' : 'Create audio'}
+                      </button>
+                    )}
+                  </div>
+                  {audioUrl && <audio ref={audioRef} src={audioUrl} controls className="mt-3 w-full" />}
+                  {audioError && <p role="alert" className="mt-2 text-[10.5px] text-[#b5484a]">{audioError}</p>}
+                </div>
+              )}
               {artifact.kind === 'mindmap' ? (
                 <MindMap markdown={artifact.content} rootLabel={notebook.title} />
               ) : artifact.kind === 'flashcards' ? (

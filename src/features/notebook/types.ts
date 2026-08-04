@@ -64,7 +64,9 @@ export type StudioArtifactKind =
   | 'timeline'
   | 'mindmap'
   | 'flashcards'
-  | 'quiz';
+  | 'quiz'
+  | 'presentation'
+  | 'audio_overview';
 
 /** Kinds stored as JSON and rendered as an interactive widget, not as prose. */
 export const INTERACTIVE_ARTIFACT_KINDS: readonly StudioArtifactKind[] = ['flashcards', 'quiz'];
@@ -151,6 +153,8 @@ const STUDIO_TITLES: Record<StudioArtifactKind, string> = {
   mindmap: 'Mind map',
   flashcards: 'Flashcards',
   quiz: 'Quiz',
+  presentation: 'Presentation',
+  audio_overview: 'Audio overview',
 };
 
 export function studioArtifactTitle(kind: StudioArtifactKind): string {

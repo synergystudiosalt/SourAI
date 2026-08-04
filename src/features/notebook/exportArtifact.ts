@@ -15,7 +15,7 @@ export interface ExportableArtifact {
   notebookTitle?: string;
 }
 
-export type ExportFormat = 'docx' | 'png';
+export type ExportFormat = 'docx' | 'png' | 'pptx';
 
 function escapeXml(value: string): string {
   return value
@@ -329,6 +329,11 @@ export async function downloadArtifact(
   format: ExportFormat
 ): Promise<void> {
   const base = safeFileName(artifact.title);
+  if (format === 'pptx') {
+    const { buildPptx } = await import('./presentation');
+    saveBlob(await buildPptx(artifact.text, artifact.title, artifact.notebookTitle), `${base}.pptx`);
+    return;
+  }
   if (format === 'docx') {
     saveBlob(await buildDocx(artifact), `${base}.docx`);
     return;

@@ -51,6 +51,8 @@ export const STUDIO_OPTION_SPECS: Partial<Record<StudioKind, StudioOptionSpec>> 
   },
   study_guide: { difficulty: true, focus: true },
   faq: { count: { min: 4, max: 25, fallback: 10, noun: 'questions' }, difficulty: false, focus: true },
+  presentation: { count: { min: 4, max: 15, fallback: 8, noun: 'slides' }, difficulty: false, focus: true },
+  audio_overview: { difficulty: false, focus: true },
 };
 
 export function studioOptionSpec(kind: StudioKind): StudioOptionSpec | undefined {

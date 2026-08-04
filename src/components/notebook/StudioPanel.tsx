@@ -12,6 +12,8 @@ import {
   Loader2,
   Trash2,
   StickyNote,
+  Presentation,
+  Headphones,
 } from 'lucide-react';
 
 import {
@@ -55,6 +57,18 @@ const GENERATORS: {
   { kind: 'quiz', label: 'Quiz', hint: 'Multiple choice, marked as you go', icon: ListChecks },
   { kind: 'timeline', label: 'Timeline', hint: 'Events in order, with a cast list', icon: CalendarClock },
   { kind: 'mindmap', label: 'Mind map', hint: 'An explorable map of the ideas', icon: Network },
+  {
+    kind: 'presentation',
+    label: 'Presentation',
+    hint: 'A polished deck you can export to PowerPoint',
+    icon: Presentation,
+  },
+  {
+    kind: 'audio_overview',
+    label: 'Audio overview',
+    hint: 'A grounded transcript voiced by Groq',
+    icon: Headphones,
+  },
 ];
 
 const KIND_ICONS: Record<StudioArtifactKind, React.ComponentType<{ className?: string }>> = {
@@ -66,6 +80,8 @@ const KIND_ICONS: Record<StudioArtifactKind, React.ComponentType<{ className?: s
   faq: HelpCircle,
   timeline: CalendarClock,
   mindmap: Network,
+  presentation: Presentation,
+  audio_overview: Headphones,
 };
 
 export interface StudioPanelProps {

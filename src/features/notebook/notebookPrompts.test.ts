@@ -96,6 +96,8 @@ describe('prompts', () => {
     expect(buildStudioPrompt('faq', packed)).toMatch(/frequently-asked-questions/i);
     expect(buildStudioPrompt('mindmap', packed)).toMatch(/nested Markdown bullet list/i);
     expect(buildStudioPrompt('timeline', packed)).toMatch(/Cast of characters/i);
+    expect(buildStudioPrompt('presentation', packed)).toMatch(/PowerPoint/i);
+    expect(buildStudioPrompt('audio_overview', packed)).toMatch(/Groq speech API/i);
   });
 });
 

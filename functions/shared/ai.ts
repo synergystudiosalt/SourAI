@@ -776,14 +776,13 @@ export async function transcribeWithGroq(
 }
 
 /**
- * Text-to-speech via Groq's PlayAI voices — the only TTS route Groq serves,
- * and included on its free tier. Returns raw WAV bytes.
+ * Text-to-speech via Groq's current Orpheus English model. Returns raw WAV bytes.
  */
 export async function synthesizeSpeechWithGroq(
   keys: string[],
   text: string,
-  voice: string = 'Fritz-PlayAI',
-  model: string = 'playai-tts'
+  voice: string = 'hannah',
+  model: string = 'canopylabs/orpheus-v1-english'
 ): Promise<ArrayBuffer> {
   const state = new KeyAttemptState(keys, takeGroqKey);
   let lastErr: unknown = new Error('No Groq API keys configured');

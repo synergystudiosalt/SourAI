@@ -11,6 +11,8 @@ describe('studioOptionSpec', () => {
   it('asks for settings only where they change the output', () => {
     expect(studioOptionSpec('flashcards')?.count).toBeDefined();
     expect(studioOptionSpec('quiz')?.difficulty).toBe(true);
+    expect(studioOptionSpec('presentation')?.count?.noun).toBe('slides');
+    expect(studioOptionSpec('audio_overview')?.focus).toBe(true);
     // A mind map has nothing worth asking about, so it must not open a dialog.
     expect(studioOptionSpec('mindmap')).toBeUndefined();
     expect(studioOptionSpec('timeline')).toBeUndefined();

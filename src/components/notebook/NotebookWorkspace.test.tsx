@@ -196,6 +196,26 @@ describe('NotebookWorkspace', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
+  it('offers grounded PowerPoint and Groq audio overview generators', async () => {
+    const user = userEvent.setup();
+    const calls = stubNotebookApi();
+    render(<Harness initial={notebookWith([source()])} />);
+
+    await user.click(screen.getByRole('button', { name: /Presentation/ }));
+    let dialog = await screen.findByRole('dialog', { name: /Presentation settings/ });
+    await user.click(within(dialog).getByRole('button', { name: 'Generate' }));
+    expect(await screen.findByRole('region', { name: /Studio output: Presentation/ })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Audio overview/ }));
+    dialog = await screen.findByRole('dialog', { name: /Audio overview settings/ });
+    await user.click(within(dialog).getByRole('button', { name: 'Generate' }));
+    expect(await screen.findByRole('region', { name: /Studio output: Audio overview/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create audio' })).toBeInTheDocument();
+
+    expect(calls.filter((call) => call.action === 'studio').map((call) => call.body.kind))
+      .toEqual(['presentation', 'audio_overview']);
+  });
+
   it('renders a generated mind map as an explorable tree, not raw Markdown', async () => {
     const user = userEvent.setup();
     stubNotebookApi({

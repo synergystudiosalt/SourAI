@@ -3,7 +3,7 @@
  *
  * Speech-to-text records the mic with MediaRecorder and sends the clip to
  * /api/speech-to-text (Groq Whisper). Text-to-speech posts to
- * /api/text-to-speech (Groq PlayAI) and plays back the returned WAV. Both
+ * /api/text-to-speech (Groq Orpheus) and plays back the returned WAV. Both
  * fall back to the browser's native Web Speech API when the Groq call can't
  * be made — no server key configured, offline, unsupported codec — so the
  * mic and speaker buttons keep working either way.
@@ -193,7 +193,7 @@ function speakWithBrowserFallback(text: string, callbacks: SpeakCallbacks): void
 }
 
 /**
- * Reads text aloud with Groq's PlayAI TTS. Falls back to the browser's own
+ * Reads text aloud with Groq's Orpheus TTS. Falls back to the browser's own
  * speechSynthesis if the request fails — no server key, offline, rate limit.
  */
 export async function speakText(text: string, callbacks: SpeakCallbacks = {}, voice?: string): Promise<void> {

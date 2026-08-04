@@ -135,6 +135,8 @@ export type StudioKind =
   | 'mindmap'
   | 'flashcards'
   | 'quiz'
+  | 'presentation'
+  | 'audio_overview'
   | 'summary';
 
 export const STUDIO_KINDS: readonly StudioKind[] = [
@@ -145,6 +147,8 @@ export const STUDIO_KINDS: readonly StudioKind[] = [
   'mindmap',
   'flashcards',
   'quiz',
+  'presentation',
+  'audio_overview',
   'summary',
 ];
 
@@ -207,6 +211,21 @@ const STUDIO_INSTRUCTIONS: Record<StudioKind, string> = {
     'Distractors must be plausible and drawn from the same subject matter, never joke answers or "none of the above".',
     'Vary which index holds the correct answer. The explanation is one or two sentences.',
     'Do not put bracketed citation markers inside the text; use the numeric "source" field instead.',
+  ].join('\n'),
+  presentation: [
+    'Produce a slide deck outline in Markdown that can be exported directly to PowerPoint.',
+    'Start with one `# <deck title>` heading. Then write each content slide as `## Slide <number>: <title>`.',
+    'Under every slide heading, write 3 to 5 concise bullets. Keep each bullet under 18 words.',
+    'Create 6 to 10 content slides with a clear opening, logical progression, and final takeaway slide.',
+    'Do not add speaker notes, tables, code fences, or prose outside the slide headings and bullets.',
+    'Cite the source number at the end of every factual bullet.',
+  ].join('\n'),
+  audio_overview: [
+    'Write a natural, single-host audio overview transcript for spoken delivery.',
+    'Open with a brief hook, explain the central ideas in a coherent sequence, connect themes across sources, and close with two memorable takeaways.',
+    'Use conversational sentences and verbal transitions, not headings, bullets, stage directions, or Markdown.',
+    'Keep the complete transcript between 450 and 600 words and under 3,800 characters so it can be sent efficiently to the Groq speech API.',
+    'Place bracketed source citations after factual sentences. Never invent a co-host, quotations, sound effects, or facts outside the sources.',
   ].join('\n'),
   summary: [
     'Produce a notebook overview in Markdown: a two-to-four sentence summary paragraph, then a `## Key topics` bulleted list of 4 to 8 topics.',

@@ -1,14 +1,83 @@
 import { synthesizeSpeechWithGroq, getApiKeys, serializeAiError } from '../shared/ai';
 
-/** Groq's PlayAI TTS caps a single request around this length; trim rather than error. */
+/** Bound the complete overview; the smaller Orpheus requests are chunked below. */
 const MAX_TEXT_CHARS = 4000;
+const MAX_CHUNK_CHARS = 190;
 
 const ALLOWED_VOICES = new Set([
-  'Arista-PlayAI', 'Atlas-PlayAI', 'Basil-PlayAI', 'Briggs-PlayAI', 'Calum-PlayAI',
-  'Celeste-PlayAI', 'Cheyenne-PlayAI', 'Chip-PlayAI', 'Cillian-PlayAI', 'Deedee-PlayAI',
-  'Fritz-PlayAI', 'Gail-PlayAI', 'Indigo-PlayAI', 'Mamaw-PlayAI', 'Mason-PlayAI',
-  'Mikail-PlayAI', 'Mitch-PlayAI', 'Quinn-PlayAI', 'Thunder-PlayAI',
+  'autumn', 'diana', 'hannah', 'austin', 'daniel', 'troy',
 ]);
+
+export function splitSpeechText(text: string, maxChars = MAX_CHUNK_CHARS): string[] {
+  const chunks: string[] = [];
+  let rest = text.replace(/\s+/g, ' ').trim();
+  while (rest.length > maxChars) {
+    const window = rest.slice(0, maxChars + 1);
+    const sentence = Math.max(window.lastIndexOf('. '), window.lastIndexOf('! '), window.lastIndexOf('? '));
+    const whitespace = window.lastIndexOf(' ');
+    const end = sentence >= Math.floor(maxChars * 0.55) ? sentence + 1 : whitespace > 0 ? whitespace : maxChars;
+    chunks.push(rest.slice(0, end).trim());
+    rest = rest.slice(end).trim();
+  }
+  if (rest) chunks.push(rest);
+  return chunks;
+}
+
+function ascii(bytes: Uint8Array, offset: number, length: number): string {
+  return String.fromCharCode(...bytes.slice(offset, offset + length));
+}
+
+function wavParts(buffer: ArrayBuffer): { format: Uint8Array; data: Uint8Array } {
+  const bytes = new Uint8Array(buffer);
+  const view = new DataView(buffer);
+  if (bytes.length < 44 || ascii(bytes, 0, 4) !== 'RIFF' || ascii(bytes, 8, 4) !== 'WAVE') {
+    throw new Error('Groq returned an invalid WAV segment.');
+  }
+  let offset = 12;
+  let format: Uint8Array | undefined;
+  let data: Uint8Array | undefined;
+  while (offset + 8 <= bytes.length) {
+    const id = ascii(bytes, offset, 4);
+    const size = view.getUint32(offset + 4, true);
+    const start = offset + 8;
+    if (start + size > bytes.length) break;
+    if (id === 'fmt ') format = bytes.slice(start, start + size);
+    if (id === 'data') data = bytes.slice(start, start + size);
+    offset = start + size + (size % 2);
+  }
+  if (!format || !data) throw new Error('Groq returned an incomplete WAV segment.');
+  return { format, data };
+}
+
+/** Joins PCM WAV responses without leaving an invalid header between chunks. */
+export function mergeWavSegments(segments: ArrayBuffer[]): ArrayBuffer {
+  if (segments.length === 1) return segments[0];
+  const parts = segments.map(wavParts);
+  const format = parts[0].format;
+  if (parts.some((part) => part.format.length !== format.length || part.format.some((byte, i) => byte !== format[i]))) {
+    throw new Error('Groq returned WAV segments with incompatible formats.');
+  }
+  const formatPad = format.length % 2;
+  const dataLength = parts.reduce((total, part) => total + part.data.length, 0);
+  const output = new Uint8Array(12 + 8 + format.length + formatPad + 8 + dataLength);
+  const view = new DataView(output.buffer);
+  const writeAscii = (offset: number, value: string) => value.split('').forEach((char, index) => { output[offset + index] = char.charCodeAt(0); });
+  writeAscii(0, 'RIFF');
+  view.setUint32(4, output.length - 8, true);
+  writeAscii(8, 'WAVE');
+  writeAscii(12, 'fmt ');
+  view.setUint32(16, format.length, true);
+  output.set(format, 20);
+  const dataHeader = 20 + format.length + formatPad;
+  writeAscii(dataHeader, 'data');
+  view.setUint32(dataHeader + 4, dataLength, true);
+  let cursor = dataHeader + 8;
+  for (const part of parts) {
+    output.set(part.data, cursor);
+    cursor += part.data.length;
+  }
+  return output.buffer;
+}
 
 export const onRequest: PagesFunction = async (context) => {
   if (context.request.method !== 'POST') {
@@ -37,7 +106,14 @@ export const onRequest: PagesFunction = async (context) => {
 
     const voice = body.voice && ALLOWED_VOICES.has(body.voice) ? body.voice : undefined;
 
-    const audio = await synthesizeSpeechWithGroq(groqKeys, text, voice);
+    const chunks = splitSpeechText(text);
+    const segments: ArrayBuffer[] = [];
+    for (let index = 0; index < chunks.length; index += 3) {
+      segments.push(...(await Promise.all(chunks.slice(index, index + 3).map((chunk) =>
+        synthesizeSpeechWithGroq(groqKeys, chunk, voice)
+      ))));
+    }
+    const audio = mergeWavSegments(segments);
 
     return new Response(audio, {
       status: 200,
